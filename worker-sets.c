@@ -24,14 +24,16 @@ dl_print (dep_list *dl)
 dep_list*
 dl_shallow_copy (dep_list *dl)
 {
-    assert (dl != NULL);
+    if (dl == NULL) {
+        return NULL;
+    }
 
     dep_list *head = calloc (1, sizeof (dep_list)); // TODO: check allocation
     dep_list *cp = head;
     dep_list *it = dl;
 
     while (it != NULL) {
-        cp->fd = it->fd;
+        /* cp->fd = it->fd; */
         cp->path = it->path;
         cp->inode = it->inode;
         if (it->next) {
@@ -71,7 +73,7 @@ dl_listing (const char *path)
 {
     assert (path != NULL);
 
-    dep_list *head = calloc (1, sizeof (dep_list)); // TODO: check allocation
+    dep_list *head = NULL;
     dep_list *prev = NULL;
     DIR *dir = opendir (path);
     if (dir != NULL) {
@@ -82,7 +84,11 @@ dl_listing (const char *path)
                 continue;
             }
 
-             // TODO: check allocation
+            // TODO: check allocation
+            if (head == NULL) {
+                head = calloc (1, sizeof (dep_list)); // TODO: check allocation
+            }
+
             dep_list *iter = (prev == NULL) ? head : calloc (1, sizeof (dep_list));
             iter->path = strdup (ent->d_name);
             iter->inode = ent->d_ino;
@@ -103,10 +109,12 @@ void dl_diff (dep_list **before, dep_list **after)
     assert (before != NULL);
     assert (after != NULL);
 
+    if (*before == NULL || *after == NULL) {
+        return;
+    }
+
     dep_list *before_iter = *before;
     dep_list *before_prev = NULL;
-
-    assert (before_iter != NULL);
 
     while (before_iter != NULL) {
         dep_list *after_iter = *after;

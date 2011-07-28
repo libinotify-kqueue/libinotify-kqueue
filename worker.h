@@ -48,11 +48,13 @@ typedef struct {
 } worker;
 
 
-worker* worker_create        ();
-void    worker_free          (worker *wrk);
+worker* worker_create         ();
+void    worker_free           (worker *wrk);
 
-int     worker_add_or_modify (worker *wrk, const char *path, uint32_t flags);
-int     worker_remove        (worker *wrk, int id);
+// TODO: enum type for scan_deps
+watch*  worker_start_watching (worker *wrk, const char *path, uint32_t flags, int dependency);
+int     worker_add_or_modify  (worker *wrk, const char *path, uint32_t flags);
+int     worker_remove         (worker *wrk, int id);
 
 
 #endif /* __WORKER_H__ */

@@ -52,7 +52,7 @@ struct inotify_event
  * events that they originally wanted.  Be sure to add new events here!
  */
 #define IN_ALL_EVENTS	(IN_ACCESS | IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE | \
-			 IN_CLOSE_NOWRITE | IN_OPEN | IN_MOVED_FROM | \
+			 IN_CLOSE_NOWRITE | IN_OPEN | IN_MOVED_FROM | IN_MOVE_SELF | \
 			 IN_MOVED_TO | IN_DELETE | IN_CREATE | IN_DELETE_SELF)
 
 

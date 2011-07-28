@@ -12,15 +12,22 @@
 #include "worker-thread.h"
 
 static uint32_t
-kqueue_to_inotify (uint32_t flags)
+kqueue_to_inotify (uint32_t flags, int is_directory)
 {
     uint32_t result = 0;
 
     if (flags & (NOTE_ATTRIB | NOTE_LINK))
         result |= IN_ATTRIB;
 
-    if (flags & (NOTE_WRITE | NOTE_EXTEND)) // TODO: NOTE_MODIFY?
+    if ((flags & (NOTE_WRITE | NOTE_EXTEND)) // TODO: NOTE_MODIFY?
+        && is_directory == 0)
         result |= IN_MODIFY;
+
+    if (flags & NOTE_DELETE)
+        result |= IN_DELETE_SELF;
+
+    if (flags & NOTE_RENAME)
+        result |= IN_MOVE_SELF;
     
     return result;
 }
@@ -53,7 +60,7 @@ static struct inotify_event*
 create_inotify_event (int wd, uint32_t mask, uint32_t cookie, const char *name, int *event_len)
 {
     struct inotify_event *event = NULL;
-    int name_len = strlen (name) + 1;
+    int name_len = name ? strlen (name) + 1 : 0;
     *event_len = sizeof (struct inotify_event) + name_len;
     event = calloc (1, *event_len); // TODO: check allocation
 
@@ -61,7 +68,10 @@ create_inotify_event (int wd, uint32_t mask, uint32_t cookie, const char *name, 
     event->mask = mask;
     event->cookie = cookie;
     event->len = name_len;
-    strcpy (event->name, name);
+
+    if (name) {
+        strcpy (event->name, name);
+    }
 
     return event;
 }
@@ -76,7 +86,6 @@ produce_directory_moves (worker         *wrk,
 {
     assert (wrk != NULL);
     assert (w != NULL);
-    assert (w->parent != NULL);
     assert (event != NULL);
     assert (was != NULL);
     assert (now != NULL);
@@ -96,7 +105,7 @@ produce_directory_moves (worker         *wrk,
                 int event_len = 0;
                 struct inotify_event *ev;
 
-                ev = create_inotify_event (w->parent->fd,
+                ev = create_inotify_event (w->fd,
                                            IN_MOVED_FROM,
                                            cookie,
                                            was_iter->path,
@@ -151,7 +160,6 @@ produce_directory_changes (worker         *wrk,
 {
     assert (wrk != NULL);
     assert (w != NULL);
-    assert (w->parent != NULL);
     assert (event != NULL);
     assert (flag != 0);
 
@@ -159,7 +167,7 @@ produce_directory_changes (worker         *wrk,
         struct inotify_event *ie = NULL;
         int ie_len = 0;
         // TODO: check allocation
-        ie = create_inotify_event (w->parent->fd,
+        ie = create_inotify_event (w->fd,
                                    flag,
                                    0,
                                    list->path,
@@ -193,9 +201,23 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
 
     dl_diff (&was, &now);
 
+    // TODO: remove deleted entries, start monitoring on new ones
     produce_directory_moves (wrk, w, event, &was, &now);
     produce_directory_changes (wrk, w, event, was, IN_DELETE);
     produce_directory_changes (wrk, w, event, now, IN_CREATE);
+
+    {   dep_list *now_iter = now;
+        while (now_iter != NULL) {
+            char path[512]; // TODO
+            sprintf (path, "%s/%s", w->filename, now_iter->path);
+            watch *neww = worker_start_watching (wrk, path, w->flags, 1); // TODO: magic
+            neww->parent = w;
+            if (neww == NULL) {
+                perror ("Failed to start watching on a new dependency\n");
+            }
+            now_iter = now_iter->next;
+        }
+    }
 
     dl_shallow_free (now);
     dl_free (was);
@@ -207,28 +229,48 @@ produce_notifications (worker *wrk, struct kevent *event)
     assert (wrk != NULL);
     assert (event != NULL);
 
-    if (wrk->sets.watches[event->udata].type == WATCH_USER) {
-        if (wrk->sets.watches[event->udata].is_directory
-            && (event->fflags & (NOTE_WRITE | NOTE_EXTEND))) { // TODO: watch's inotify flags here
-            produce_directory_diff (wrk, &wrk->sets.watches[event->udata], event);
+    watch *w = &wrk->sets.watches[event->udata];
+
+    if (w->type == WATCH_USER) {
+        uint32_t flags = event->fflags;
+
+        if (w->is_directory
+            && (flags & (NOTE_WRITE | NOTE_EXTEND))) {
+            produce_directory_diff (wrk, w, event);
+            flags &= ~(NOTE_WRITE|NOTE_EXTEND);
         }
-        // TODO: other types of events on user entries
+
+        if (flags) {
+            struct inotify_event *ie = NULL;
+            int ev_len;
+            ie = create_inotify_event (w->fd,
+                                       kqueue_to_inotify (flags, w->is_directory),
+                                       0,
+                                       NULL,
+                                       &ev_len);
+
+            // TODO: EINTR
+            write (wrk->io[KQUEUE_FD], ie, ev_len);
+            free (ie);
+        }
     } else {
         /* for dependency events, ignore some notifications */
         if (event->fflags & (NOTE_ATTRIB | NOTE_LINK | NOTE_WRITE | NOTE_EXTEND)) {
             struct inotify_event *ie = NULL;
-            watch *w = &wrk->sets.watches[event->udata];
             watch *p = w->parent;
+            assert (p != NULL);
             int ev_len;
-            ie = create_inotify_event (p->fd,
-                                       kqueue_to_inotify (event->fflags),
-                                       0,
-                                       // TODO: /foo and /foo/ cases
-                                       w->filename + 1 + strlen(p->filename),
-                                       &ev_len);
+            ie = create_inotify_event
+                (p->fd,
+                 kqueue_to_inotify (event->fflags, w->is_directory),
+                 0,
+                 // TODO: /foo and /foo/ cases
+                 w->filename + 1 + strlen(p->filename),
+                 &ev_len);
             
             // TODO: EINTR
             write (wrk->io[KQUEUE_FD], ie, ev_len);
+            free (ie);
         }
     }
 }

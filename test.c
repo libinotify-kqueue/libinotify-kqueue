@@ -82,11 +82,11 @@ void get_event (int fd, const char * target)
         if (pevent->mask & IN_DELETE)
             strcat(action, " deleted from watched directory");
         if (pevent->mask & IN_DELETE_SELF)
-            strcat(action, "Watched file/directory was itself deleted");
+            strcat(action, " watched file/directory was itself deleted");
         if (pevent->mask & IN_MODIFY)
             strcat(action, " was modified");
         if (pevent->mask & IN_MOVE_SELF)
-            strcat(action, "Watched file/directory was itself moved");
+            strcat(action, " watched file/directory was itself moved");
         if (pevent->mask & IN_MOVED_FROM)
             strcat(action, " moved out of watched directory");
         if (pevent->mask & IN_MOVED_TO)
