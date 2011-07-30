@@ -6,31 +6,12 @@
 #include <stdio.h>  /* perror */
 #include <string.h> /* memset */
 
+#include "utils.h"
+#include "conversions.h"
 #include "inotify.h"
 #include "worker.h"
 #include "worker-sets.h"
 #include "worker-thread.h"
-
-static uint32_t
-kqueue_to_inotify (uint32_t flags, int is_directory)
-{
-    uint32_t result = 0;
-
-    if (flags & (NOTE_ATTRIB | NOTE_LINK))
-        result |= IN_ATTRIB;
-
-    if ((flags & (NOTE_WRITE | NOTE_EXTEND)) // TODO: NOTE_MODIFY?
-        && is_directory == 0)
-        result |= IN_MODIFY;
-
-    if (flags & NOTE_DELETE)
-        result |= IN_DELETE_SELF;
-
-    if (flags & NOTE_RENAME)
-        result |= IN_MOVE_SELF;
-    
-    return result;
-}
 
 void
 process_command (worker *wrk)
@@ -167,11 +148,7 @@ produce_directory_changes (worker         *wrk,
         struct inotify_event *ie = NULL;
         int ie_len = 0;
         // TODO: check allocation
-        ie = create_inotify_event (w->fd,
-                                   flag,
-                                   0,
-                                   list->path,
-                                   &ie_len);
+        ie = create_inotify_event (w->fd, flag, 0, list->path, &ie_len);
 
         write (wrk->io[KQUEUE_FD], ie, ie_len);
         free (ie);
@@ -193,6 +170,7 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
     assert (w->is_directory);
 
     dep_list *was = NULL, *now = NULL;
+
     was = dl_shallow_copy (w->deps);
     dl_shallow_free (w->deps);
 
@@ -208,14 +186,14 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
 
     {   dep_list *now_iter = now;
         while (now_iter != NULL) {
-            char path[512]; // TODO
-            sprintf (path, "%s/%s", w->filename, now_iter->path);
-            watch *neww = worker_start_watching (wrk, path, w->flags, 1); // TODO: magic
+            char *path = path_concat(w->filename, now_iter->path);
+            watch *neww = worker_start_watching (wrk, path, w->flags, WATCH_DEPENDENCY);
             neww->parent = w;
             if (neww == NULL) {
                 perror ("Failed to start watching on a new dependency\n");
             }
             now_iter = now_iter->next;
+            free (path);
         }
     }
 
@@ -229,7 +207,7 @@ produce_notifications (worker *wrk, struct kevent *event)
     assert (wrk != NULL);
     assert (event != NULL);
 
-    watch *w = &wrk->sets.watches[event->udata];
+    watch *w = wrk->sets.watches[event->udata];
 
     if (w->type == WATCH_USER) {
         uint32_t flags = event->fflags;
@@ -265,7 +243,7 @@ produce_notifications (worker *wrk, struct kevent *event)
                  kqueue_to_inotify (event->fflags, w->is_directory),
                  0,
                  // TODO: /foo and /foo/ cases
-                 w->filename + 1 + strlen(p->filename),
+                 w->filename,
                  &ev_len);
             
             // TODO: EINTR

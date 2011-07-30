@@ -1,5 +1,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
@@ -18,6 +19,11 @@ int main (int argc, char *argv[])
     char target[FILENAME_MAX];
     int fd;
     int wd;   /* watch descriptor */
+
+    struct rlimit rl;
+    rl.rlim_cur = 3072;
+    rl.rlim_max = 8172;
+    setrlimit (RLIMIT_NOFILE, &rl);
 
     if (argc < 2) {
         fprintf (stderr, "Watching the current directory\n");

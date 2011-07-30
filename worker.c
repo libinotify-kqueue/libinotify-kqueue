@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <dirent.h>
 
+#include "utils.h"
 #include "inotify.h"
 #include "worker-thread.h"
 #include "worker.h"
@@ -72,7 +73,7 @@ worker_free (worker *wrk)
 static int
 worker_add_dependencies (worker        *wrk,
                          struct kevent *event,
-                         watch         *parent)
+                         watch         *parent) // <-- can change on grow!
 {
     assert (wrk != NULL);
     assert (parent != NULL);
@@ -93,25 +94,23 @@ worker_add_dependencies (worker        *wrk,
             int index = wrk->sets.length;
             worker_sets_extend (&wrk->sets, 1);
 
-            int parent_len = strlen (parent->filename);
-            int full_len = parent_len + strlen (ent->d_name) + 2;
-            char *full_path = malloc (full_len); // TODO: check alloc
-            // TODO: strip spaces!!!
-            if (full_path[parent_len] == '/') {
-                full_path[parent_len] = '\0';
-            }
-            snprintf (full_path, full_len, "%s/%s", parent->filename, ent->d_name);
-
-            if (watch_init_dependency (&wrk->sets.watches[index],
-                                       &wrk->sets.events[index],
-                                       full_path, // do we really need a full path?
-                                       parent->flags,
-                                       index)
+            char *full_path = path_concat(parent->filename, ent->d_name);
+            wrk->sets.watches[index] = calloc (1, sizeof (struct watch));
+            if (watch_init (wrk->sets.watches[index],
+                            WATCH_DEPENDENCY,
+                            &wrk->sets.events[index],
+                            full_path, // do we really need a full path?
+                            parent->flags,
+                            index)
                 == 0) {
                 ++wrk->sets.length;
-                wrk->sets.watches[index].parent = parent;
+                wrk->sets.watches[index]->parent = parent;
 
                 dep_list *entry = calloc (1, sizeof (dep_list));
+                if (entry == 0) {
+                    printf ("Failed to allocate an entry\n");
+                }
+
                 /* entry->fd = wrk->sets.events[index].ident; */
                 entry->path = strdup (ent->d_name);
                 entry->inode = ent->d_ino;
@@ -122,10 +121,10 @@ worker_add_dependencies (worker        *wrk,
                     parent->deps = entry;
                 }
                 iter = entry;
-            }
-            printf ("Watching also on %s\n", full_path);
+            } /* TODO else {... */
             free (full_path);
         }
+
         closedir(dir);
     } else {
         printf ("Failed to open directory %s\n", parent->filename);
@@ -137,40 +136,33 @@ watch*
 worker_start_watching (worker     *wrk,
                        const char *path,
                        uint32_t    flags,
-                       int         dependency)
+                       int         type)
 {
     assert (wrk != NULL);
     assert (path != NULL);
 
-    int i, retval;
+    int i;
 
-    printf ("Adding a new watch kevent: %s\n", path);
     worker_sets_extend (&wrk->sets, 1);
     i = wrk->sets.length;
-    retval =
-        (dependency == 0)
-        ? watch_init_user (&wrk->sets.watches[i],
-                           &wrk->sets.events[i],
-                           path,
-                           flags,
-                           i)
-        : watch_init_dependency (&wrk->sets.watches[i],
-                                 &wrk->sets.events[i],
-                                 path,
-                                 flags,
-                                 i);
-    if (retval == -1) {
+    wrk->sets.watches[i] = calloc (1, sizeof (struct watch));
+    if (watch_init (wrk->sets.watches[i],
+                    type,
+                    &wrk->sets.events[i],
+                    path,
+                    flags,
+                    i)
+        == -1) {
         perror ("Failed to initialize a user watch\n");
         // TODO: error
         return NULL;
     }
     ++wrk->sets.length;
 
-    if (dependency == 0 && wrk->sets.watches[i].is_directory) {
-        printf ("Watched entry is a directory, adding dependencies\n");
-        worker_add_dependencies (wrk, &wrk->sets.events[i], &wrk->sets.watches[i]);
+    if (type == WATCH_USER && wrk->sets.watches[i]->is_directory) {
+        worker_add_dependencies (wrk, &wrk->sets.events[i], wrk->sets.watches[i]);
     }
-    return &wrk->sets.watches[i];
+    return wrk->sets.watches[i];
 }
 
 int
@@ -187,10 +179,10 @@ worker_add_or_modify (worker     *wrk,
     int i = 0;
     // look up for an entry with this filename
     for (i = 1; i < wrk->sets.length; i++) {
-        const char *evpath = wrk->sets.watches[i].filename;
+        const char *evpath = wrk->sets.watches[i]->filename;
         assert (evpath != NULL);
 
-        if (wrk->sets.watches[i].type == WATCH_USER &&
+        if (wrk->sets.watches[i]->type == WATCH_USER &&
             strcmp (path, evpath) == 0) {
             // TODO: update flags
             return i;
@@ -198,7 +190,7 @@ worker_add_or_modify (worker     *wrk,
     }
 
     // add a new entry if path is not found
-    watch *w = worker_start_watching (wrk, path, flags, 0); // TODO: magic number
+    watch *w = worker_start_watching (wrk, path, flags, WATCH_USER); // TODO: magic number
     return (w != NULL) ? w->fd : -1;
 }
 
