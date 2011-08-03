@@ -55,7 +55,6 @@ inotify_add_watch (int         fd,
     for (i = 0; i < WORKER_SZ; i++) {
         if (workers[i]->io[INOTIFY_FD] == fd) {
             worker *wrk = workers[i];
-
             pthread_mutex_lock (&wrk->mutex);
 
             // TODO: hide these details
@@ -72,8 +71,10 @@ inotify_add_watch (int         fd,
             pthread_barrier_destroy (&wrk->cmd.sync);
 
             // TODO: check error here
+            int retval = wrk->cmd.retval;
+            pthread_mutex_unlock (&wrk->mutex);
             pthread_mutex_unlock (&workers_mutex);
-            return wrk->cmd.retval;
+            return retval;
         }
     }
 
@@ -100,7 +101,7 @@ inotify_rm_watch (int fd,
             // TODO: hide these details
             worker_cmd_reset (&wrk->cmd);
             wrk->cmd.type = WCMD_REMOVE;
-            wrk->cmd.rm_id = fd;
+            wrk->cmd.rm_id = wd;
             pthread_barrier_init (&wrk->cmd.sync, NULL, 2);
 
             write (wrk->io[INOTIFY_FD], "*", 1); // TODO: EINTR
@@ -110,9 +111,10 @@ inotify_rm_watch (int fd,
             pthread_barrier_destroy (&wrk->cmd.sync);
 
             // TODO: check error here
-            // TODO: unlock workers earlier?
+            int retval = wrk->cmd.retval;
+            pthread_mutex_unlock (&wrk->mutex);
             pthread_mutex_unlock (&workers_mutex);
-            return -1; // TODO: obtain return value
+            return retval;
         }
     }
     

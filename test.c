@@ -48,7 +48,16 @@ int main (int argc, char *argv[])
         return 1;
     }
 
+    int ev_count = 0;
+
     while (1) {
+        if (ev_count == 3) {
+            printf("stopping watch\n");
+            inotify_rm_watch (fd, wd);
+        }
+
+        ++ev_count;
+
         get_event(fd, target);
     }
 
@@ -125,15 +134,3 @@ void handle_error (int error)
 }  /* handle_error */
 
 /* ----------------------------------------------------------------- */
-
-
-
-
-
-/* #include "inotify.h" */
-
-/* int main (int argc, char *argv[]) { */
-/*     int fd = inotify_init(); */
-/*     (void) fd; */
-/*     return 0; */
-/* } */

@@ -6,7 +6,6 @@
 typedef struct dep_list {
     struct dep_list *next;
 
-    /* int fd; */
     char *path;
     ino_t inode;
 } dep_list;
