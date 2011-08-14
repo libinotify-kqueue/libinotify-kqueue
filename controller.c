@@ -15,7 +15,7 @@
 static worker* workers[WORKER_SZ] = {NULL};
 static pthread_mutex_t workers_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-int
+INO_EXPORT int
 inotify_init (void) __THROW
 {
     // TODO: a dynamic structure here
@@ -37,14 +37,14 @@ inotify_init (void) __THROW
     return -1;
 }
 
-int
+INO_EXPORT int
 inotify_init1 (int flags) __THROW
 {
     // TODO: implementation
     return 0;
 }
 
-int
+INO_EXPORT int
 inotify_add_watch (int         fd,
                    const char *name,
                    uint32_t    mask) __THROW
@@ -74,7 +74,7 @@ inotify_add_watch (int         fd,
     return -1;
 }
 
-int
+INO_EXPORT int
 inotify_rm_watch (int fd,
                   int wd) __THROW
 {

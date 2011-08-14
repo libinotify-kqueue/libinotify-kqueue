@@ -11,6 +11,13 @@
   #endif
 #endif
 
+#ifdef __cplusplus
+  #define INO_EXPORT extern "C"
+#else
+  #define INO_EXPORT
+#endif
+
+
 
 /* Flags for the parameter of inotify_init1. */
 enum {
@@ -57,17 +64,17 @@ struct inotify_event
 
 
 /* Create and initialize inotify-kqueue instance. */
-int inotify_init (void) __THROW;
+INO_EXPORT int inotify_init (void) __THROW;
 
 /* Create and initialize inotify-kqueue instance. */
-int inotify_init1 (int flags) __THROW;
+INO_EXPORT int inotify_init1 (int flags) __THROW;
 
 /* Add watch of object NAME to inotify-kqueue instance FD. Notify about
    events specified by MASK. */
-int inotify_add_watch (int fd, const char *name, uint32_t mask) __THROW;
+INO_EXPORT int inotify_add_watch (int fd, const char *name, uint32_t mask) __THROW;
 
 /* Remove the watch specified by WD from the inotify instance FD. */
-int inotify_rm_watch (int fd, int wd) __THROW;
+INO_EXPORT int inotify_rm_watch (int fd, int wd) __THROW;
 
 
 #endif /* __BSD_INOTIFY_H__ */
