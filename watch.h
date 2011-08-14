@@ -5,15 +5,16 @@
 #include <stdint.h>    /* uint32_t */
 #include <dirent.h>    /* ino_t */
 
-// TODO: Worker is a very bad dependency here
 #include "dep-list.h"
 
-#define WATCH_USER       0
-#define WATCH_DEPENDENCY 1
+typedef enum watch_type {
+    WATCH_USER,
+    WATCH_DEPENDENCY,
+} watch_type_t;
 
 
 typedef struct watch {
-    int type;                 /* TODO: enum? */
+    watch_type_t type;        /* a type of a watch */
     int is_directory;         /* a flag, a directory or not */
 
     uint32_t flags;           /* flags in the inotify format */
@@ -30,9 +31,8 @@ typedef struct watch {
     };
 } watch;
 
-// TODO: enum for watch type
 int watch_init (watch         *w,
-                int            watch_type,
+                watch_type_t   watch_type,
                 struct kevent *kv,
                 const char    *path,
                 const char    *entry_name,
@@ -42,4 +42,4 @@ int watch_init (watch         *w,
 void watch_free (watch *w);
 
 
-#endif // __WATCH_H__
+#endif /* __WATCH_H__ */

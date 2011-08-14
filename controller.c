@@ -7,6 +7,7 @@
 #include <stdio.h> /* printf */
 
 #include "worker.h"
+#include "utils.h"
 #include "inotify.h"
 
 
@@ -57,18 +58,9 @@ inotify_add_watch (int         fd,
             worker *wrk = workers[i];
             pthread_mutex_lock (&wrk->mutex);
 
-            // TODO: hide these details
-            worker_cmd_reset (&wrk->cmd);
-            wrk->cmd.type = WCMD_ADD;
-            wrk->cmd.add.filename = strdup (name);
-            wrk->cmd.add.mask = mask;
-            pthread_barrier_init (&wrk->cmd.sync, NULL, 2);
-
-            write (wrk->io[INOTIFY_FD], "*", 1); // TODO: EINTR
-            pthread_barrier_wait (&wrk->cmd.sync);
-
-            // TODO: hide these details too
-            pthread_barrier_destroy (&wrk->cmd.sync);
+            worker_cmd_add (&wrk->cmd, name, mask);
+            safe_write (wrk->io[INOTIFY_FD], "*", 1);
+            worker_cmd_wait (&wrk->cmd);
 
             // TODO: check error here
             int retval = wrk->cmd.retval;
@@ -78,7 +70,6 @@ inotify_add_watch (int         fd,
         }
     }
 
-    // TODO: unlock workers earlier?
     pthread_mutex_unlock (&workers_mutex);
     return -1;
 }
@@ -98,17 +89,9 @@ inotify_rm_watch (int fd,
             worker *wrk = workers[i];
             pthread_mutex_lock (&wrk->mutex);
 
-            // TODO: hide these details
-            worker_cmd_reset (&wrk->cmd);
-            wrk->cmd.type = WCMD_REMOVE;
-            wrk->cmd.rm_id = wd;
-            pthread_barrier_init (&wrk->cmd.sync, NULL, 2);
-
-            write (wrk->io[INOTIFY_FD], "*", 1); // TODO: EINTR
-            pthread_barrier_wait (&wrk->cmd.sync);
-
-            // TODO: hide these details too
-            pthread_barrier_destroy (&wrk->cmd.sync);
+            worker_cmd_remove (&wrk->cmd, wd);
+            safe_write (wrk->io[INOTIFY_FD], "*", 1);
+            worker_cmd_wait (&wrk->cmd);
 
             // TODO: check error here
             int retval = wrk->cmd.retval;

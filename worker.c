@@ -18,8 +18,36 @@
 static void
 worker_update_flags (worker *wrk, watch *w, uint32_t flags);
 
+static void
+worker_cmd_reset (worker_cmd *cmd);
 
 void
+worker_cmd_add (worker_cmd *cmd, const char *filename, uint32_t mask)
+{
+    assert (cmd != NULL);
+    worker_cmd_reset (cmd);
+
+    cmd->type = WCMD_ADD;
+    cmd->add.filename = strdup (filename);
+    cmd->add.mask = mask;
+
+    pthread_barrier_init (&cmd->sync, NULL, 2);
+}
+
+void
+worker_cmd_remove (worker_cmd *cmd, int watch_id)
+{
+    assert (cmd != NULL);
+    worker_cmd_reset (cmd);
+
+    cmd->type = WCMD_REMOVE;
+    cmd->rm_id = watch_id;
+
+    pthread_barrier_init (&cmd->sync, NULL, 2);
+}
+
+
+static void
 worker_cmd_reset (worker_cmd *cmd)
 {
     assert (cmd != NULL);
@@ -27,6 +55,16 @@ worker_cmd_reset (worker_cmd *cmd)
     free (cmd->add.filename);
     memset (cmd, 0, sizeof (worker_cmd));
 }
+
+void
+worker_cmd_wait (worker_cmd *cmd)
+{
+    assert (cmd != NULL);
+    pthread_barrier_wait (&cmd->sync);
+    pthread_barrier_destroy (&cmd->sync);
+}
+
+
 
 worker*
 worker_create ()
@@ -110,11 +148,11 @@ worker_add_dependencies (worker        *wrk,
 }
 
 watch*
-worker_start_watching (worker     *wrk,
-                       const char *path,
-                       const char *entry_name,
-                       uint32_t    flags,
-                       int         type)
+worker_start_watching (worker      *wrk,
+                       const char  *path,
+                       const char  *entry_name,
+                       uint32_t     flags,
+                       watch_type_t type)
 {
     assert (wrk != NULL);
     assert (path != NULL);
@@ -153,19 +191,21 @@ worker_add_or_modify (worker     *wrk,
 {
     assert (path != NULL);
     assert (wrk != NULL);
-    // TODO: a pointer to sets?
-    assert (wrk->sets.events != NULL);
-    assert (wrk->sets.watches != NULL);
 
+    worker_sets *sets = &wrk->sets;
+
+    assert (sets->events != NULL);
+    assert (sets->watches != NULL);
+
+    /* look up for an entry with this filename */
     int i = 0;
-    // look up for an entry with this filename
-    for (i = 1; i < wrk->sets.length; i++) {
-        const char *evpath = wrk->sets.watches[i]->filename;
+    for (i = 1; i < sets->length; i++) {
+        const char *evpath = sets->watches[i]->filename;
         assert (evpath != NULL);
 
-        if (wrk->sets.watches[i]->type == WATCH_USER &&
+        if (sets->watches[i]->type == WATCH_USER &&
             strcmp (path, evpath) == 0) {
-            worker_update_flags (wrk, wrk->sets.watches[i], flags);
+            worker_update_flags (wrk, sets->watches[i], flags);
             return i;
         }
     }
@@ -216,8 +256,7 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags)
 
         /* Yes, it is quite stupid to iterate over ALL watches of a worker
          * while we have a linked list of its dependencies.
-         * TODO improve it
-         */
+         * TODO improve it */
         int i;
         for (i = 1; i < wrk->sets.length; i++) {
             watch *depw = wrk->sets.watches[i];

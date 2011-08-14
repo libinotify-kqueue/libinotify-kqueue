@@ -40,7 +40,7 @@ _file_information (int fd, int *is_dir, ino_t *inode)
 
 
 int watch_init (watch         *w,
-                int            watch_type,
+                watch_type_t   watch_type,
                 struct kevent *kv,
                 const char    *path,
                 const char    *entry_name,
