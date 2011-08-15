@@ -14,7 +14,6 @@ public:
     };
 
     struct activity {
-        events expected;
         int timeout;
     };
 
@@ -39,7 +38,7 @@ private:
 
 public:
     request ();
-    void setup (const events &expected, unsigned int timeout = 0);
+    void receive (unsigned int timeout = 2);
     void setup (const std::string &path, uint32_t mask);
     void setup (int rm_id);
 

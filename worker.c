@@ -52,7 +52,9 @@ worker_cmd_reset (worker_cmd *cmd)
 {
     assert (cmd != NULL);
 
-    free (cmd->add.filename);
+    if (cmd->type == WCMD_ADD) {
+        free (cmd->add.filename);
+    }
     memset (cmd, 0, sizeof (worker_cmd));
 }
 
@@ -206,7 +208,7 @@ worker_add_or_modify (worker     *wrk,
         if (sets->watches[i]->type == WATCH_USER &&
             strcmp (path, evpath) == 0) {
             worker_update_flags (wrk, sets->watches[i], flags);
-            return i;
+            return sets->watches[i]->fd;
         }
     }
 

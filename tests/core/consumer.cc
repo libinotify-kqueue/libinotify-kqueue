@@ -30,23 +30,18 @@ void consumer::register_activity (request::activity activity)
     time_t start = time (NULL);
     time_t elapsed = 0;
 
-    while (!activity.expected.empty()
-           && (elapsed = time (NULL) - start) < activity.timeout) {
+    events received;
+
+    while ((elapsed = time (NULL) - start) < activity.timeout) {
         event ev;
         if (ino.get_next_event (ev, activity.timeout)) {
-            event_matcher matcher (ev);
-            events::iterator it = std::find_if (activity.expected.begin(), activity.expected.end(), matcher); 
-            if (it != activity.expected.end()) {
-                activity.expected.erase (it);
-            } else {
-                activity.expected.insert (ev);
-            }
+            received.insert (ev);
         }
     }
 
     LOG ("CONS: Okay, informing producer about results...");
     input.reset ();
-    output.setup (activity.expected);
+    output.setup (received);
 }
 
 void consumer::add_modify_watch (request::add_modify add_modify)

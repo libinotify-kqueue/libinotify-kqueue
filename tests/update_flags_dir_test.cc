@@ -17,7 +17,7 @@ void update_flags_dir_test::run ()
     consumer cons;
     int wid = 0;
     int new_wid = 0;
-    events expected;
+    events received;
 
     /* Add a watch */
     cons.input.setup ("ufdt-working", IN_ATTRIB);
@@ -26,56 +26,48 @@ void update_flags_dir_test::run ()
     wid = cons.output.added_watch_id ();
     should ("start watching successfully", wid != -1);
 
-    /* Test notifications on touches in the directory */
-    expected = events ();
-    expected.insert (event ("1", wid, IN_ATTRIB));
 
     cons.output.reset ();
-    cons.input.setup (expected, 1);
+    cons.input.receive ();
 
     system ("touch ufdt-working/1");
 
     cons.output.wait ();
-    expected = cons.output.left_unregistered ();
+    received = cons.output.registered ();
 
-    should ("receive touch notifications for files in a directory", !expected.size());
+    should ("receive touch notifications for files in a directory",
+            contains (received, event ("1", wid, IN_ATTRIB)));
 
-    /* Test notifications on modifications in the directory without IN_MODIFY */
-    expected = events ();
-    expected.insert (event ("1", wid, IN_MODIFY));
 
     cons.output.reset ();
-    cons.input.setup (expected, 1);
+    cons.input.receive ();
 
     system ("echo Hello >> ufdt-working/1");
 
     cons.output.wait ();
-    expected = cons.output.left_unregistered ();
+    received = cons.output.registered ();
 
     should ("do not receive modify notifications for files in a directory without IN_MODIFY",
-            expected.size() > 0);
+            received.empty ());
 
-    /* Update flags */
+
     cons.input.setup ("ufdt-working", IN_ATTRIB | IN_MODIFY);
     cons.output.wait ();
 
     new_wid = cons.output.added_watch_id ();
     should ("update flags successfully", wid == new_wid);
 
-    /* Test if new notifications are coming */
-    expected = events ();
-    expected.insert (event ("1", wid, IN_MODIFY));
 
     cons.output.reset ();
-    cons.input.setup (expected, 1);
+    cons.input.receive ();
 
     system ("echo Hello >> ufdt-working/1");
 
     cons.output.wait ();
-    expected = cons.output.left_unregistered ();
+    received = cons.output.registered ();
 
     should ("receive modify notifications for files in a directory with IN_MODIFY",
-            !expected.size());
+            contains (received, event ("1", wid, IN_MODIFY)));
 
     cons.input.interrupt ();
 }

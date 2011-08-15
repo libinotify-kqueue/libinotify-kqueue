@@ -8,14 +8,14 @@
 class response: public action {
 public:
     enum variant {
-        UNREGISTERED_EVENTS,
+        REGISTERED_EVENTS,
         WATCH_ID,
     };
 
 private:
     // Again, not a union
     struct {
-        events _left_unreg;
+        events _registered;
         int _watch_id;
     } variants;
 
@@ -23,11 +23,11 @@ private:
 
 public:
     response ();
-    void setup (const events &unregistered);
+    void setup (const events &registered);
     void setup (int watch_id);
 
     variant current_variant () const;
-    events left_unregistered () const;
+    events registered () const;
     int added_watch_id () const;
 };
 

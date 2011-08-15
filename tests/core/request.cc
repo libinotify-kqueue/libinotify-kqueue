@@ -7,11 +7,10 @@ request::request ()
 {
 }
 
-void request::setup (const events &expected, unsigned int timeout)
+void request::receive (unsigned int timeout)
 {
     LOG (named() << ": Setting up to register an activity");
     current = REGISTER_ACTIVITY;
-    variants._act.expected = expected;
     variants._act.timeout = timeout;
     wait ();
 }

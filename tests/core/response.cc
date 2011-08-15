@@ -7,11 +7,11 @@ response::response ()
 {
 }
 
-void response::setup (const events &unregistered)
+void response::setup (const events &registered)
 {
     LOG (named() << ": Passing back unregistered events");
-    current = UNREGISTERED_EVENTS;
-    variants._left_unreg = unregistered;
+    current = REGISTERED_EVENTS;
+    variants._registered = registered;
     wait ();
     LOG (named() << " YAY!!!");
 }
@@ -29,10 +29,10 @@ response::variant response::current_variant () const
     return current;
 }
 
-events response::left_unregistered () const
+events response::registered () const
 {
-    assert (current == UNREGISTERED_EVENTS);
-    return variants._left_unreg;
+    assert (current == REGISTERED_EVENTS);
+    return variants._registered;
 }
 
 int response::added_watch_id () const

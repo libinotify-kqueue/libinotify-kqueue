@@ -5,6 +5,7 @@
 #include "fail_test.hh"
 #include "update_flags_test.hh"
 #include "update_flags_dir_test.hh"
+#include "open_close_test.hh"
 
 #define THREADED
 
@@ -19,7 +20,8 @@ int main (int argc, char *argv[]) {
     fail_test ft (j);
     update_flags_test uft (j);
     update_flags_dir_test ufdt (j);
-
+    open_close_test oct (j);
+    
     sst.wait_for_end ();
     ssdt.wait_for_end ();
     ntfst.wait_for_end ();
@@ -27,6 +29,7 @@ int main (int argc, char *argv[]) {
     ft.wait_for_end ();
     uft.wait_for_end ();
     ufdt.wait_for_end ();
+    oct.wait_for_end ();
 #else
     start_stop_test sst (j);
     sst.wait_for_end ();
@@ -48,6 +51,9 @@ int main (int argc, char *argv[]) {
 
     update_flags_dir_test ufdt (j);
     ufdt.wait_for_end ();
+
+    open_close_test oct (j);
+    oct.wait_for_end ();
 #endif
 
     j.summarize ();

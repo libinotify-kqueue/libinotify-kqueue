@@ -22,28 +22,24 @@ void start_stop_test::run ()
 {
     consumer cons;
     int wid = 0;
+    events received;
 
     /* Add a watch */
     cons.input.setup ("sst-working", IN_ATTRIB);
     cons.output.wait ();
 
     wid = cons.output.added_watch_id ();
-
     should ("watch is added successfully", wid != -1);
 
     /* Tell consumer to watch for an IN_ATTRIB event */
-    events expected;
-    expected.insert (event ("", wid, IN_ATTRIB));
-    cons.output.reset ();
-    cons.input.setup (expected, 1);
+    cons.input.receive ();
 
-    /* Produce activity */
     system ("touch sst-working");
 
     cons.output.wait ();
-
-    expected = cons.output.left_unregistered ();
-    should ("all produced events are registered", expected.empty ());
+    received = cons.output.registered ();
+    should ("all produced events are registered",
+            contains (received, event ("", wid, IN_ATTRIB)));
 
     /* Now stop watching */
     cons.output.reset ();
@@ -51,51 +47,43 @@ void start_stop_test::run ()
     cons.output.wait ();
 
     /* Linux inotify sends IN_IGNORED on stop */
-    expected = events ();
-    expected.insert (event ("", wid, IN_IGNORED));
-
     cons.output.reset ();
-    cons.input.setup (expected, 1);
+    cons.input.receive ();
     cons.output.wait ();
 
-    expected = cons.output.left_unregistered ();
-    should ("got IN_IGNORED on watch stop", expected.empty ());
+    received = cons.output.registered ();
+    should ("got IN_IGNORED on watch stop",
+            contains (received, event ("", wid, IN_IGNORED)));
     
     /* Tell again to consumer to watch for an IN_ATTRIB event  */
-    expected = events();
-    expected.insert (event ("", wid, IN_ATTRIB));
     cons.output.reset ();
-    cons.input.setup (expected, 1);
+    cons.input.receive ();
     
-    /* Produce activity. Consumer should not see it */
     system ("touch sst-working");
 
     cons.output.wait ();
-    expected = cons.output.left_unregistered ();
-
-    should ("events should not be registered on a removed watch", expected.size() == 1);
+    received = cons.output.registered ();
+    should ("events should not be registered on a removed watch",
+            received.size() == 0);
 
     /* Now start watching again. Everything should work */
     cons.input.setup ("sst-working", IN_ATTRIB);
     cons.output.wait ();
 
     wid = cons.output.added_watch_id ();
-
     should ("start watching a file after stop", wid != -1);
 
     /* Tell consumer to watch for an IN_ATTRIB event */
-    expected = events ();
-    expected.insert (event ("", wid, IN_ATTRIB));
     cons.output.reset ();
-    cons.input.setup (expected, 1);
+    cons.input.receive ();
 
     /* Produce activity, consumer should watch it */
     system ("touch sst-working");
 
     cons.output.wait ();
-
-    expected = cons.output.left_unregistered ();
-    should ("all produced events are registered after resume", expected.empty ());
+    received = cons.output.registered ();
+    should ("all produced events are registered after resume",
+            contains (received, event ("", wid, IN_ATTRIB)));
 
     cons.input.interrupt ();
 }

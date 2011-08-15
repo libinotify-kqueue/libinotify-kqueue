@@ -12,8 +12,15 @@ event::event (const std::string &filename_, int watch_, uint32_t flags_)
 
 bool event::operator< (const event &ev) const
 {
-    // yes, compare by a filename and watch id only
-    return watch != ev.watch ? watch < ev.watch : filename < ev.filename;
+    if (watch == ev.watch) {
+        if (filename == ev.filename) {
+            return flags < ev.flags;
+        } else {
+            return filename < ev.filename;
+        }
+    } else {
+        return watch < ev.watch;
+    }
 }
 
 event_matcher::event_matcher (const event &ev_)
