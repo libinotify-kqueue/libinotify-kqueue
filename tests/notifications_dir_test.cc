@@ -1,15 +1,27 @@
+/*******************************************************************************
+  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+*******************************************************************************/
+
 #include <algorithm>
 #include "notifications_dir_test.hh"
-
-/* Always present on Linux (not sure about a concrete 2.6.x release)
- * May be "to be implemented" on BSDs */
-#ifndef IN_IGNORED
-#  define IN_IGNORED	 0x00008000
-#endif
-
-#ifndef IN_ISDIR
-#  define IN_ISDIR	     0x40000000
-#endif
 
 notifications_dir_test::notifications_dir_test (journal &j)
 : test ("Directory notifications", j)
@@ -19,13 +31,20 @@ notifications_dir_test::notifications_dir_test (journal &j)
 void notifications_dir_test::setup ()
 {
     cleanup ();
+
     system ("mkdir ntfsdt-working");
+    system ("touch ntfsdt-working/foo");
+    system ("touch ntfsdt-working/bar");
+
+    system ("mkdir ntfsdt-cache");
+    system ("touch ntfsdt-cache/bar");
 }
 
 void notifications_dir_test::run ()
 {
     consumer cons;
     events received;
+    events::iterator iter;
     int wid = 0;
 
     /* Add a watch */
@@ -47,8 +66,14 @@ void notifications_dir_test::run ()
 
     cons.output.wait ();
     received = cons.output.registered ();
-    should ("receive IN_ATTRIB with IN_ISDIR flag set on touch on a directory",
-            contains (received, event ("", wid, IN_ATTRIB | IN_ISDIR)));
+
+    iter = std::find_if (received.begin(),
+                         received.end(),
+                         event_matcher (event ("", wid, IN_ATTRIB | IN_ISDIR)));
+    should ("receive IN_ATTRIB event on touch on a directory",
+            iter != received.end() && iter->flags & IN_ATTRIB);
+    should ("the touch event for a directory contains IN_ISDIR in the flags",
+            iter != received.end() && iter->flags & IN_ISDIR);
 
 
     cons.output.reset ();
@@ -84,8 +109,6 @@ void notifications_dir_test::run ()
             contains (received, event ("2", wid, IN_DELETE)));
 
     
-#ifdef TESTS_MOVES_TRICKY
-    /* And tricky test case to test renames in a directory. */
     cons.output.reset ();
     cons.input.receive (5);
 
@@ -107,20 +130,8 @@ void notifications_dir_test::run ()
         should ("both events for a rename have the same cookie",
                 iter_from->cookie == iter_to->cookie);
     }
-#else
-    /* A simplier and less strict version */
-    cons.output.reset ();
-    cons.input.receive ();
 
-    system ("mv ntfsdt-working/1 ntfsdt-working/one");
-
-    cons.output.wait ();
-    received = cons.output.registered ();
-    should ("receive all events on moves",
-            contains (received, event ("1", wid, IN_MOVED_FROM))
-            && contains (received, event ("one", wid, IN_MOVED_TO)));
-#endif
-
+    
     cons.output.reset ();
     cons.input.receive ();
 
@@ -130,6 +141,61 @@ void notifications_dir_test::run ()
     received = cons.output.registered ();
     should ("receive IN_MODIFY event on modifying an entry in a directory",
             contains (received, event ("one", wid, IN_MODIFY)));
+
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("mv ntfsdt-working/foo ntfsdt-working/bar");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive all move events when replaced a file in a directory "
+            "with another file from the same directory",
+            contains (received, event ("foo", wid, IN_MOVED_FROM))
+            && contains (received, event ("bar", wid, IN_MOVED_TO)));
+
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("touch ntfsdt-working/bar");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive events from a file, which has replaced a file in a directory",
+            contains (received, event ("bar", wid, IN_ATTRIB)));
+
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("mv ntfsdt-cache/bar ntfsdt-working/bar");
+
+    /* Interesting test case here.
+     * Looks like inotify sends IN_MOVED_TO when overwriting a file with a file from
+     * the same partition/fs, and sends a pair of IN_DELETE/IN_CREATE when overwriting
+     * a file from a different partition/fs.
+     */
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive events when overwriting a file in a directory"
+            " with an external file",
+            (contains (received, event ("bar", wid, IN_DELETE))
+             && contains (received, event ("bar", wid, IN_CREATE)))
+            || (contains (received, event ("bar", wid, IN_MOVED_TO))));
+
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("touch ntfsdt-working/bar");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive events from a file, which has overwritten a file in a directory",
+            contains (received, event ("bar", wid, IN_ATTRIB)));
+
     
 
     cons.output.reset ();
@@ -150,8 +216,10 @@ void notifications_dir_test::run ()
 
     cons.output.wait ();
     received = cons.output.registered ();
-    should ("receive IN_DELETE for a file in a directory on removing a directory",
+    should ("receive IN_DELETE for a file \'one\' in a directory on removing a directory",
             contains (received, event ("one", wid, IN_DELETE)));
+    should ("receive IN_DELETE for a file \'bar\' in a directory on removing a directory",
+            contains (received, event ("bar", wid, IN_DELETE)));
     should ("receive IN_DELETE_SELF on removing a directory",
             contains (received, event ("", wid, IN_DELETE_SELF)));
     should ("receive IN_IGNORED on removing a directory",
@@ -164,4 +232,5 @@ void notifications_dir_test::cleanup ()
 {
     system ("rm -rf ntfsdt-working-2");
     system ("rm -rf ntfsdt-working");
+    system ("rm -rf ntfsdt-cache");
 }

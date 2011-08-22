@@ -32,7 +32,7 @@ struct inotify_event
     int wd;          /* Watch descriptor.  */
     uint32_t mask;   /* Watch mask.  */
     uint32_t cookie; /* Cookie to synchronize two events.  */
-    uint32_t len;    /* Length (including NULs) of name.  */
+    uint32_t len;    /* Length (including NULLs) of name.  */
     char name[];     /* Name.  */
 };
 
@@ -53,6 +53,13 @@ struct inotify_event
 #define IN_DELETE_SELF   0x00000400 /* Self was deleted.  */
 #define IN_MOVE_SELF     0x00000800 /* Self was moved.  */
 
+/* Additional events */
+#define IN_IGNORED       0x00008000
+
+/* ...and flags */
+#define IN_ISDIR	     0x40000000
+
+
 /*
  * All of the events - we build the list by hand so that we can add flags in
  * the future and not break backward compatibility.  Apps will get only the
@@ -67,7 +74,7 @@ struct inotify_event
 INO_EXPORT int inotify_init (void) __THROW;
 
 /* Create and initialize inotify-kqueue instance. */
-INO_EXPORT int inotify_init1 (int flags) __THROW;
+/* INO_EXPORT int inotify_init1 (int flags) __THROW; */
 
 /* Add watch of object NAME to inotify-kqueue instance FD. Notify about
    events specified by MASK. */

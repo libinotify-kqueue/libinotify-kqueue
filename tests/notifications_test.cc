@@ -1,10 +1,26 @@
-#include "notifications_test.hh"
+/*******************************************************************************
+  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
-/* Always present on Linux (not sure about a concrete 2.6.x release)
- * May be "to be implemented" on BSDs */
-#ifndef IN_IGNORED
-#  define IN_IGNORED	 0x00008000
-#endif
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+*******************************************************************************/
+
+#include "notifications_test.hh"
 
 notifications_test::notifications_test (journal &j)
 : test ("File notifications", j)
@@ -24,8 +40,7 @@ void notifications_test::run ()
     int wid = 0;
 
 
-    cons.input.setup ("ntfst-working",
-                      IN_ATTRIB | IN_MODIFY | IN_MOVE_SELF | IN_DELETE_SELF);
+    cons.input.setup ("ntfst-working", IN_ATTRIB | IN_MODIFY | IN_MOVE_SELF | IN_DELETE_SELF);
     cons.output.wait ();
 
     wid = cons.output.added_watch_id ();
@@ -40,17 +55,6 @@ void notifications_test::run ()
     cons.output.wait ();
     received = cons.output.registered ();
     should ("receive IN_ATTRIB on touch", contains (received, event ("", wid, IN_ATTRIB)));
-
-
-    // cons.output.reset ();
-    // cons.input.receive ();
-
-    // system ("cat ntfst-working > /dev/null");
-
-    // cons.output.wait ();
-    // received = cons.output.registered ();
-    // should ("receive IN_OPEN on read", contains (received, event ("", wid, IN_OPEN)));
-    // should ("receive IN_CLOSE_NOWRITE on read", contains (received, event ("", wid, IN_CLOSE_NOWRITE)));
 
 
     cons.output.reset ();

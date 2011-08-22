@@ -1,3 +1,25 @@
+/*******************************************************************************
+  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+*******************************************************************************/
+
 #include <sys/event.h>
 #include <sys/socket.h>
 #include <stdlib.h>
@@ -8,7 +30,8 @@
 #include <stdio.h>
 #include <dirent.h>
 
-#include "inotify.h"
+#include "sys/inotify.h"
+
 #include "utils.h"
 #include "conversions.h"
 #include "worker-thread.h"
@@ -21,6 +44,13 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags);
 static void
 worker_cmd_reset (worker_cmd *cmd);
 
+/**
+ * Initialize a command with the data of the inotify_add_watch() call.
+ *
+ * @param[in] cmd      A pointer to #worker_cmd.
+ * @param[in] filename A file name of the watched entry.
+ * @param[in] mask     A combination of the inotify watch flags.
+ **/
 void
 worker_cmd_add (worker_cmd *cmd, const char *filename, uint32_t mask)
 {
@@ -34,6 +64,13 @@ worker_cmd_add (worker_cmd *cmd, const char *filename, uint32_t mask)
     pthread_barrier_init (&cmd->sync, NULL, 2);
 }
 
+
+/**
+ * Initiailize a command with the data of the inotify_rm_watch() call.
+ *
+ * @param[in] cmd       A pointer to #worker_cmd
+ * @param[in] watch_id  The identificator of a watch to remove.
+ **/
 void
 worker_cmd_remove (worker_cmd *cmd, int watch_id)
 {
@@ -46,7 +83,11 @@ worker_cmd_remove (worker_cmd *cmd, int watch_id)
     pthread_barrier_init (&cmd->sync, NULL, 2);
 }
 
-
+/**
+ * Reset the worker command.
+ *
+ * @param[in] cmd A pointer to #worker_cmd.
+ **/
 static void
 worker_cmd_reset (worker_cmd *cmd)
 {
@@ -58,6 +99,14 @@ worker_cmd_reset (worker_cmd *cmd)
     memset (cmd, 0, sizeof (worker_cmd));
 }
 
+/**
+ * Wait on a worker command.
+ *
+ * This function is used by both user and worker threads for
+ * synchronization.
+ *
+ * @param[in] cmd A pointer to #worker_cmd.
+ **/
 void
 worker_cmd_wait (worker_cmd *cmd)
 {
@@ -67,36 +116,44 @@ worker_cmd_wait (worker_cmd *cmd)
 }
 
 
-
+/**
+ * Create a new worker and start its thread.
+ *
+ * @return A pointer to a new worker.
+ **/
 worker*
 worker_create ()
 {
     worker* wrk = calloc (1, sizeof (worker));
 
     if (wrk == NULL) {
-        perror ("Failed to create a new worker");
+        perror_msg ("Failed to create a new worker");
         goto failure;
     }
 
     wrk->kq = kqueue ();
     if (wrk->kq == -1) {
-        perror ("Failed to create a new kqueue");
+        perror_msg ("Failed to create a new kqueue");
         goto failure;
     }
 
     if (socketpair (AF_UNIX, SOCK_STREAM, 0, wrk->io) == -1) {
-        perror ("Failed to create a socket pair");
+        perror_msg ("Failed to create a socket pair");
         goto failure;
     }
 
-    worker_sets_init (&wrk->sets, wrk->io[KQUEUE_FD]);
+    if (worker_sets_init (&wrk->sets, wrk->io[KQUEUE_FD]) == -1) {
+        goto failure;
+    }
     pthread_mutex_init (&wrk->mutex, NULL);
 
     /* create a run a worker thread */
     if (pthread_create (&wrk->thread, NULL, worker_thread, wrk) != 0) {
-        perror ("Failed to start a new worker thread");
+        perror_msg ("Failed to start a new worker thread");
         goto failure;
     }
+
+    wrk->closed = 0;
 
     return wrk;
     
@@ -107,16 +164,35 @@ worker_create ()
     return NULL;
 }
 
-
+/**
+ * Free a worker and all the associated memory.
+ *
+ * @param[in] wrk A pointer to #worker.
+ **/
 void
 worker_free (worker *wrk)
 {
     assert (wrk != NULL);
+    close (wrk->io[KQUEUE_FD]);
+    wrk->io[KQUEUE_FD] = -1;
 
+    close (wrk->kq);
+    wrk->closed = 1;
+    worker_cmd_reset (&wrk->cmd);
     worker_sets_free (&wrk->sets);
-    free (wrk);
 }
 
+/**
+ * When starting watching a directory, start also watching its contents.
+ *
+ * This function creates and initializes additional watches for a directory.
+ *
+ * @param[in] wrk    A pointer to #worker.
+ * @param[in] event  A pointer to the associated kqueue event.
+ * @param[in] parent A pointer to the parent #watch, i.e. the watch we add
+ *     dependencies for.
+ * @return 0 on success, -1 otherwise.
+ **/
 static int
 worker_add_dependencies (worker        *wrk,
                          struct kevent *event,
@@ -132,23 +208,37 @@ worker_add_dependencies (worker        *wrk,
     {   dep_list *iter = parent->deps;
         while (iter != NULL) {
             char *path = path_concat (parent->filename, iter->path);
-            watch *neww = worker_start_watching (wrk,
-                                                 path,
-                                                 iter->path,
-                                                 parent->flags,
-                                                 WATCH_DEPENDENCY);
-            if (neww == NULL) {
-                perror ("Failed to start watching a dependency\n");
-                /* TODO ? */
+            if (path != NULL) {
+                watch *neww = worker_start_watching (wrk,
+                                                     path,
+                                                     iter->path,
+                                                     parent->flags,
+                                                     WATCH_DEPENDENCY);
+                if (neww == NULL) {
+                    perror_msg ("Failed to start watching a dependency\n");
+                } else {
+                    neww->parent = parent;
+                }
+                free (path);
+            } else {
+                perror_msg ("Failed to allocate a path while adding a dependency");
             }
-            neww->parent = parent;
             iter = iter->next;
-            free (path);
         }
     }
     return 0;
 }
 
+/**
+ * Start watching a file or a directory.
+ *
+ * @param[in] wrk        A pointer to #worker.
+ * @param[in] path       Path to watch.
+ * @param[in] entry_name Entry name. Used for dependencies.
+ * @param[in] flags      A combination of inotify event flags.
+ * @param[in] type       The type of a watch.
+ * @return A pointer to a created watch.
+ **/
 watch*
 worker_start_watching (worker      *wrk,
                        const char  *path,
@@ -161,7 +251,11 @@ worker_start_watching (worker      *wrk,
 
     int i;
 
-    worker_sets_extend (&wrk->sets, 1);
+    if (worker_sets_extend (&wrk->sets, 1) == -1) {
+        perror_msg ("Failed to extend worker sets");
+        return NULL;
+    }
+
     i = wrk->sets.length;
     wrk->sets.watches[i] = calloc (1, sizeof (struct watch));
     if (watch_init (wrk->sets.watches[i],
@@ -172,13 +266,11 @@ worker_start_watching (worker      *wrk,
                     flags,
                     i)
         == -1) {
-        perror ("Failed to initialize a user watch\n");
-        // TODO: error
+        watch_free (wrk->sets.watches[i]);
+        wrk->sets.watches[i] = NULL;
         return NULL;
     }
     ++wrk->sets.length;
-
-    printf ("Starting watching on %s, index %d\n", path, i);
 
     if (type == WATCH_USER && wrk->sets.watches[i]->is_directory) {
         worker_add_dependencies (wrk, &wrk->sets.events[i], wrk->sets.watches[i]);
@@ -186,6 +278,14 @@ worker_start_watching (worker      *wrk,
     return wrk->sets.watches[i];
 }
 
+/**
+ * Add or modify a watch.
+ *
+ * @param[in] wrk   A pointer to #worker.
+ * @param[in] path  A file path to watch.
+ * @param[in] flags A combination of inotify watch flags.
+ * @return An id of an added watch on success, -1 on failure.
+**/
 int
 worker_add_or_modify (worker     *wrk,
                       const char *path,
@@ -212,12 +312,18 @@ worker_add_or_modify (worker     *wrk,
         }
     }
 
-    // add a new entry if path is not found
-    watch *w = worker_start_watching (wrk, path, NULL, flags, WATCH_USER); // TODO: magic number
+    /* add a new entry if path is not found */
+    watch *w = worker_start_watching (wrk, path, NULL, flags, WATCH_USER);
     return (w != NULL) ? w->fd : -1;
 }
 
-
+/**
+ * Stop and remove a watch.
+ *
+ * @param[in] wrk A pointer to #worker.
+ * @param[in] id  An ID of the watch to remove.
+ * @return 0 on success, -1 of failure.
+ **/
 int
 worker_remove (worker *wrk,
                int     id)
@@ -228,10 +334,21 @@ worker_remove (worker *wrk,
     int i;
     for (i = 1; i < wrk->sets.length; i++) {
         if (wrk->sets.events[i].ident == id) {
+            int ie_len = 0;
+            struct inotify_event *ie;
+            ie = create_inotify_event (id, IN_IGNORED, 0, "", &ie_len);
+
             worker_remove_many (wrk,
                                 wrk->sets.watches[i],
                                 wrk->sets.watches[i]->deps,
                                 1);
+
+            if (ie != NULL) {
+                safe_write (wrk->io[KQUEUE_FD], ie, ie_len);
+                free (ie);
+            } else {
+                perror_msg ("Failed to create an IN_IGNORED event on stopping a watch");
+            }
             break;
         }
     }
@@ -240,14 +357,21 @@ worker_remove (worker *wrk,
 }
 
 
-
+/**
+ * Update watch flags.
+ *
+ * When called for a directory watch, update also the flags of all the
+ * dependent (child) watches.
+ *
+ * @param[in] wrk   A pointer to #worker.
+ * @param[in] w     A pointer to #watch.
+ * @param[in] flags A combination of the inotify watch flags.
+ **/
 static void
 worker_update_flags (worker *wrk, watch *w, uint32_t flags)
 {
     assert (w != NULL);
     assert (w->event != NULL);
-
-    printf ("Updating flags!\n");
 
     w->flags = flags;
     w->event->fflags = inotify_to_kqueue (flags, w->is_directory);
@@ -270,7 +394,15 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags)
     }
 }
 
-
+/**
+ * Remove a list of watches, probably with ther parent watch.
+ *
+ * @param[in] wrk     A pointer to #worker.
+ * @param[in] parent  A pointer to the parent #watch.
+ * @param[in] items   A list of watches to remove. All items must be childs of
+ *     of the specified parent.
+ * @param[in] remove_self Set to 1 to remove the parent watch too.
+ **/
 void
 worker_remove_many (worker *wrk, watch *parent, dep_list *items, int remove_self)
 {
@@ -279,6 +411,7 @@ worker_remove_many (worker *wrk, watch *parent, dep_list *items, int remove_self
 
     dep_list *to_remove = dl_shallow_copy (items);
     dep_list *to_head = to_remove;
+    
     int i, j;
 
     for (i = 1, j = 1; i < wrk->sets.length; i++) {
@@ -328,12 +461,21 @@ worker_remove_many (worker *wrk, watch *parent, dep_list *items, int remove_self
 
     wrk->sets.length -= (i - j);
 
-    // TODO: who will free items?
-    // TODO: possible memory corruption here?
+    for (i = wrk->sets.length; i < wrk->sets.allocated; i++) {
+        wrk->sets.watches[i] = NULL;
+    }
+
     dl_shallow_free (to_remove);
 }
 
-
+/**
+ * Update paths of child watches for a specified watch.
+ *
+ * It is necessary when renames in the watched directory occur.
+ *
+ * @param[in] wrk    A pointer to #worker.
+ * @param[in] parent A pointer to parent #watch.
+ **/
 void
 worker_update_paths (worker *wrk, watch *parent)
 {
@@ -369,14 +511,14 @@ worker_update_paths (worker *wrk, watch *parent)
                 } else {
                     to_head = iter->next;
                 }
-            }
 
-            free (w->filename);
-            // TODO: memleak?
-            w->filename = strdup (iter->path);
+                if (strcmp (iter->path, w->filename)) {
+                    free (w->filename);
+                    w->filename = strdup (iter->path);
+                }
+            }
         }
     }
     
-    // TODO: possible memory corruption here?
     dl_shallow_free (to_update);
 }
