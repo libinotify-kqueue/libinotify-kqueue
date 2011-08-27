@@ -59,6 +59,21 @@ struct inotify_event
 /* ...and flags */
 #define IN_ISDIR	     0x40000000
 
+/* These flags are unsupported, but still should be present */
+#define IN_UNMOUNT	     0x00002000	/* Backing fs was unmounted.  */
+#define IN_Q_OVERFLOW	 0x00004000	/* Event queued overflowed.  */
+#define IN_IGNORED	     0x00008000	/* File was ignored.  */
+
+#define IN_ONLYDIR	     0x01000000	/* Only watch the path if it is a
+                                       directory.  */
+#define IN_DONT_FOLLOW	 0x02000000	/* Do not follow a sym link.  */
+#define IN_EXCL_UNLINK	 0x04000000	/* Exclude events on unlinked
+                                       objects.  */
+#define IN_MASK_ADD	    0x20000000	/* Add to the mask of an already
+                                       existing watch.  */
+#define IN_ISDIR	    0x40000000	/* Event occurred against dir.  */
+#define IN_ONESHOT	    0x80000000	/* Only send event once.  */
+
 
 /*
  * All of the events - we build the list by hand so that we can add flags in
