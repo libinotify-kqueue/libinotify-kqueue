@@ -27,6 +27,8 @@
 #include "inotify_client.hh"
 #include "log.hh"
 
+#include <iostream>
+
 inotify_client::inotify_client ()
 : fd (inotify_init())
 {

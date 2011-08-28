@@ -26,6 +26,7 @@
 #include <unistd.h> /* write */
 #include <stdlib.h> /* calloc, realloc */
 #include <string.h> /* memset */
+#include <stdio.h>
 #include <errno.h>
 
 #include "sys/inotify.h"
@@ -35,6 +36,7 @@
 #include "worker.h"
 #include "worker-sets.h"
 #include "worker-thread.h"
+
 
 /**
  * This structure represents a sequence of packets.
@@ -94,6 +96,10 @@ process_command (worker *wrk)
                                                 wrk->cmd.add.mask);
     } else if (wrk->cmd.type == WCMD_REMOVE) {
         wrk->cmd.retval = worker_remove (wrk, wrk->cmd.rm_id);
+    } else {
+        perror_msg ("Worker processing a command without a command - "
+                    "something went wrong.");
+        return;
     }
 
     /* TODO: is the situation when nobody else waits on a barrier possible */
@@ -603,15 +609,20 @@ worker_thread (void *arg)
 
         if (received.ident == wrk->io[KQUEUE_FD]) {
             if (received.flags & EV_EOF) {
+                wrk->closed = 1;
+                int fd = wrk->io[INOTIFY_FD];
+                wrk->io[INOTIFY_FD] = -1;
                 worker_erase (wrk);
 
-                if (pthread_mutex_trylock (&wrk->mutex) == EBUSY) {
-                    wrk->closed = 1;
-                } else {
+                if (pthread_mutex_trylock (&wrk->mutex) == 0) {
                     worker_free (wrk);
                     pthread_mutex_unlock (&wrk->mutex);
                     free (wrk);
                 }
+                /* If we could not lock on a worker, it means that an inotify
+                 * call (add_watch/rm_watch) has already locked it. In this
+                 * case worker will be freed by a caller (caller checks the
+                 * `closed' flag. */
                 return NULL;
             } else {
                 process_command (wrk);

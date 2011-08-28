@@ -37,7 +37,6 @@
 #include "worker-thread.h"
 #include "worker.h"
 
-
 static void
 worker_update_flags (worker *wrk, watch *w, uint32_t flags);
 
@@ -137,7 +136,7 @@ worker_create ()
         goto failure;
     }
 
-    if (socketpair (AF_UNIX, SOCK_STREAM, 0, wrk->io) == -1) {
+    if (socketpair (AF_UNIX, SOCK_STREAM, 0, (int *) wrk->io) == -1) {
         perror_msg ("Failed to create a socket pair");
         goto failure;
     }
@@ -173,6 +172,7 @@ void
 worker_free (worker *wrk)
 {
     assert (wrk != NULL);
+
     close (wrk->io[KQUEUE_FD]);
     wrk->io[KQUEUE_FD] = -1;
 

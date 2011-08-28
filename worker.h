@@ -67,7 +67,7 @@ void worker_cmd_wait   (worker_cmd *cmd);
 
 typedef struct {
     int kq;                /* kqueue descriptor */
-    int io[2];             /* a socket pair */
+    volatile int io[2];    /* a socket pair */
     pthread_t thread;      /* worker thread */
     worker_sets sets;      /* kqueue events, filenames, etc */
     volatile int closed;   /* closed flag */

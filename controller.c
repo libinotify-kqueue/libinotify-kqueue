@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
+#include <stdio.h>
 
 #include "sys/inotify.h"
 
@@ -58,6 +59,23 @@ inotify_init (void) __THROW
             worker *wrk = worker_create ();
             if (wrk != NULL) {
                 workers[i] = wrk;
+
+                /* We can face into situation when there are two workers with
+                 * the same inotify FDs. It usually occurs when a worker fd has
+                 * been closed but the worker has not been removed from a list
+                 * yet. The fd is free, and when we create a new worker, we can
+                 * receive the same fd. So check for duplicates and remove them
+                 * now. */
+                int j;
+                for (j = 0; j < WORKER_SZ; j++) {
+                    worker *jw = workers[j];
+                    if (jw != NULL && jw->io[INOTIFY_FD] == wrk->io[INOTIFY_FD]
+                        && jw != wrk) {
+                        workers[j] = NULL;
+                        perror_msg ("Collision found!");
+                    }
+                }
+
                 pthread_mutex_unlock (&workers_mutex);
                 return wrk->io[INOTIFY_FD];
             }
@@ -91,7 +109,8 @@ inotify_add_watch (int         fd,
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
         worker *wrk = workers[i];
-        if (wrk != NULL && wrk->io[INOTIFY_FD] == fd) {
+        if (wrk != NULL && wrk->io[INOTIFY_FD] == fd && wrk->closed == 0
+            && is_opened (wrk->io[INOTIFY_FD])) {
             pthread_mutex_lock (&wrk->mutex);
 
             if (wrk->closed) {
@@ -148,7 +167,8 @@ inotify_rm_watch (int fd,
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
         worker *wrk = workers[i];
-        if (wrk != NULL && wrk->io[INOTIFY_FD] == fd) {
+        if (wrk != NULL && wrk->io[INOTIFY_FD] == fd && wrk->closed == 0
+            && is_opened (wrk->io[INOTIFY_FD])) {
             pthread_mutex_lock (&wrk->mutex);
 
             if (wrk->closed) {
@@ -176,7 +196,7 @@ inotify_rm_watch (int fd,
             return retval;
         }
     }
-    
+
     pthread_mutex_unlock (&workers_mutex);
     return 0;
 }

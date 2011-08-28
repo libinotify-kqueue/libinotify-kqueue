@@ -24,6 +24,9 @@
 #include <errno.h>  /* EINTR */
 #include <stdlib.h> /* malloc */
 #include <string.h> /* strlen */
+#include <fcntl.h> /* fcntl */
+#include <stdio.h>
+#include <assert.h>
 
 #include "sys/inotify.h"
 #include "utils.h"
@@ -144,6 +147,20 @@ int
 safe_write (int fd, const void *data, size_t size)
 {
     SAFE_GENERIC_OP (write, fd, data, size);
+}
+
+
+/**
+ * Check if the specified file descriptor is still opened.
+ *
+ * @param[in] fd A file descriptor to check.
+ * @return 1 if still opened, 0 if closed or an error has occured.
+ **/
+int
+is_opened (int fd)
+{
+    int ret = (fcntl (fd, F_GETFL) != -1);
+    return ret;
 }
 
 /**

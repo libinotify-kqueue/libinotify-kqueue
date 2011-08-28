@@ -24,6 +24,7 @@
 #define __UTILS_H__
 
 #include <stdint.h> /* uint32_t */
+#include <pthread.h>
 
 char* path_concat (const char *dir, const char *file);
 
@@ -35,6 +36,8 @@ struct inotify_event* create_inotify_event (int         wd,
 
 int safe_read  (int fd, void *data, size_t size);
 int safe_write (int fd, const void *data, size_t size);
+
+int is_opened (int fd);
 
 void perror_msg (const char *msg);
 
