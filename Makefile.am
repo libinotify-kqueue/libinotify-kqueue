@@ -17,7 +17,7 @@ libinotify_la_SOURCES = \
 	worker.c \
 	controller.c
 
-libinotify_la_CFLAGS = -I.
+libinotify_la_CFLAGS = -I. -DNDEBUG
 libinotify_la_LDFLAGS = -lpthread
 endif
 
