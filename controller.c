@@ -20,7 +20,6 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include <sys/event.h>
 #include <stddef.h> /* NULL */
 #include <string.h>
 #include <stdlib.h>
@@ -28,6 +27,9 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
+
+#include <sys/types.h>
+#include <sys/event.h>
 
 #include "sys/inotify.h"
 

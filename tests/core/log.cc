@@ -21,6 +21,9 @@
 *******************************************************************************/
 
 #include <pthread.h>
+#if defined(__FreeBSD__)
+#include <sys/types.h>
+#endif
 
 static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -40,6 +43,8 @@ unsigned int current_thread ()
     return static_cast<unsigned int>(pthread_self ());
 #elif defined (__NetBSD__)
     return reinterpret_cast<unsigned int>(pthread_self ());
+#elif defined (__FreeBSD__)
+    return reinterpret_cast<uintptr_t>(pthread_self ());
 #else
     error Currently unsupported
 #endif

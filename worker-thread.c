@@ -20,7 +20,6 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include <sys/event.h>
 #include <stddef.h> /* NULL */
 #include <assert.h>
 #include <unistd.h> /* write */
@@ -28,6 +27,9 @@
 #include <string.h> /* memset */
 #include <stdio.h>
 #include <errno.h>
+
+#include <sys/types.h>
+#include <sys/event.h>
 
 #include "sys/inotify.h"
 
@@ -519,7 +521,7 @@ produce_notifications (worker *wrk, struct kevent *event)
     assert (wrk != NULL);
     assert (event != NULL);
 
-    watch *w = wrk->sets.watches[event->udata];
+    watch *w = wrk->sets.watches[(uintptr_t)event->udata];
 
     if (w->type == WATCH_USER) {
         uint32_t flags = event->fflags;

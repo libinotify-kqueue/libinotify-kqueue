@@ -26,6 +26,9 @@
 #include <stdlib.h> /* free */
 #include <assert.h>
 
+#include <sys/types.h>
+#include <sys/stat.h> /* stat */
+
 #include "utils.h"
 #include "conversions.h"
 #include "watch.h"
