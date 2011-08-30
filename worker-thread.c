@@ -74,7 +74,7 @@ bulk_write (bulk_events *be, void *mem, size_t size)
     }
 
     be->memory = ptr;
-    memcpy (be->memory + be->size, mem, size);
+    memcpy ((char *)be->memory + be->size, mem, size);
     be->size += size;
     return 0;
 }
