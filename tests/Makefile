@@ -2,7 +2,6 @@ UNAME=$(shell uname)
 APP=tests
 CXX=g++
 CXXFLAGS=-I.. -O2 -Wall -ggdb
-LDFLAGS=-lpthread
 
 
 # Uncomment this line to enable debug logging.
@@ -16,10 +15,15 @@ LDFLAGS=-lpthread
 
 ifeq ($(UNAME),Linux)
 	CXXFLAGS+=-std=c++0x
+	LDFLAGS=-lpthead
 endif
 
 ifeq ($(UNAME),NetBSD)
-	LDFLAGS+=../blob.a
+	LDFLAGS=../blob.a -lpthead
+endif
+
+ifeq ($(UNAME),FreeBSD)
+	LDFLAGS=-L../.libs/ -pthread -linotify
 endif
 
 CORE_OBJS=\

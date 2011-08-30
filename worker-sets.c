@@ -26,6 +26,7 @@
 #include <stddef.h> /* NULL */
 #include <fcntl.h>  /* open, fstat */
 #include <dirent.h> /* opendir, readdir, closedir */
+#include <sys/types.h>
 #include <sys/event.h>
 
 #include "sys/inotify.h"

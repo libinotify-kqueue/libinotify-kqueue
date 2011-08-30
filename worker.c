@@ -20,8 +20,6 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include <sys/event.h>
-#include <sys/socket.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h> /* open() */
@@ -29,6 +27,10 @@
 #include <assert.h>
 #include <stdio.h>
 #include <dirent.h>
+
+#include <sys/types.h>
+#include <sys/event.h>
+#include <sys/socket.h>
 
 #include "sys/inotify.h"
 
