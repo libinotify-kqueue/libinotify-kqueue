@@ -10,9 +10,13 @@ case "$host_os" in
 *linux*)
    OS=Linux
    ;;
+*freebsd*)
+   OS=FreeBSD
+   ;;
 esac
 
 AM_CONDITIONAL(LINUX, [test "$OS" = "Linux"])
+AM_CONDITIONAL(FREEBSD, [test "$OS" = "FreeBSD"])
 
 
 AC_ARG_ENABLE([perrors],
