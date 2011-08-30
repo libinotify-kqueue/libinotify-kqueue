@@ -39,6 +39,7 @@
 #include "worker-sets.h"
 #include "worker-thread.h"
 
+void worker_erase (worker *wrk);
 
 /**
  * This structure represents a sequence of packets.
