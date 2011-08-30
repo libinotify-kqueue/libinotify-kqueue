@@ -450,7 +450,7 @@ worker_remove_many (worker *wrk, watch *parent, dep_list *items, int remove_self
         /* If the control reached here, keep this item */
         if (i != j) {
             wrk->sets.events[j] = wrk->sets.events[i];
-            wrk->sets.events[j].udata = j;
+            wrk->sets.events[j].udata = (void *)(uintptr_t)j;
             wrk->sets.watches[j] = w;
             wrk->sets.watches[j]->event = &wrk->sets.events[j];
         }
