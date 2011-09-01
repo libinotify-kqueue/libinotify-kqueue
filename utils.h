@@ -31,8 +31,8 @@
  * This macros will help to avoid cast warnings on the supported platforms.
  */
 #if defined(__NetBSD__)
-#  define INDEX_TO_UDATA(X) X
-#  define UDATA_TO_INDEX(X) X
+#  define INDEX_TO_UDATA(X) (X)
+#  define UDATA_TO_INDEX(X) (X)
 #elif defined(__FreeBSD__)
 #  define INDEX_TO_UDATA(X) ((void *)(uintptr_t)X)
 #  define UDATA_TO_INDEX(X) ((uintptr_t)X)
