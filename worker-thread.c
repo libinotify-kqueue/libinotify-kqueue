@@ -39,6 +39,7 @@
 #include "worker-sets.h"
 #include "worker-thread.h"
 
+void worker_erase (worker *wrk);
 
 /**
  * This structure represents a sequence of packets.
@@ -73,7 +74,7 @@ bulk_write (bulk_events *be, void *mem, size_t size)
     }
 
     be->memory = ptr;
-    memcpy (be->memory + be->size, mem, size);
+    memcpy ((char *)be->memory + be->size, mem, size);
     be->size += size;
     return 0;
 }
@@ -612,7 +613,6 @@ worker_thread (void *arg)
         if (received.ident == wrk->io[KQUEUE_FD]) {
             if (received.flags & EV_EOF) {
                 wrk->closed = 1;
-                int fd = wrk->io[INOTIFY_FD];
                 wrk->io[INOTIFY_FD] = -1;
                 worker_erase (wrk);
 

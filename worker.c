@@ -302,7 +302,7 @@ worker_add_or_modify (worker     *wrk,
     assert (sets->watches != NULL);
 
     /* look up for an entry with this filename */
-    int i = 0;
+    size_t i = 0;
     for (i = 1; i < sets->length; i++) {
         const char *evpath = sets->watches[i]->filename;
         assert (evpath != NULL);
@@ -333,7 +333,7 @@ worker_remove (worker *wrk,
     assert (wrk != NULL);
     assert (id != -1);
 
-    int i;
+    size_t i;
     for (i = 1; i < wrk->sets.length; i++) {
         if (wrk->sets.events[i].ident == id) {
             int ie_len = 0;
@@ -385,7 +385,7 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags)
         /* Yes, it is quite stupid to iterate over ALL watches of a worker
          * while we have a linked list of its dependencies.
          * TODO improve it */
-        int i;
+        size_t i;
         for (i = 1; i < wrk->sets.length; i++) {
             watch *depw = wrk->sets.watches[i];
             if (depw->parent == w) {
@@ -414,7 +414,7 @@ worker_remove_many (worker *wrk, watch *parent, dep_list *items, int remove_self
     dep_list *to_remove = dl_shallow_copy (items);
     dep_list *to_head = to_remove;
     
-    int i, j;
+    size_t i, j;
 
     for (i = 1, j = 1; i < wrk->sets.length; i++) {
         dep_list *iter = to_head;
@@ -450,7 +450,7 @@ worker_remove_many (worker *wrk, watch *parent, dep_list *items, int remove_self
         /* If the control reached here, keep this item */
         if (i != j) {
             wrk->sets.events[j] = wrk->sets.events[i];
-            wrk->sets.events[j].udata = j;
+            wrk->sets.events[j].udata = (void *)(uintptr_t)j;
             wrk->sets.watches[j] = w;
             wrk->sets.watches[j]->event = &wrk->sets.events[j];
         }
@@ -490,7 +490,7 @@ worker_update_paths (worker *wrk, watch *parent)
 
     dep_list *to_update = dl_shallow_copy (parent->deps);
     dep_list *to_head = to_update;
-    int i, j;
+    size_t i, j;
 
     for (i = 1, j = 1; i < wrk->sets.length; i++) {
         dep_list *iter = to_head;

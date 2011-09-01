@@ -116,7 +116,7 @@ worker_sets_free (worker_sets *ws)
     assert (ws->events != NULL);
     assert (ws->watches != NULL);
 
-    int i;
+    size_t i;
     for (i = 0; i < ws->length; i++) {
         if (ws->watches[i] != NULL) {
             watch_free (ws->watches[i]);

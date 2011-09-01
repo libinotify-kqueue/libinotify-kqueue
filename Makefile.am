@@ -18,7 +18,11 @@ libinotify_la_SOURCES = \
 	controller.c
 
 libinotify_la_CFLAGS = -I. -DNDEBUG
+if FREEBSD
+libinotify_la_LDFLAGS = -pthread
+else
 libinotify_la_LDFLAGS = -lpthread
+endif
 endif
 
 ############################################################
@@ -62,7 +66,11 @@ if BUILD_LIBRARY
 check_libinotify_LDADD = libinotify.la
 endif
 
+if FREEBSD
+check_libinotify_LDFLAGS = -pthread
+else
 check_libinotify_LDFLAGS = -lpthread
+endif
 
 
 noinst_programs = check_libinotify
