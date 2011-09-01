@@ -123,7 +123,7 @@ watch_init (watch         *w,
             EV_ADD | EV_ENABLE | EV_ONESHOT,
             inotify_to_kqueue (flags, w->is_directory),
             0,
-            (void *)(uintptr_t)index);
+            INDEX_TO_UDATA (index));
 
     return 0;
 }

@@ -397,7 +397,7 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags)
 }
 
 /**
- * Remove a list of watches, probably with ther parent watch.
+ * Remove a list of watches, probably with their parent watch.
  *
  * @param[in] wrk     A pointer to #worker.
  * @param[in] parent  A pointer to the parent #watch.
@@ -450,7 +450,7 @@ worker_remove_many (worker *wrk, watch *parent, dep_list *items, int remove_self
         /* If the control reached here, keep this item */
         if (i != j) {
             wrk->sets.events[j] = wrk->sets.events[i];
-            wrk->sets.events[j].udata = (void *)(uintptr_t)j;
+            wrk->sets.events[j].udata = INDEX_TO_UDATA (j);
             wrk->sets.watches[j] = w;
             wrk->sets.watches[j]->event = &wrk->sets.events[j];
         }

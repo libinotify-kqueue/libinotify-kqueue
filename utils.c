@@ -117,7 +117,7 @@ create_inotify_event (int         wd,
             }                                   \
         }                                       \
         size -= retval;                         \
-        data = (const char *)data + retval;     \
+        data = (char *)data + retval;           \
     }                                           \
     return 0;
 
