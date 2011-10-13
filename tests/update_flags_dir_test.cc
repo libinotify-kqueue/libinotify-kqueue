@@ -20,6 +20,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <cstdlib>
+
 #include "update_flags_dir_test.hh"
 
 update_flags_dir_test::update_flags_dir_test (journal &j)

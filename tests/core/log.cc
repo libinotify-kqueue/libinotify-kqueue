@@ -40,9 +40,9 @@ void release_log_lock ()
 unsigned int current_thread ()
 {
 #ifdef __linux__
-    return static_cast<unsigned int>(pthread_self ());
+    return static_cast<unsigned long>(pthread_self ());
 #elif defined (__NetBSD__)
-    return reinterpret_cast<unsigned int>(pthread_self ());
+    return reinterpret_cast<unsigned long>(pthread_self ());
 #elif defined (__FreeBSD__)
     return reinterpret_cast<uintptr_t>(pthread_self ());
 #else

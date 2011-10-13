@@ -20,6 +20,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <cstdlib>
+
 #include "open_close_test.hh"
 
 open_close_test::open_close_test (journal &j)

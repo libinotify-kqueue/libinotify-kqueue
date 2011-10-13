@@ -20,6 +20,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <cstdlib>
+
 #include "notifications_test.hh"
 
 notifications_test::notifications_test (journal &j)
