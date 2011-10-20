@@ -109,312 +109,322 @@ process_command (worker *wrk)
     pthread_barrier_wait (&wrk->cmd.sync);
 }
 
-/**
- * Traverses two lists. Compares items with a supplied expression
- * and performs the passed code on a match. Removes the matched entries
- * from the both lists.
+/** 
+ * This structure represents a directory diff calculation context.
+ * It is passed to dl_calculate as user data and then is used in all
+ * the callbacks.
  **/
-#define EXCLUDE_SIMILAR(removed_list, added_list, match_expr, matched_code) \
-    assert (removed_list != NULL);                                      \
-    assert (added_list != NULL);                                        \
-                                                                        \
-    dep_list *removed_list##_iter = *removed_list;                      \
-    dep_list *removed_list##_prev = NULL;                               \
-                                                                        \
-    int productive = 0;                                                 \
-                                                                        \
-    while (removed_list##_iter != NULL) {                               \
-        dep_list *added_list##_iter = *added_list;                      \
-        dep_list *added_list##_prev = NULL;                             \
-                                                                        \
-        int matched = 0;                                                \
-        while (added_list##_iter != NULL) {                             \
-            if (match_expr) {                                           \
-                matched = 1;                                            \
-                ++productive;                                           \
-                matched_code;                                           \
-                                                                        \
-                if (removed_list##_prev) {                              \
-                    removed_list##_prev->next = removed_list##_iter->next; \
-                } else {                                                \
-                    *removed_list = removed_list##_iter->next;          \
-                }                                                       \
-                if (added_list##_prev) {                                \
-                    added_list##_prev->next = added_list##_iter->next;  \
-                } else {                                                \
-                    *added_list = added_list##_iter->next;              \
-                }                                                       \
-                free (added_list##_iter);                               \
-                break;                                                  \
-            }                                                           \
-            added_list##_iter = added_list##_iter->next;                \
-        }                                                               \
-        dep_list *oldptr = removed_list##_iter;                         \
-        removed_list##_iter = removed_list##_iter->next;                \
-        if (matched == 0) {                                             \
-            removed_list##_prev = oldptr;                               \
-        } else {                                                        \
-            free (oldptr);                                              \
-        }                                                               \
-    }                                                                   \
-    return (productive > 0);
-
+typedef struct {
+    worker *wrk;
+    watch *w;
+    bulk_events *be;
+} handle_context;
 
 /**
- * Detect and notify about replacements in the watched directory.
+ * Produce an IN_CREATE notification for a new file and start wathing on it.
  *
- * Consider you are watching a directory foo with the folloing files
- * insinde:
+ * This function is used as a callback and is invoked from the dep-list
+ * routines.
  *
- *    foo/bar
- *    foo/baz
- *
- * A replacement in a watched directory is what happens when you invoke
- *
- *    mv /foo/bar /foo/bar
- *
- * i.e. when you replace a file in a watched directory with another file
- * from the same directory.
- *
- * @param[in]     wrk     A pointer to #worker.
- * @param[in]     w       A pointer to #watch.
- * @param[in,out] removed A pointer to a pointer to a #dep_list - a list
- *     of items which are considered as deleted in the watched directory.
- * @param[in,out] current A pointer to a pointer to a #dep_list - the
- *     current directory listing.
- * @param[in]     be      A pointer to #bulk_events
- * @return The number of the detected replacemenets.
+ * @param[in] udata  A pointer to user data (#handle_context).
+ * @param[in] path   File name of a new file.
+ * @param[in] inode  Inode number of a new file.
  **/
-int
-produce_directory_replacements (worker        *wrk,
-                                watch         *w,
-                                dep_list    **removed,
-                                dep_list    **current,
-                                bulk_events  *be)
+static void
+handle_added (void *udata, const char *path, ino_t inode)
 {
-    assert (wrk != NULL);
-    assert (w != NULL);
-    assert (be != NULL);
+    assert (udata != NULL);
 
-    EXCLUDE_SIMILAR
-        (removed, current,
-         (removed_iter->inode == current_iter->inode),
-         {
-             uint32_t cookie = removed_iter->inode & 0x00000000FFFFFFFF;
-             int event_len = 0;
-             struct inotify_event *ev;
+    handle_context *ctx = (handle_context *) udata;
+    assert (ctx->wrk != NULL);
+    assert (ctx->w != NULL);
+    assert (ctx->be != NULL);
 
-             ev = create_inotify_event (w->fd, IN_MOVED_FROM, cookie,
-                                        removed_iter->path,
-                                        &event_len);
-             if (ev != NULL) {
-                 bulk_write (be, ev, event_len);
-                 free (ev);
-             }  else {
-                 perror_msg ("Failed to create a new IN_MOVED_FROM inotify event (*)");
-             }
+    struct inotify_event *ie = NULL;
+    int ie_len = 0;
 
-             ev = create_inotify_event (w->fd, IN_MOVED_TO, cookie,
-                                        current_iter->path,
-                                        &event_len);
-             if (ev != NULL) {
-                 bulk_write (be, ev, event_len);
-                 free (ev);
-             } else {
-                 perror_msg ("Failed to create a new IN_MOVED_TO inotify event (*)");
-             }
+    ie = create_inotify_event (ctx->w->fd, IN_CREATE, 0, path, &ie_len);
+    if (ie != NULL) {
+        bulk_write (ctx->be, ie, ie_len);
+        free (ie);
+    } else {
+        perror_msg ("Failed to create a new inotify event (directory changes)");
+    }
 
-             int i;
-             for (i = 1; i < wrk->sets.length; i++) {
-                 watch *iw = wrk->sets.watches[i];
-                 if (iw && iw->parent == w
-                     && strcmp (current_iter->path, iw->filename) == 0) {
-                     dep_list *dl = dl_create (iw->filename, iw->inode);
-                     worker_remove_many (wrk, w, dl, 0);
-                     dl_shallow_free (dl);
-                     break;
-                 }
-             }
-         });
-}
-
-/**
- * Detect and notify about overwrites in the watched directory.
- *
- * Consider you are watching a directory foo with a file inside:
- *
- *    foo/bar
- *
- * And you also have a directory tmp with a file 1:
- * 
- *    tmp/1
- *
- * You do not watching directory tmp.
- *
- * A replacement in a watched directory is what happens when you invoke
- *
- *    mv /tmp/1 /foo/bar
- *
- * i.e. when you overwrite a file in a watched directory with another file
- * from the another directory.
- *
- * @param[in]     wrk     A pointer to #worker.
- * @param[in]     w       A pointer to #watch.
- * @param[in,out] removed A pointer to a pointer to a #dep_list -
- *     the listing of the previous contents of a directory.
- * @param[in,out] current A pointer to a pointer to a #dep_list -
- *     the current directory listing (with removed replacements, see above).
- * @param[in]     be      A pointer to #bulk_events
- * @return The number of the detected overwrites.
- **/
-int
-produce_directory_overwrites (worker      *wrk,
-                              watch       *w,
-                              dep_list   **previous,
-                              dep_list   **current,
-                              bulk_events *be)
-{
-    assert (wrk != NULL);
-    assert (w != NULL);
-    assert (be != NULL);
-
-    EXCLUDE_SIMILAR
-        (previous, current,
-         (strcmp (previous_iter->path, current_iter->path) == 0
-          && previous_iter->inode != current_iter->inode),
-         {
-             int i;
-             for (i = 0; i < wrk->sets.length; i++) {
-                 watch *wi = wrk->sets.watches[i];
-                 if (wi && (strcmp (wi->filename, current_iter->path) == 0)
-                     && wi->parent == w) {
-                     if (watch_reopen (wi) == -1) {
-                         /* I dont know, what to do */
-                         /* Not a very beautiful way to remove a single dependency */
-                         dep_list *dl = dl_create (wi->filename, wi->inode);
-                         worker_remove_many (wrk, w, dl, 0);
-                         dl_shallow_free (dl);
-                     } else {
-                         uint32_t cookie = current_iter->inode & 0x00000000FFFFFFFF;
-                         int event_len = 0;
-                         struct inotify_event *ev;
-
-                         ev = create_inotify_event (w->fd, IN_DELETE, cookie,
-                                                    current_iter->path,
-                                                    &event_len);
-                         if (ev != NULL) {
-                             bulk_write (be, ev, event_len);
-                             free (ev);
-                         }  else {
-                             perror_msg ("Failed to create a new IN_DELETE inotify event (*)");
-                         }
-
-                         ev = create_inotify_event (w->fd, IN_CREATE, cookie,
-                                                    current_iter->path,
-                                                    &event_len);
-                         if (ev != NULL) {
-                             bulk_write (be, ev, event_len);
-                             free (ev);
-                         } else {
-                             perror_msg ("Failed to create a new IN_CREATE inotify event (*)");
-                         }
-                     }
-                     break;
-                 }
-             }
-         });
-}
-
-/**
- * Detect and notify about moves in the watched directory.
- *
- * A move is what happens when you rename a file in a directory, and
- * a new name is unique, i.e. you didnt overwrite any existing files
- * with this one.
- *
- * @param[in]     w       A pointer to #watch.
- * @param[in,out] removed A pointer to a pointer to #dep_list - the list of
- *     files considered as removed in the watched directory.
- * @param[in,out] added   A pointer to a pointer to #dep_list - the list of
- *     files considered as created in the watched directory.
- * @param[in]     be      A pointer to #bulk_events.
- **/
-int
-produce_directory_moves (watch        *w,
-                         dep_list    **removed,
-                         dep_list    **added,
-                         bulk_events  *be)
-{
-    assert (w != NULL);
-    assert (be != NULL);
-
-    EXCLUDE_SIMILAR
-        (removed, added,
-         (removed_iter->inode == added_iter->inode),
-         {
-             uint32_t cookie = removed_iter->inode & 0x00000000FFFFFFFF;
-             int event_len = 0;
-             struct inotify_event *ev;
-             
-             ev = create_inotify_event (w->fd, IN_MOVED_FROM, cookie,
-                                        removed_iter->path,
-                                        &event_len);
-             if (ev != NULL) {   
-                 bulk_write (be, ev, event_len);
-                 free (ev);
-             } else {
-                 perror_msg ("Failed to create a new IN_MOVED_FROM inotify event");
-             }
-             
-             ev = create_inotify_event (w->fd, IN_MOVED_TO, cookie,
-                                        added_iter->path,
-                                        &event_len);
-             if (ev != NULL) {   
-                 bulk_write (be, ev, event_len);
-                 free (ev);
-             } else {
-                 perror_msg ("Failed to create a new IN_MOVED_TO inotify event");
-             }
-         });
-}
-
-/**
- * Inform about changes in the watched directory.
- *
- * This function traverses the list of items and for each item
- * it writes inotify notifications with the specified mask.
- *
- * The function is used to notify about IN_CREATE/IN_DELETE events
- *
- * @param[in] w    A pointer to #watch.
- * @param[in] list A list of items to notify about.
- * @param[in] flag A flag to set in the each inotify notification.
- * @param[in] be   A pointer to #bulk_events.
- **/
-void
-produce_directory_changes (watch          *w,
-                           dep_list       *list,
-                           uint32_t        flag,
-                           bulk_events    *be)
-{
-    assert (w != NULL);
-    assert (flag != 0);
-
-    while (list != NULL) {
-        struct inotify_event *ie = NULL;
-        int ie_len = 0;
-
-        ie = create_inotify_event (w->fd, flag, 0, list->path, &ie_len);
-        if (ie != NULL) {
-            bulk_write (be, ie, ie_len);
-            free (ie);
+    char *npath = path_concat (ctx->w->filename, path);
+    if (npath != NULL) {
+        watch *neww = worker_start_watching (ctx->wrk, npath, path, ctx->w->flags, WATCH_DEPENDENCY);
+        if (neww == NULL) {
+            perror_msg ("Failed to start watching on a new dependency\n");
         } else {
-            perror_msg ("Failed to create a new inotify event (directory changes)");
+            neww->parent = ctx->w;
         }
-
-        list = list->next;
+        free (npath);
+    } else {
+        perror_msg ("Failed to allocate a path to start watching a dependency");
     }
 }
+
+/**
+ * Produce an IN_DELETE notification for a removed file.
+ *
+ * This function is used as a callback and is invoked from the dep-list
+ * routines.
+ *
+ * @param[in] udata  A pointer to user data (#handle_context).
+ * @param[in] path   File name of the removed file.
+ * @param[in] inode  Inode number of the removed file.
+ **/
+static void
+handle_removed (void *udata, const char *path, ino_t inode)
+{
+    assert (udata != NULL);
+
+    handle_context *ctx = (handle_context *) udata;
+    assert (ctx->wrk != NULL);
+    assert (ctx->w != NULL);
+    assert (ctx->be != NULL);
+
+    struct inotify_event *ie = NULL;
+    int ie_len = 0;
+
+    ie = create_inotify_event (ctx->w->fd, IN_DELETE, 0, path, &ie_len);
+    if (ie != NULL) {
+        bulk_write (ctx->be, ie, ie_len);
+        free (ie);
+    } else {
+        perror_msg ("Failed to create a new inotify event (directory changes)");
+    }
+}
+
+/**
+ * Produce an IN_MOVED_FROM/IN_MOVED_TO notifications pair for a replaced file.
+ * Also stops wathing on the replaced file.
+ *
+ * This function is used as a callback and is invoked from the dep-list
+ * routines.
+ *
+ * @param[in] udata       A pointer to user data (#handle_context).
+ * @param[in] from_path   File name of the source file.
+ * @param[in] from_inode  Inode number of the source file.
+ * @param[in] to_path     File name of the replaced file.
+ * @param[in] to_inode    Inode number of the replaced file.
+**/
+static void
+handle_replaced (void       *udata,
+                 const char *from_path,
+                 ino_t       from_inode,
+                 const char *to_path,
+                 ino_t       to_inode)
+{
+    assert (udata != NULL);
+
+    handle_context *ctx = (handle_context *) udata;
+    assert (ctx->wrk != NULL);
+    assert (ctx->w != NULL);
+    assert (ctx->be != NULL);
+
+    uint32_t cookie = from_inode & 0x00000000FFFFFFFF;
+    int event_len = 0;
+    struct inotify_event *ev;
+
+    ev = create_inotify_event (ctx->w->fd, IN_MOVED_FROM, cookie,
+                               from_path,
+                               &event_len);
+    if (ev != NULL) {
+        bulk_write (ctx->be, ev, event_len);
+        free (ev);
+    }  else {
+        perror_msg ("Failed to create a new IN_MOVED_FROM inotify event (*)");
+    }
+
+    ev = create_inotify_event (ctx->w->fd, IN_MOVED_TO, cookie,
+                               to_path,
+                               &event_len);
+    if (ev != NULL) {
+        bulk_write (ctx->be, ev, event_len);
+        free (ev);
+    } else {
+        perror_msg ("Failed to create a new IN_MOVED_TO inotify event (*)");
+    }
+
+    int i;
+    for (i = 1; i < ctx->wrk->sets.length; i++) {
+        watch *iw = ctx->wrk->sets.watches[i];
+        if (iw && iw->parent == ctx->w && strcmp (to_path, iw->filename) == 0) {
+            dep_list *dl = dl_create (iw->filename, iw->inode);
+            worker_remove_many (ctx->wrk, ctx->w, dl, 0);
+            dl_shallow_free (dl);
+            break;
+        }
+    }
+}
+
+
+/**
+ * Produce an IN_DELETE/IN_CREATE notifications pair for an overwritten file.
+ * Reopen a watch for the overwritten file.
+ *
+ * This function is used as a callback and is invoked from the dep-list
+ * routines.
+ *
+ * @param[in] udata  A pointer to user data (#handle_context).
+ * @param[in] path   File name of the overwritten file.
+ * @param[in] inode  Inode number of the overwritten file.
+ **/
+static void
+handle_overwritten (void *udata, const char *path, ino_t inode)
+{
+    assert (udata != NULL);
+
+    handle_context *ctx = (handle_context *) udata;
+    assert (ctx->wrk != NULL);
+    assert (ctx->w != NULL);
+    assert (ctx->be != NULL);
+
+   int i;
+    for (i = 0; i < ctx->wrk->sets.length; i++) {
+        watch *wi = ctx->wrk->sets.watches[i];
+        if (wi && (strcmp (wi->filename, path) == 0)
+            && wi->parent == ctx->w) {
+            if (watch_reopen (wi) == -1) {
+                /* I dont know, what to do */
+                /* Not a very beautiful way to remove a single dependency */
+                dep_list *dl = dl_create (wi->filename, wi->inode);
+                worker_remove_many (ctx->wrk, ctx->w, dl, 0);
+                dl_shallow_free (dl);
+            } else {
+                uint32_t cookie = inode & 0x00000000FFFFFFFF;
+                int event_len = 0;
+                struct inotify_event *ev;
+
+                ev = create_inotify_event (ctx->w->fd, IN_DELETE, cookie,
+                                           path,
+                                           &event_len);
+                if (ev != NULL) {
+                    bulk_write (ctx->be, ev, event_len);
+                    free (ev);
+                }  else {
+                    perror_msg ("Failed to create a new IN_DELETE inotify event (*)");
+                }
+
+                ev = create_inotify_event (ctx->w->fd, IN_CREATE, cookie,
+                                           path,
+                                           &event_len);
+                if (ev != NULL) {
+                    bulk_write (ctx->be, ev, event_len);
+                    free (ev);
+                } else {
+                    perror_msg ("Failed to create a new IN_CREATE inotify event (*)");
+                }
+            }
+            break;
+        }
+    }
+}
+
+/**
+ * Produce an IN_MOVED_FROM/IN_MOVED_TO notifications pair for a renamed file.
+ *
+ * This function is used as a callback and is invoked from the dep-list
+ * routines.
+ *
+ * @param[in] udata       A pointer to user data (#handle_context).
+ * @param[in] from_path   The old name of the file.
+ * @param[in] from_inode  Inode number of the old file.
+ * @param[in] to_path     The new name of the file.
+ * @param[in] to_inode    Inode number of the new file.
+**/
+static void
+handle_moved (void       *udata,
+              const char *from_path,
+              ino_t       from_inode,
+              const char *to_path,
+              ino_t       to_inode)
+{
+    assert (udata != NULL);
+
+    handle_context *ctx = (handle_context *) udata;
+    assert (ctx->wrk != NULL);
+    assert (ctx->w != NULL);
+    assert (ctx->be != NULL);
+
+    uint32_t cookie = from_inode & 0x00000000FFFFFFFF;
+    int event_len = 0;
+    struct inotify_event *ev;
+    
+    ev = create_inotify_event (ctx->w->fd, IN_MOVED_FROM, cookie,
+                               from_path,
+                               &event_len);
+    if (ev != NULL) {   
+        bulk_write (ctx->be, ev, event_len);
+        free (ev);
+    } else {
+        perror_msg ("Failed to create a new IN_MOVED_FROM inotify event");
+    }
+    
+    ev = create_inotify_event (ctx->w->fd, IN_MOVED_TO, cookie,
+                               to_path,
+                               &event_len);
+    if (ev != NULL) {   
+        bulk_write (ctx->be, ev, event_len);
+        free (ev);
+    } else {
+        perror_msg ("Failed to create a new IN_MOVED_TO inotify event");
+    }
+}
+
+/**
+ * Remove the appropriate watches if the files were removed from the directory.
+ * 
+ * This function is used as a callback and is invoked from the dep-list
+ * routines.
+ *
+ * @param[in] udata  A pointer to user data (#handle_context).
+ * @param[in] list   A list of the removed files. 
+ **/
+static void
+handle_many_removed (void *udata, const dep_list *list)
+{
+    assert (udata != NULL);
+    handle_context *ctx = (handle_context *) udata;
+
+    if (list) {
+        worker_remove_many (ctx->wrk, ctx->w, list, 0);
+    }
+}
+
+/**
+ * Update file names for the renamed files.
+ *
+ * This function is used as a callback and is invoked from the dep-list
+ * routines.
+ *
+ * @param[in] udata  A pointer to user data (#handle_context).
+ **/
+static void
+handle_names_updated (void *udata)
+{
+    assert (udata != NULL);
+
+    handle_context *ctx = (handle_context *) udata;
+    assert (ctx->wrk != NULL);
+    assert (ctx->w != NULL);
+
+    worker_update_paths (ctx->wrk, ctx->w);
+}
+
+
+static const traverse_cbs cbs = {
+    handle_added,
+    handle_removed,
+    handle_replaced,
+    handle_overwritten,
+    handle_moved,
+    NULL, /* many_added */
+    handle_many_removed,
+    handle_names_updated,
+};
 
 /**
  * Detect and notify about the changes in the watched directory.
@@ -436,77 +446,36 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
     assert (w->type == WATCH_USER);
     assert (w->is_directory);
 
-    dep_list *was = NULL, *now = NULL, *ptr = NULL;
-
+    dep_list *was = NULL, *now = NULL;
     was = dl_shallow_copy (w->deps);
-    dep_list *previous = dl_shallow_copy (w->deps);
-
-    ptr = dl_listing (w->filename);
-    if (ptr == NULL && errno != ENOENT) {
-        /* why skip ENOENT? directory could be already deleted at this point */
-        perror_msg ("Failed to create a listing of directory");
+    now = dl_listing (w->filename);
+    if (now == NULL && errno != ENOENT) {
+        /* Why do I skip ENOENT? Because the directory could be deleted at this
+         * point */
+        perror_msg ("Failed to create a listing for directory");
         dl_shallow_free (was);
-        dl_shallow_free (previous);
         return;
     }
+
     dl_shallow_free (w->deps);
-    w->deps = ptr;
-
-    now = dl_shallow_copy (w->deps);
-
-    dl_diff (&was, &now);
+    w->deps = now;
 
     bulk_events be;
-    memset (&be, 0, sizeof (bulk_events));
+    memset (&be, 0, sizeof (be));
 
-    int need_upd = 0;
-    if (produce_directory_moves (w, &was, &now, &be)) {
-        ++need_upd;
-    }
-
-    dep_list *listing = dl_shallow_copy (w->deps);
-    if (produce_directory_replacements (wrk, w, &was, &listing, &be)) {
-        ++need_upd;
-    }
-
-    produce_directory_overwrites (wrk, w, &previous, &listing, &be);
-    dl_shallow_free (previous);
-    dl_shallow_free (listing);
+    handle_context ctx;
+    memset (&ctx, 0, sizeof (ctx));
+    ctx.wrk = wrk;
+    ctx.w = w;
+    ctx.be = &be;
     
-    if (need_upd) {
-        worker_update_paths (wrk, w);
-    }
-
-    produce_directory_changes (w, was, IN_DELETE, &be);
-    produce_directory_changes (w, now, IN_CREATE, &be);
-
+    dl_calculate (was, now, &cbs, &ctx);
+    
     if (be.memory) {
         safe_write (wrk->io[KQUEUE_FD], be.memory, be.size);
         free (be.memory);
     }
 
-    {   dep_list *now_iter = now;
-        while (now_iter != NULL) {
-            char *path = path_concat (w->filename, now_iter->path);
-            if (path != NULL) {
-                watch *neww = worker_start_watching (wrk, path, now_iter->path, w->flags, WATCH_DEPENDENCY);
-                if (neww == NULL) {
-                    perror_msg ("Failed to start watching on a new dependency\n");
-                } else {
-                    neww->parent = w;
-                }
-                free (path);
-            } else {
-                perror_msg ("Failed to allocate a path to start watching a dependency");
-            }
-
-            now_iter = now_iter->next;
-        }
-    }
-
-    worker_remove_many (wrk, w, was, 0);
-
-    dl_shallow_free (now);
     dl_free (was);
 }
 

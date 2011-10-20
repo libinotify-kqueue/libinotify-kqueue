@@ -91,6 +91,6 @@ int     worker_add_or_modify  (worker *wrk, const char *path, uint32_t flags);
 int     worker_remove         (worker *wrk, int id);
 
 void    worker_update_paths   (worker *wrk, watch *parent);
-void    worker_remove_many    (worker *wrk, watch *parent, dep_list* items, int remove_self);
+void    worker_remove_many    (worker *wrk, watch *parent, const dep_list* items, int remove_self);
 
 #endif /* __WORKER_H__ */

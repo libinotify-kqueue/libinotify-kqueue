@@ -406,7 +406,7 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags)
  * @param[in] remove_self Set to 1 to remove the parent watch too.
  **/
 void
-worker_remove_many (worker *wrk, watch *parent, dep_list *items, int remove_self)
+worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remove_self)
 {
     assert (wrk != NULL);
     assert (parent != NULL);

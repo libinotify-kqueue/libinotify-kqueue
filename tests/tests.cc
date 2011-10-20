@@ -74,7 +74,7 @@ int main (int argc, char *argv[]) {
 
     open_close_test oct (j);
     oct.wait_for_end ();
-    
+  
     fail_test ft (j);
     ft.wait_for_end ();
 #endif

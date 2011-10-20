@@ -35,7 +35,7 @@
  * @param[in] dl A pointer to a list.
  **/
 void
-dl_print (dep_list *dl)
+dl_print (const dep_list *dl)
 {
     while (dl != NULL) {
         printf ("%lld:%s ", dl->inode, dl->path);
@@ -77,7 +77,7 @@ dep_list* dl_create (char *path, ino_t inode)
  * @return A shallow copy of the list.
  **/ 
 dep_list*
-dl_shallow_copy (dep_list *dl)
+dl_shallow_copy (const dep_list *dl)
 {
     if (dl == NULL) {
         return NULL;
@@ -90,7 +90,7 @@ dl_shallow_copy (dep_list *dl)
     }
 
     dep_list *cp = head;
-    dep_list *it = dl;
+    const dep_list *it = dl;
 
     while (it != NULL) {
         cp->path = it->path;
@@ -270,3 +270,249 @@ dl_diff (dep_list **before, dep_list **after)
         }
     }
 }
+
+
+/**
+ * Traverses two lists. Compares items with a supplied expression
+ * and performs the passed code on a match. Removes the matched entries
+ * from the both lists.
+ **/
+#define EXCLUDE_SIMILAR(removed_list, added_list, match_expr, matched_code) \
+    assert (removed_list != NULL);                                      \
+    assert (added_list != NULL);                                        \
+                                                                        \
+    dep_list *removed_list##_iter = *removed_list;                      \
+    dep_list *removed_list##_prev = NULL;                               \
+                                                                        \
+    int productive = 0;                                                 \
+                                                                        \
+    while (removed_list##_iter != NULL) {                               \
+        dep_list *added_list##_iter = *added_list;                      \
+        dep_list *added_list##_prev = NULL;                             \
+                                                                        \
+        int matched = 0;                                                \
+        while (added_list##_iter != NULL) {                             \
+            if (match_expr) {                                           \
+                matched = 1;                                            \
+                ++productive;                                           \
+                matched_code;                                           \
+                                                                        \
+                if (removed_list##_prev) {                              \
+                    removed_list##_prev->next = removed_list##_iter->next; \
+                } else {                                                \
+                    *removed_list = removed_list##_iter->next;          \
+                }                                                       \
+                if (added_list##_prev) {                                \
+                    added_list##_prev->next = added_list##_iter->next;  \
+                } else {                                                \
+                    *added_list = added_list##_iter->next;              \
+                }                                                       \
+                free (added_list##_iter);                               \
+                break;                                                  \
+            }                                                           \
+            added_list##_iter = added_list##_iter->next;                \
+        }                                                               \
+        dep_list *oldptr = removed_list##_iter;                         \
+        removed_list##_iter = removed_list##_iter->next;                \
+        if (matched == 0) {                                             \
+            removed_list##_prev = oldptr;                               \
+        } else {                                                        \
+            free (oldptr);                                              \
+        }                                                               \
+    }                                                                   \
+    return (productive > 0);
+
+
+#define cb_invoke(cbs, name, udata, ...) \
+    do { \
+        if (cbs->name) { \
+            (cbs->name) (udata, ## __VA_ARGS__); \
+        } \
+    } while (0)
+
+/**
+ * Detect and notify about moves in the watched directory.
+ *
+ * A move is what happens when you rename a file in a directory, and
+ * a new name is unique, i.e. you didnt overwrite any existing files
+ * with this one.
+ *
+ * @param[in,out] removed  A list of the removed files in the directory.
+ * @param[in,out] added    A list of the added files of the directory.
+ * @param[in]     cbs      A pointer to #traverse_cbs, an user-defined set of 
+ *     traverse callbacks.
+ * @param[in]     udata    A pointer to the user-defined data.
+ * @return 0 if no files were renamed, >0 otherwise.
+**/
+static int
+dl_detect_moves (dep_list           **removed, 
+                 dep_list           **added, 
+                 const traverse_cbs  *cbs, 
+                 void                *udata)
+{
+    assert (cbs != NULL);
+
+     EXCLUDE_SIMILAR
+        (removed, added,
+         (removed_iter->inode == added_iter->inode),
+         {
+             cb_invoke (cbs, moved, udata,
+                        removed_iter->path, removed_iter->inode,
+                        added_iter->path, added_iter->inode);
+         });
+}
+
+/**
+ * Detect and notify about replacements in the watched directory.
+ *
+ * Consider you are watching a directory foo with the folloing files
+ * insinde:
+ *
+ *    foo/bar
+ *    foo/baz
+ *
+ * A replacement in a watched directory is what happens when you invoke
+ *
+ *    mv /foo/bar /foo/bar
+ *
+ * i.e. when you replace a file in a watched directory with another file
+ * from the same directory.
+ *
+ * @param[in,out] removed  A list of the removed files in the directory.
+ * @param[in,out] current  A list with the current contents of the directory.
+ * @param[in]     cbs      A pointer to #traverse_cbs, an user-defined set of 
+ *     traverse callbacks.
+ * @param[in]     udata    A pointer to the user-defined data.
+ * @return 0 if no files were renamed, >0 otherwise.
+ **/
+static int
+dl_detect_replacements (dep_list           **removed,
+                        dep_list           **current,
+                        const traverse_cbs  *cbs,
+                        void                *udata)
+{
+    assert (cbs != NULL);
+
+    EXCLUDE_SIMILAR
+        (removed, current,
+         (removed_iter->inode == current_iter->inode),
+         {
+            cb_invoke (cbs, replaced, udata,
+                        removed_iter->path, removed_iter->inode,
+                        current_iter->path, current_iter->inode);
+         });
+}
+
+/**
+ * Detect and notify about overwrites in the watched directory.
+ *
+ * Consider you are watching a directory foo with a file inside:
+ *
+ *    foo/bar
+ *
+ * And you also have a directory tmp with a file 1:
+ * 
+ *    tmp/1
+ *
+ * You do not watching directory tmp.
+ *
+ * An overwrite in a watched directory is what happens when you invoke
+ *
+ *    mv /tmp/1 /foo/bar
+ *
+ * i.e. when you overwrite a file in a watched directory with another file
+ * from the another directory.
+ *
+ * @param[in,out] previous A list with the previous contents of the directory.
+ * @param[in,out] current  A list with the current contents of the directory.
+ * @param[in]     cbs      A pointer to #traverse_cbs, an user-defined set of 
+ *     traverse callbacks.
+ * @param[in]     udata    A pointer to the user-defined data.
+ * @return 0 if no files were renamed, >0 otherwise.
+ **/
+static int
+dl_detect_overwrites (dep_list           **previous,
+                      dep_list           **current,
+                      const traverse_cbs  *cbs,
+                      void                *udata)
+{
+    assert (cbs != NULL);
+
+    EXCLUDE_SIMILAR
+        (previous, current,
+         (strcmp (previous_iter->path, current_iter->path) == 0
+          && previous_iter->inode != current_iter->inode),
+         {
+             cb_invoke (cbs, overwritten, udata, current_iter->path, current_iter->inode);
+         });
+}
+
+
+/**
+ * Traverse a list and invoke a callback for each item.
+ * 
+ * @param[in] list  A #dep_list.
+ * @param[in] cb    A #single_entry_cb callback function.
+ * @param[in] udata A pointer to the user-defined data.
+ **/
+static void 
+dl_emit_single_cb_on (dep_list        *list,
+                      single_entry_cb  cb,
+                      void            *udata)
+{
+    while (cb && list != NULL) {
+        (cb) (udata, list->path, list->inode);
+        list = list->next;
+    }
+}
+
+
+/**
+ * Recognize all the changes in the directory, invoke the appropriate callbacks.
+ *
+ * This is the core function of directory diffing submodule.
+ *
+ * @param[in] before The previous contents of the directory.
+ * @param[in] after  The current contents of the directory.
+ * @param[in] cbs    A pointer to user callbacks (#traverse_callbacks).
+ * @param[in] udata  A pointer to user data.
+ **/
+void
+dl_calculate (dep_list           *before,
+              dep_list           *after,
+              const traverse_cbs *cbs,
+              void               *udata)
+{
+    assert (before != NULL);
+    assert (after != NULL);
+    assert (cbs != NULL);
+
+    int need_update = 0;
+
+    dep_list *was = dl_shallow_copy (before);
+    dep_list *pre = dl_shallow_copy (before);
+    dep_list *now = dl_shallow_copy (after);
+    dep_list *lst = dl_shallow_copy (after);
+
+    dl_diff (&was, &now); 
+
+    need_update += dl_detect_moves (&was, &now, cbs, udata);
+    need_update += dl_detect_replacements (&was, &lst, cbs, udata);
+    dl_detect_overwrites (&pre, &lst, cbs, udata);
+ 
+    if (need_update) {
+        cb_invoke (cbs, names_updated, udata);
+    }
+
+    dl_emit_single_cb_on (was, cbs->removed, udata);
+    dl_emit_single_cb_on (now, cbs->added, udata);
+
+    cb_invoke (cbs, many_added, udata, now);
+    cb_invoke (cbs, many_removed, udata, was);
+    
+    dl_shallow_free (lst);
+    dl_shallow_free (now);
+    dl_shallow_free (pre);
+    dl_shallow_free (was);
+}
+

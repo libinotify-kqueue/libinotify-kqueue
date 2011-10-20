@@ -32,13 +32,38 @@ typedef struct dep_list {
     ino_t inode;
 } dep_list;
 
+typedef void (* no_entry_cb)     (void *udata);
+typedef void (* single_entry_cb) (void *udata, const char *path, ino_t inode);
+typedef void (* dual_entry_cb)   (void *udata,
+                                  const char *from_path, ino_t from_inode,
+                                  const char *to_path,   ino_t to_inode);
+typedef void (* list_cb)         (void *udata, const dep_list *list);
+
+
+typedef struct traverse_cbs {
+    single_entry_cb  added;
+    single_entry_cb  removed;
+    dual_entry_cb    replaced;
+    single_entry_cb  overwritten;
+    dual_entry_cb    moved;
+    list_cb          many_added;
+    list_cb          many_removed;
+    no_entry_cb      names_updated;
+} traverse_cbs;
+
 dep_list* dl_create       (char *path, ino_t inode);
-void      dl_print        (dep_list *dl);
-dep_list* dl_shallow_copy (dep_list *dl);
+void      dl_print        (const dep_list *dl);
+dep_list* dl_shallow_copy (const dep_list *dl);
 void      dl_shallow_free (dep_list *dl);
 void      dl_free         (dep_list *dl);
 dep_list* dl_listing      (const char *path);
 void      dl_diff         (dep_list **before, dep_list **after);
+
+void
+dl_calculate (dep_list            *before,
+              dep_list            *after,
+              const traverse_cbs  *cbs,
+              void                *udata);
 
 
 #endif /* __DEP_LIST_H__ */
