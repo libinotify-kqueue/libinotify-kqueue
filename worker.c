@@ -125,6 +125,7 @@ worker_cmd_wait (worker_cmd *cmd)
 worker*
 worker_create ()
 {
+    pthread_attr_t attr;
     worker* wrk = calloc (1, sizeof (worker));
 
     if (wrk == NULL) {
@@ -149,7 +150,9 @@ worker_create ()
     pthread_mutex_init (&wrk->mutex, NULL);
 
     /* create a run a worker thread */
-    if (pthread_create (&wrk->thread, NULL, worker_thread, wrk) != 0) {
+    pthread_attr_init (&attr);
+    pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
+    if (pthread_create (&wrk->thread, &attr, worker_thread, wrk) != 0) {
         perror_msg ("Failed to start a new worker thread");
         goto failure;
     }
