@@ -38,7 +38,7 @@ void
 dl_print (const dep_list *dl)
 {
     while (dl != NULL) {
-        printf ("%lld:%s ", dl->inode, dl->path);
+        printf ("%lld:%s ", (long long int) dl->inode, dl->path);
         dl = dl->next;
     }
     printf ("\n");
@@ -483,8 +483,6 @@ dl_calculate (dep_list           *before,
               const traverse_cbs *cbs,
               void               *udata)
 {
-    assert (before != NULL);
-    assert (after != NULL);
     assert (cbs != NULL);
 
     int need_update = 0;
