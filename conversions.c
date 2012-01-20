@@ -27,7 +27,7 @@
 #include "conversions.h"
 
 /* It is just a shortctut */
-#define NOTE_MODIFIED (NOTE_WRITE | NOTE_EXTEND)
+static const int NOTE_MODIFIED = (NOTE_WRITE | NOTE_EXTEND);
 
 /**
  * Convert the inotify watch mask to the kqueue event filter flags.

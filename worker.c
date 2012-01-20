@@ -220,7 +220,9 @@ worker_add_dependencies (worker        *wrk,
                                                      parent->flags,
                                                      WATCH_DEPENDENCY);
                 if (neww == NULL) {
-                    perror_msg ("Failed to start watching a dependency\n");
+                    perror_msg ("Failed to start watching a dependency %s of %s",
+                                path,
+                                iter->path);
                 } else {
                     neww->parent = parent;
                 }

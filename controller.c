@@ -68,13 +68,12 @@ inotify_init (void) __THROW
                  * yet. The fd is free, and when we create a new worker, we can
                  * receive the same fd. So check for duplicates and remove them
                  * now. */
-                int j;
+                int j, lfd = wrk->io[INOTIFY_FD];
                 for (j = 0; j < WORKER_SZ; j++) {
                     worker *jw = workers[j];
-                    if (jw != NULL && jw->io[INOTIFY_FD] == wrk->io[INOTIFY_FD]
-                        && jw != wrk) {
+                    if (jw != NULL && jw->io[INOTIFY_FD] == lfd && jw != wrk) {
                         workers[j] = NULL;
-                        perror_msg ("Collision found!");
+                        perror_msg ("Collision found: fd %d", lfd);
                     }
                 }
 

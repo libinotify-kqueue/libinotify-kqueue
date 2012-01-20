@@ -27,6 +27,7 @@
 #include <fcntl.h> /* fcntl */
 #include <stdio.h>
 #include <assert.h>
+#include <stdarg.h> /* va_list */
 
 #include "sys/inotify.h"
 #include "utils.h"
@@ -45,10 +46,13 @@ path_concat (const char *dir, const char *file)
 {
     int dir_len = strlen (dir);
     int file_len = strlen (file);
+    int alloc_sz = dir_len + file_len + 2;
 
-    char *path = malloc (dir_len + file_len + 2);
+    char *path = malloc (alloc_sz);
     if (path == NULL) {
-        perror_msg ("Failed to allocate memory path for concatenation");
+        perror_msg ("Failed to allocate memory (%d bytes) "
+                    "for path concatenation",
+                    alloc_sz);
         return NULL;
     }
 
@@ -86,7 +90,9 @@ create_inotify_event (int         wd,
     event = calloc (1, *event_len);
 
     if (event == NULL) {
-        perror_msg ("Failed to allocate a new inotify event");
+        perror_msg ("Failed to allocate a new inotify event [%s, %X]",
+                    name,
+                    mask);
         return NULL;
     }
 
@@ -170,13 +176,23 @@ is_opened (int fd)
  * be printed too.
  * The library should be built with --enable-perrors configure option.
  *
- * @param[in] msg A message to print.
+ * @param[in] msg A message format to print.
+ * @param[in] ... A set of parameters to include in the message, according
+ *      to the format string.
  **/
 void
-perror_msg (const char *msg)
+perror_msg (const char *msg, ...)
 {
 #ifdef ENABLE_PERRORS
-    perror (msg);
+    const int msgsz = 2048; /* should be enough */
+    char buf[msgsz];
+    va_list vl;
+
+    va_start (vl, msg);
+    vsnprintf (buf, msgsz, msg, vl);
+    va_end (vl);
+
+    perror (buf);
 #else
     (void) msg;
 #endif

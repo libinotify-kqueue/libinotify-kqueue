@@ -86,14 +86,18 @@ worker_sets_extend (worker_sets *ws,
         void *ptr = NULL;
         ptr = realloc (ws->events, sizeof (struct kevent) * to_allocate);
         if (ptr == NULL) {
-            perror_msg ("Failed to extend events memory in the worker sets");
+            perror_msg ("Failed to extend events memory in the worker sets "
+                        "to %d items",
+                        to_allocate);
             return -1;
         }
         ws->events = ptr;
 
         ptr = realloc (ws->watches, sizeof (struct watch *) * to_allocate);
         if (ptr == NULL) {
-            perror_msg ("Failed to extend watches memory in the worker sets");
+            perror_msg ("Failed to extend watches memory in the worker sets "
+                        "to %d items",
+                        to_allocate);
             return -1;
         }
         ws->watches = ptr;

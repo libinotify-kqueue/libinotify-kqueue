@@ -52,6 +52,6 @@ int safe_write (int fd, const void *data, size_t size);
 
 int is_opened (int fd);
 
-void perror_msg (const char *msg);
+void perror_msg (const char *msg, ...);
 
 #endif /* __UTILS_H__ */

@@ -28,6 +28,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h> /* stat */
+#include <stdio.h>    /* snprintf */
 
 #include "utils.h"
 #include "conversions.h"
@@ -52,7 +53,7 @@ _file_information (int fd, int *is_dir, ino_t *inode)
     memset (&st, 0, sizeof (struct stat));
 
     if (fstat (fd, &st) == -1) {
-        perror_msg ("fstat failed, assuming it is just a file");
+        perror_msg ("fstat failed on %d, assuming it is just a file", fd);
         return;
     }
 
@@ -104,7 +105,7 @@ watch_init (watch         *w,
 
     int fd = open (path, O_RDONLY);
     if (fd == -1) {
-        perror_msg ("Failed to open a file");
+        perror_msg ("Failed to open file %s", path);
         return -1;
     }
 
@@ -149,13 +150,13 @@ watch_reopen (watch *w)
 
     char *filename = path_concat (w->parent->filename, w->filename);
     if (filename == NULL) {
-        perror_msg ("Failed to create a filename to make reopen");
+        perror_msg ("Failed to create a filename to make a reopen");
         return -1;
     }
 
     int fd = open (filename, O_RDONLY);
     if (fd == -1) {
-        perror_msg ("Failed to reopen a file");
+        perror_msg ("Failed to reopen a file %s", filename);
         free (filename);
         return -1;
     }

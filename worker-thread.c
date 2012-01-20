@@ -69,7 +69,8 @@ bulk_write (bulk_events *be, void *mem, size_t size)
 
     void *ptr = realloc (be->memory, be->size + size);
     if (ptr == NULL) {
-        perror_msg ("Failed to extend the bulk events buffer");
+        perror_msg ("Failed to extend the bulk events buffer on %d bytes", 
+                    size);
         return -1;
     }
 
@@ -148,14 +149,14 @@ handle_added (void *udata, const char *path, ino_t inode)
         bulk_write (ctx->be, ie, ie_len);
         free (ie);
     } else {
-        perror_msg ("Failed to create a new inotify event (directory changes)");
+        perror_msg ("Failed to create an IN_CREATE event for %s", path);
     }
 
     char *npath = path_concat (ctx->w->filename, path);
     if (npath != NULL) {
         watch *neww = worker_start_watching (ctx->wrk, npath, path, ctx->w->flags, WATCH_DEPENDENCY);
         if (neww == NULL) {
-            perror_msg ("Failed to start watching on a new dependency\n");
+            perror_msg ("Failed to start watching on a new dependency %s", npath);
         } else {
             neww->parent = ctx->w;
         }
@@ -193,7 +194,7 @@ handle_removed (void *udata, const char *path, ino_t inode)
         bulk_write (ctx->be, ie, ie_len);
         free (ie);
     } else {
-        perror_msg ("Failed to create a new inotify event (directory changes)");
+        perror_msg ("Failed to create an IN_DELETE event for %s", path);
     }
 }
 
@@ -235,7 +236,8 @@ handle_replaced (void       *udata,
         bulk_write (ctx->be, ev, event_len);
         free (ev);
     }  else {
-        perror_msg ("Failed to create a new IN_MOVED_FROM inotify event (*)");
+        perror_msg ("Failed to create an IN_MOVED_FROM event (*) for %s",
+                    from_path);
     }
 
     ev = create_inotify_event (ctx->w->fd, IN_MOVED_TO, cookie,
@@ -245,7 +247,8 @@ handle_replaced (void       *udata,
         bulk_write (ctx->be, ev, event_len);
         free (ev);
     } else {
-        perror_msg ("Failed to create a new IN_MOVED_TO inotify event (*)");
+        perror_msg ("Failed to create an IN_MOVED_TO event (*) for %s",
+                    to_path);
     }
 
     int i;
@@ -305,7 +308,8 @@ handle_overwritten (void *udata, const char *path, ino_t inode)
                     bulk_write (ctx->be, ev, event_len);
                     free (ev);
                 }  else {
-                    perror_msg ("Failed to create a new IN_DELETE inotify event (*)");
+                    perror_msg ("Failed to create an IN_DELETE event (*) for %s",
+                                path);
                 }
 
                 ev = create_inotify_event (ctx->w->fd, IN_CREATE, cookie,
@@ -315,7 +319,8 @@ handle_overwritten (void *udata, const char *path, ino_t inode)
                     bulk_write (ctx->be, ev, event_len);
                     free (ev);
                 } else {
-                    perror_msg ("Failed to create a new IN_CREATE inotify event (*)");
+                    perror_msg ("Failed to create an IN_CREATE event (*) for %s",
+                                path);
                 }
             }
             break;
@@ -360,7 +365,8 @@ handle_moved (void       *udata,
         bulk_write (ctx->be, ev, event_len);
         free (ev);
     } else {
-        perror_msg ("Failed to create a new IN_MOVED_FROM inotify event");
+        perror_msg ("Failed to create an IN_MOVED_FROM event for %s",
+                    from_path);
     }
     
     ev = create_inotify_event (ctx->w->fd, IN_MOVED_TO, cookie,
@@ -370,7 +376,8 @@ handle_moved (void       *udata,
         bulk_write (ctx->be, ev, event_len);
         free (ev);
     } else {
-        perror_msg ("Failed to create a new IN_MOVED_TO inotify event");
+        perror_msg ("Failed to create an IN_MOVED_TO event for %s",
+                    to_path);
     }
 }
 
@@ -452,7 +459,8 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
     if (now == NULL && errno != ENOENT) {
         /* Why do I skip ENOENT? Because the directory could be deleted at this
          * point */
-        perror_msg ("Failed to create a listing for directory");
+        perror_msg ("Failed to create a listing for directory %s",
+                    w->filename);
         dl_shallow_free (was);
         return;
     }
