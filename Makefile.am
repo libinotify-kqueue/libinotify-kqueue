@@ -58,9 +58,9 @@ check_libinotify_SOURCES = \
     tests/open_close_test.cc \
     tests/tests.cc
 
-
 if LINUX
 check_libinotify_CXXFLAGS = -std=c++0x
+check_libinotify_SOURCES += barriers.c
 endif
 
 if BUILD_LIBRARY
