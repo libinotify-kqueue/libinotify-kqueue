@@ -54,6 +54,7 @@ void start_stop_test::run ()
     should ("watch is added successfully", wid != -1);
 
     /* Tell consumer to watch for an IN_ATTRIB event */
+    cons.output.reset ();
     cons.input.receive ();
 
     system ("touch sst-working");
@@ -89,6 +90,7 @@ void start_stop_test::run ()
             received.size() == 0);
 
     /* Now start watching again. Everything should work */
+    cons.output.reset ();
     cons.input.setup ("sst-working", IN_ATTRIB);
     cons.output.wait ();
 

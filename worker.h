@@ -29,6 +29,7 @@
 #include "worker-thread.h"
 #include "worker-sets.h"
 #include "dep-list.h"
+#include "barriers.h"
 
 #define INOTIFY_FD 0
 #define KQUEUE_FD  1
@@ -56,7 +57,7 @@ typedef struct worker_cmd {
         int rm_id;
     };
 
-    pthread_barrier_t sync;
+    ik_barrier sync;
 } worker_cmd;
 
 

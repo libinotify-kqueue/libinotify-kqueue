@@ -72,6 +72,7 @@ void update_flags_test::run ()
             received.empty());
 
 
+    cons.output.reset ();
     cons.input.setup ("uft-working", IN_ATTRIB | IN_MODIFY);
     cons.output.wait ();
 
@@ -101,6 +102,7 @@ void update_flags_test::run ()
             contains (received, event ("", wid, IN_ATTRIB)));
 
 
+    cons.output.reset ();
     cons.input.setup ("uft-working", IN_MODIFY);
     cons.output.wait ();
     updated_wid = cons.output.added_watch_id ();

@@ -106,8 +106,8 @@ process_command (worker *wrk)
         return;
     }
 
-    /* TODO: is the situation when nobody else waits on a barrier possible */
-    pthread_barrier_wait (&wrk->cmd.sync);
+    /* TODO: is the situation when nobody else waits on a barrier possible? */
+    ik_barrier_wait (&wrk->cmd.sync);
 }
 
 /** 

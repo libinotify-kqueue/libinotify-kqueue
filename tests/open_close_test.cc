@@ -96,7 +96,6 @@ void open_close_test::run ()
     should ("receive IN_CLOSE_WRITE on modify",
             contains (received, event ("", file_wid, IN_CLOSE_WRITE)));
 
-    
     cons.input.interrupt ();
 }
 

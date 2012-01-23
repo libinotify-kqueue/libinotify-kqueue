@@ -62,7 +62,7 @@ worker_cmd_add (worker_cmd *cmd, const char *filename, uint32_t mask)
     cmd->add.filename = strdup (filename);
     cmd->add.mask = mask;
 
-    pthread_barrier_init (&cmd->sync, NULL, 2);
+    ik_barrier_init (&cmd->sync, 2);
 }
 
 
@@ -81,7 +81,7 @@ worker_cmd_remove (worker_cmd *cmd, int watch_id)
     cmd->type = WCMD_REMOVE;
     cmd->rm_id = watch_id;
 
-    pthread_barrier_init (&cmd->sync, NULL, 2);
+    ik_barrier_init (&cmd->sync, 2);
 }
 
 /**
@@ -112,8 +112,8 @@ void
 worker_cmd_wait (worker_cmd *cmd)
 {
     assert (cmd != NULL);
-    pthread_barrier_wait (&cmd->sync);
-    pthread_barrier_destroy (&cmd->sync);
+    ik_barrier_wait (&cmd->sync);
+    ik_barrier_destroy (&cmd->sync);
 }
 
 

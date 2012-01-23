@@ -75,6 +75,7 @@ void update_flags_dir_test::run ()
             received.empty ());
 
 
+    cons.output.reset ();
     cons.input.setup ("ufdt-working", IN_ATTRIB | IN_MODIFY);
     cons.output.wait ();
 
