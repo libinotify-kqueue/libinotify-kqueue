@@ -28,7 +28,7 @@
 void acquire_log_lock ();
 void release_log_lock ();
 
-unsigned int current_thread ();
+unsigned long current_thread ();
 
 
 #ifdef ENABLE_LOGGING

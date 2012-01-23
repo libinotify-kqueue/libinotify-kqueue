@@ -33,9 +33,11 @@
 #if defined(__NetBSD__)
 #  define INDEX_TO_UDATA(X) (X)
 #  define UDATA_TO_INDEX(X) (X)
-#elif defined(__FreeBSD__)
+#elif defined(__FreeBSD__) || defined(__OpenBSD__)
 #  define INDEX_TO_UDATA(X) ((void *)(uintptr_t)X)
 #  define UDATA_TO_INDEX(X) ((uintptr_t)X)
+#else
+#  error Currently unsupported
 #endif
 
 

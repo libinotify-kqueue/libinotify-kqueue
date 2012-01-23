@@ -37,7 +37,7 @@ void release_log_lock ()
     pthread_mutex_unlock (&log_mutex);
 }
 
-unsigned int current_thread ()
+unsigned long current_thread ()
 {
 #ifdef __linux__
     return static_cast<unsigned long>(pthread_self ());
@@ -45,7 +45,9 @@ unsigned int current_thread ()
     return reinterpret_cast<unsigned long>(pthread_self ());
 #elif defined (__FreeBSD__)
     return reinterpret_cast<uintptr_t>(pthread_self ());
+#elif defined (__OpenBSD__)
+    return reinterpret_cast<unsigned long>(pthread_self ());    
 #else
-    error Currently unsupported
+#   error Currently unsupported
 #endif
 }
