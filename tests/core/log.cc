@@ -40,13 +40,11 @@ void release_log_lock ()
 unsigned long current_thread ()
 {
 #ifdef __linux__
-    return static_cast<unsigned long>(pthread_self ());
-#elif defined (__NetBSD__)
+    return static_cast<uintptr_t>(pthread_self ());
+#elif defined (__NetBSD__) || defined (__OpenBSD__)
     return reinterpret_cast<unsigned long>(pthread_self ());
 #elif defined (__FreeBSD__)
     return reinterpret_cast<uintptr_t>(pthread_self ());
-#elif defined (__OpenBSD__)
-    return reinterpret_cast<unsigned long>(pthread_self ());    
 #else
 #   error Currently unsupported
 #endif
