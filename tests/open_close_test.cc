@@ -92,7 +92,7 @@ void open_close_test::run ()
     cons.output.wait ();
     received = cons.output.registered ();
     should ("receive IN_OPEN on modify",
-            contains (received, event ("", file_wid, IN_MODIFY)));
+            contains (received, event ("", file_wid, IN_OPEN)));
     should ("receive IN_CLOSE_WRITE on modify",
             contains (received, event ("", file_wid, IN_CLOSE_WRITE)));
 
