@@ -3,7 +3,12 @@
 
 #include "barriers.h"
 
-
+/**
+ * Initialize a barrier
+ *
+ * @param[in] impl   A pointer to barrier
+ * @param[in] count  The number of threads to wait on the barrier
+ **/
 static void
 ik_barrier_impl_init (ik_barrier_impl *impl, int count)
 {
@@ -17,6 +22,16 @@ ik_barrier_impl_init (ik_barrier_impl *impl, int count)
 }
 
 
+/**
+ * Wait on a barrier.
+ * 
+ * If this thread is not the last expected one, it will be blocked
+ * until all the expected threads will check in on the barrier.
+ * Otherwise the barrier will be marked as passed and all blocked
+ * threads will be unlocked.
+ *
+ * @param[in] impl  A pointer to barrier
+ **/
 static void
 ik_barrier_impl_wait (ik_barrier_impl *impl)
 {
@@ -45,6 +60,11 @@ ik_barrier_impl_wait (ik_barrier_impl *impl)
 }
 
 
+/**
+ * Destroy the barrier and all associated resources.
+ *
+ * @param[in] impl  A pointer to barrier
+ **/
 static void
 ik_barrier_impl_destroy (ik_barrier_impl *impl)
 {
@@ -59,6 +79,15 @@ ik_barrier_impl_destroy (ik_barrier_impl *impl)
 }
 
 
+/**
+ * Initialize a barrier.
+ *
+ * Depending on the configuration, it can be either a pthread barrier
+ * or a custom implementation.
+ *
+ * @param[in] b     A pointer to barrier 
+ * @param[in] n     The number of threads to wait on the barrier.
+ **/
 void
 ik_barrier_init (ik_barrier *b, int n)
 {
@@ -71,6 +100,14 @@ ik_barrier_init (ik_barrier *b, int n)
 }
 
 
+/**
+ * Wait on a barrier.
+ *
+ * Depending on the configuration, it can be either a pthread barrier
+ * or a custom implementation.
+ *
+ * @param[in] b     A pointer to barrier 
+ **/
 void
 ik_barrier_wait (ik_barrier *b)
 {
@@ -83,6 +120,14 @@ ik_barrier_wait (ik_barrier *b)
 }
 
 
+/**
+ * Destroy a barrier.
+ *
+ * Depending on the configuration, it can be either a pthread barrier
+ * or a custom implementation.
+ *
+ * @param[in] b     A pointer to barrier 
+ **/
 void
 ik_barrier_destroy (ik_barrier *b)
 {
