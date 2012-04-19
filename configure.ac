@@ -33,14 +33,13 @@ AC_CHECK_HEADERS([sys/event.h],
     kqueue_support=yes
 ],
 [
-    AM_COND_IF(LINUX,
-    [
-        echo "Host system in GNU/Linux, enabling target "test" only"
+    if LINUX; then
+        echo "Host system in GNU/Linux, enabling target \"test\" only"
         kqueue_support=no
-    ],
-    AC_MSG_ERROR(No sys/kqueue.h found in your system!))
+    else
+        AC_MSG_ERROR(No sys/kqueue.h found in your system!)
+    fi
 ])
-
 AM_CONDITIONAL(BUILD_LIBRARY, [test "$kqueue_support" = "yes"])
 
 
