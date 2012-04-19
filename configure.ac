@@ -33,7 +33,7 @@ AC_CHECK_HEADERS([sys/event.h],
     kqueue_support=yes
 ],
 [
-    if LINUX; then
+    if [test "$OS" = "Linux"]; then
         echo "Host system in GNU/Linux, enabling target \"test\" only"
         kqueue_support=no
     else

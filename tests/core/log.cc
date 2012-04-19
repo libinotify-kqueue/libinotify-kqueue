@@ -23,6 +23,8 @@
 #include <pthread.h>
 #if defined(__FreeBSD__)
 #include <sys/types.h>
+#elif defined(__linux__)
+#include <cstdint>
 #endif
 
 static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
