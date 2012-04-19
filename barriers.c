@@ -82,8 +82,8 @@ ik_barrier_impl_destroy (ik_barrier_impl *impl)
 /**
  * Initialize a barrier.
  *
- * Depending on the configuration, it can be either a pthread barrier
- * or a custom implementation.
+ * Depending on the configuration, the underlying barrier can be either
+ * a pthread barrier or an own barrier implementation.
  *
  * @param[in] b     A pointer to barrier 
  * @param[in] n     The number of threads to wait on the barrier.
@@ -103,8 +103,8 @@ ik_barrier_init (ik_barrier *b, int n)
 /**
  * Wait on a barrier.
  *
- * Depending on the configuration, it can be either a pthread barrier
- * or a custom implementation.
+ * Depending on the configuration, the underlying barrier can be either
+ * a pthread barrier or an own barrier implementation.
  *
  * @param[in] b     A pointer to barrier 
  **/
@@ -123,8 +123,8 @@ ik_barrier_wait (ik_barrier *b)
 /**
  * Destroy a barrier.
  *
- * Depending on the configuration, it can be either a pthread barrier
- * or a custom implementation.
+ * Depending on the configuration, the underlying barrier can be either
+ * a pthread barrier or an own barrier implementation.
  *
  * @param[in] b     A pointer to barrier 
  **/
