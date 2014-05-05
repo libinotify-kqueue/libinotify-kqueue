@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -89,12 +89,12 @@ _file_information (int fd, int *is_dir, ino_t *inode)
  **/
 int
 watch_init (watch         *w,
-	    watch_type_t   watch_type,
-	    struct kevent *kv,
-	    const char    *path,
-	    const char    *entry_name,
-	    uint32_t       flags,
-	    int            index)
+            watch_type_t   watch_type,
+            struct kevent *kv,
+            const char    *path,
+            const char    *entry_name,
+            uint32_t       flags,
+            int            index)
 {
     assert (w != NULL);
     assert (kv != NULL);
@@ -103,8 +103,8 @@ watch_init (watch         *w,
     memset (w, 0, sizeof (watch));
     memset (kv, 0, sizeof (struct kevent));
 
-    int fd = open (path, O_RDONLY);
-    if (fd == -1) {
+    w->fd = open (path, O_RDONLY);
+    if (w->fd == -1) {
         perror_msg ("Failed to open file %s", path);
         return -1;
     }
@@ -116,15 +116,14 @@ watch_init (watch         *w,
     w->type = watch_type;
     w->flags = flags;
     w->filename = strdup (watch_type == WATCH_USER ? path : entry_name);
-    w->fd = fd;
     w->event = kv;
 
     int is_dir = 0;
-    _file_information (fd, &is_dir, &w->inode);
+    _file_information (w->fd, &is_dir, &w->inode);
     w->is_directory = (watch_type == WATCH_USER ? is_dir : 0);
 
     EV_SET (kv,
-            fd,
+            w->fd,
             EVFILT_VNODE,
             EV_ADD | EV_ENABLE | EV_ONESHOT,
             inotify_to_kqueue (flags, w->is_directory),
@@ -146,7 +145,9 @@ watch_reopen (watch *w)
     assert (w != NULL);
     assert (w->parent != NULL);
     assert (w->event != NULL);
-    close (w->fd);
+    if (w->fd != -1) {
+        close (w->fd);
+    }
 
     char *filename = path_concat (w->parent->filename, w->filename);
     if (filename == NULL) {
@@ -154,19 +155,18 @@ watch_reopen (watch *w)
         return -1;
     }
 
-    int fd = open (filename, O_RDONLY);
-    if (fd == -1) {
+    w->fd = open (filename, O_RDONLY);
+    if (w->fd == -1) {
         perror_msg ("Failed to reopen a file %s", filename);
         free (filename);
         return -1;
     }
 
-    w->fd = fd;
-    w->event->ident = fd;
+    w->event->ident = w->fd;
 
     /* Actually, reopen happens only for dependencies. */
     int is_dir = 0;
-    _file_information (fd, &is_dir, &w->inode);
+    _file_information (w->fd, &is_dir, &w->inode);
     w->is_directory = (w->type == WATCH_USER ? is_dir : 0);
 
     free (filename);
@@ -182,7 +182,9 @@ void
 watch_free (watch *w)
 {
     assert (w != NULL);
-    close (w->fd);
+    if (w->fd != -1) {
+        close (w->fd);
+    }
     if (w->type == WATCH_USER && w->is_directory && w->deps) {
         dl_free (w->deps);
     }

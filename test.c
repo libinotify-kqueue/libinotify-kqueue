@@ -79,7 +79,6 @@ int main (int argc, char *argv[])
         /* } */
 
         ++ev_count;
-
         get_event(fd, target);
     }
 
