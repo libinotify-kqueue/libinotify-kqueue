@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,7 @@
 #include <cstring>
 #include <poll.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 #include "inotify_client.hh"
 #include "log.hh"
 
