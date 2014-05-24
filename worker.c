@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -113,8 +113,24 @@ worker_cmd_wait (worker_cmd *cmd)
 {
     assert (cmd != NULL);
     ik_barrier_wait (&cmd->sync);
+}
+
+/**
+ * Release a worker command.
+ *
+ * This function releases resources associated with worker command.
+ * This function must be called after a successfull worker_cmd_wait()
+ * and only by a single user of worker_cmd (an initiator).
+ *
+ * @param[in] cmd A pointer to #worker_cmd.
+ **/
+void
+worker_cmd_release (worker_cmd *cmd)
+{
+    assert (cmd != NULL);
     ik_barrier_destroy (&cmd->sync);
 }
+
 
 
 /**
@@ -158,10 +174,9 @@ worker_create ()
     }
 
     wrk->closed = 0;
-
     return wrk;
     
-    failure:
+failure:
     if (wrk != NULL) {
         worker_free (wrk);
     }
@@ -183,8 +198,12 @@ worker_free (worker *wrk)
 
     close (wrk->kq);
     wrk->closed = 1;
+
     worker_cmd_reset (&wrk->cmd);
     worker_sets_free (&wrk->sets);
+    pthread_mutex_destroy (&wrk->mutex);
+
+    free (wrk);
 }
 
 /**

@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -61,10 +61,10 @@ typedef struct worker_cmd {
 } worker_cmd;
 
 
-void worker_cmd_add    (worker_cmd *cmd, const char *filename, uint32_t mask);
-void worker_cmd_remove (worker_cmd *cmd, int watch_id);
-void worker_cmd_wait   (worker_cmd *cmd);
-
+void worker_cmd_add     (worker_cmd *cmd, const char *filename, uint32_t mask);
+void worker_cmd_remove  (worker_cmd *cmd, int watch_id);
+void worker_cmd_wait    (worker_cmd *cmd);
+void worker_cmd_release (worker_cmd *cmd);
 
 typedef struct {
     int kq;                /* kqueue descriptor */

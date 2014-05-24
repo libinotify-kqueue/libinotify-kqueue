@@ -30,12 +30,11 @@
 #include "update_flags_dir_test.hh"
 #include "open_close_test.hh"
 
-#define THREADED
+#define CONCURRENT
 
 int main (int argc, char *argv[]) {
     journal j;
 
-#ifdef THREADED
     start_stop_test sst (j);
     start_stop_dir_test ssdt (j);
     notifications_test ntfst (j);
@@ -44,7 +43,17 @@ int main (int argc, char *argv[]) {
     update_flags_dir_test ufdt (j);
     open_close_test oct (j);
     fail_test ft (j);
-    
+
+#ifdef CONCURRENT
+    sst.start ();
+    ssdt.start ();
+    ntfst.start ();
+    ntfsdt.start ();
+    uft.start ();
+    ufdt.start ();
+    oct.start ();
+    ft.start ();
+
     sst.wait_for_end ();
     ssdt.wait_for_end ();
     ntfst.wait_for_end ();
@@ -54,28 +63,28 @@ int main (int argc, char *argv[]) {
     oct.wait_for_end ();
     ft.wait_for_end ();
 #else
-    start_stop_test sst (j);
+    sst.start ();
     sst.wait_for_end ();
 
-    start_stop_dir_test ssdt (j);
+    ssdt.start ();
     ssdt.wait_for_end ();
 
-    notifications_test ntfst (j);
+    ntfst.start ();
     ntfst.wait_for_end ();
 
-    notifications_dir_test ntfsdt (j);
+    ntfsdt.start ();
     ntfsdt.wait_for_end ();
 
-    update_flags_test uft (j);
+    uft.start ();
     uft.wait_for_end ();
 
-    update_flags_dir_test ufdt (j);
+    ufdt.start ();
     ufdt.wait_for_end ();
 
-    open_close_test oct (j);
+    oct.start ();
     oct.wait_for_end ();
   
-    fail_test ft (j);
+    ft.start ();
     ft.wait_for_end ();
 #endif
 

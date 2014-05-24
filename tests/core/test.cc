@@ -29,7 +29,6 @@
 test::test (const std::string &name_, journal &j)
 : jc (j.allocate_channel (name_))
 {
-    pthread_create (&thread, NULL, test::run_, this);
 }
 
 test::~test ()
@@ -40,19 +39,15 @@ void* test::run_ (void *ptr)
 {
     assert (ptr != NULL);
     test *t = static_cast<test *>(ptr);
-
-    /* TODO: Since this thread is created and started directly from a
-     * constructor, we may face with a situation when vtbl is not
-     * initialized yet.
-     *
-     * So sleeping is the most straightforward (but not actually correct)
-     * solution here. */
-    sleep (1);
-    
     t->setup ();
     t->run ();
     t->cleanup ();
     return NULL;
+}
+
+void test::start ()
+{
+    pthread_create (&thread, NULL, test::run_, this);
 }
 
 void test::wait_for_end ()

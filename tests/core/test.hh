@@ -42,6 +42,7 @@ public:
     test (const std::string &name_, journal &j);
     virtual ~test ();
 
+    void start ();
     void wait_for_end ();
 
     bool should (const std::string &test_name, bool exp);

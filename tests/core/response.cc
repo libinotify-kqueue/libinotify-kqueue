@@ -43,6 +43,7 @@ void response::setup (int watch_id)
     LOG (named() << ": Passing back new watch id");
     current = WATCH_ID;
     variants._watch_id = watch_id;
+    // printf("Response: settup up for id %d\n", watch_id);
     wait ();
 }
 

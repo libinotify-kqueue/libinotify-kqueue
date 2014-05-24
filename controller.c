@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -79,6 +79,9 @@ inotify_init (void) __THROW
 
                 pthread_mutex_unlock (&workers_mutex);
                 return wrk->io[INOTIFY_FD];
+            } else {
+                /* Failed to create worker */
+                break;
             }
         }
     }
@@ -110,15 +113,17 @@ inotify_add_watch (int         fd,
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
         worker *wrk = workers[i];
-        if (wrk != NULL && wrk->io[INOTIFY_FD] == fd && wrk->closed == 0
+        if (wrk != NULL
+            && wrk->io[INOTIFY_FD] == fd
+            && wrk->closed == 0
             && is_opened (wrk->io[INOTIFY_FD])) {
             pthread_mutex_lock (&wrk->mutex);
 
+            /* Closed flag could be set before we lock on a mutex */
             if (wrk->closed) {
-                worker_free (wrk);
                 pthread_mutex_unlock (&wrk->mutex);
-                free (wrk);
-
+                worker_free (wrk);
+                workers[i] = NULL;
                 pthread_mutex_unlock (&workers_mutex);
                 return -1;
             }
@@ -127,13 +132,15 @@ inotify_add_watch (int         fd,
             safe_write (wrk->io[INOTIFY_FD], "*", 1);
 
             worker_cmd_wait (&wrk->cmd);
-
             int retval = wrk->cmd.retval;
+            worker_cmd_release (&wrk->cmd);
+
             pthread_mutex_unlock (&wrk->mutex);
 
+            /* TODO: ???? */
             if (wrk->closed) {
                 worker_free (wrk);
-                free (wrk);
+                workers[i] = NULL;
             }
 
             pthread_mutex_unlock (&workers_mutex);
@@ -168,29 +175,33 @@ inotify_rm_watch (int fd,
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
         worker *wrk = workers[i];
-        if (wrk != NULL && wrk->io[INOTIFY_FD] == fd && wrk->closed == 0
+        if (wrk != NULL
+            && wrk->io[INOTIFY_FD] == fd
+            && wrk->closed == 0
             && is_opened (wrk->io[INOTIFY_FD])) {
             pthread_mutex_lock (&wrk->mutex);
 
             if (wrk->closed) {
-                worker_free (wrk);
                 pthread_mutex_unlock (&wrk->mutex);
-                free (wrk);
-
+                worker_free (wrk);
+                workers[i] = NULL;
                 pthread_mutex_unlock (&workers_mutex);
                 return -1;
             }
 
             worker_cmd_remove (&wrk->cmd, wd);
             safe_write (wrk->io[INOTIFY_FD], "*", 1);
-            worker_cmd_wait (&wrk->cmd);
 
+            worker_cmd_wait (&wrk->cmd);
             int retval = wrk->cmd.retval;
+            worker_cmd_release (&wrk->cmd);
+
             pthread_mutex_unlock (&wrk->mutex);
 
+            /* TODO: ???? */
             if (wrk->closed) {
                 worker_free (wrk);
-                free (wrk);
+                workers[i] = NULL;
             }
 
             pthread_mutex_unlock (&workers_mutex);

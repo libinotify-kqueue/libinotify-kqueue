@@ -107,7 +107,7 @@ process_command (worker *wrk)
     }
 
     /* TODO: is the situation when nobody else waits on a barrier possible? */
-    ik_barrier_wait (&wrk->cmd.sync);
+    worker_cmd_wait (&wrk->cmd);
 }
 
 /** 
@@ -594,9 +594,8 @@ worker_thread (void *arg)
                 worker_erase (wrk);
 
                 if (pthread_mutex_trylock (&wrk->mutex) == 0) {
-                    worker_free (wrk);
                     pthread_mutex_unlock (&wrk->mutex);
-                    free (wrk);
+                    worker_free (wrk);
                 }
                 /* If we could not lock on a worker, it means that an inotify
                  * call (add_watch/rm_watch) has already locked it. In this

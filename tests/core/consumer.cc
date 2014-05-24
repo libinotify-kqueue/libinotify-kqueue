@@ -34,8 +34,8 @@ consumer::~consumer ()
 {
     // It is a trick. The consumer object lives in a separate thread that is created
     // in its constructor. However, the object itself is created in another (parent)
-    // thread, so the destructor should work in the same thread (I cound on the
-    // static allocation).
+    // thread, so the destructor should work in the same thread (counting on static
+    // allocation).
     LOG ("CONS: Joining on self");
     pthread_join (self, NULL);
 }
