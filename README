@@ -1,0 +1,128 @@
+libinotify-kqueue
+=================
+
+Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
+
+The purpose of this library is to provide inotify API on the
+*BSD family of operating systems. The library uses kqueue(2)
+to monitor the file system activity.
+
+
+
+Requirements
+------------
+
+- gcc, g++, automake, autoconf, libtool;
+- NetBSD, OpenBSD, FreeBSD (all tested), Mac OS X (reported
+  to work).
+
+
+
+Downloading
+-----------
+
+This project does not have a special home page yet. The source
+code and the issue tracker are hosted on Github:
+
+  https://github.com/dmatveev/libinotify-kqueue
+
+
+
+Building
+--------
+
+Building from a git snaphost is as simple as:
+
+  $ autoreconf -fvi
+  $ ./configure
+  $ make
+
+
+
+Testing
+-------
+
+After you build the library, you can run tests to ensure that
+everything works in your system:
+
+  $ make test
+
+There are 60+ tests, and since some events cann't be implemented
+using only userspace kqueue(2), this test will always fail:
+
+> In test "Open/close notifications":
+>    failed: receive IN_OPEN on cat
+>    failed: receive IN_CLOSE_NOWRITE on cat
+>    failed: receive IN_OPEN on ls
+>    failed: receive IN_CLOSE_NOWRITE on ls
+>    failed: receive IN_OPEN on modify
+>    failed: receive IN_CLOSE_WRITE on modify
+
+Sometimes these cheks will also fail:
+
+> In test "Directory notifications":
+>    failed: receive IN_DELETE_SELF on removing a directory
+>    failed: receive IN_IGNORED on removing a directory
+
+It is a known problem and it is going to be fixed. If you will get
+any other results, please feel free to report it at:
+
+  https://github.com/dmatveev/libinotify-kqueue/issues
+
+
+
+Using
+-----
+
+To use the library, all you need to do is to link your application
+with it (adding -linotify to LDFLAGS works in almost all cases).
+Of course, you will need to have include (-I) and linker (-L)
+directories to be properly set in your project.
+
+Since the heart of the library is kqueue(2), the library has to
+keep many files open to provide proper monitoring. It is especially
+important when you monitor a single but large directory - EVERY file
+in this directory will be opened by a library. You can run out of
+file descriptors, so do not forget request more with setrlimit(2)
+before starting monitoring.
+
+Note that fcntl(2) calls are not supported on descriptors returned
+by the library's inotify_init().
+
+
+
+Status
+------
+
+The library is feature-complete, i.e. it implements and provides
+everything what can be implemented/provided using kqueue(2). The
+support of the remaining events (listed in the "Testing" section)
+will be added as soon as it will be possible to do with kqueue(2)
+(or using other tools in the userspace) in all major supported
+operating systems.
+
+The other point is the performance, and the directory difference
+algorithm used in libinotify-kqueue can be optimized. It is the
+primary scope of the future work on the library.
+
+
+
+Thanks
+------
+
+Thanks to Julio Merino for mentoring my work during the initial
+library development on Google Summer Of Code 2011.
+
+Thanks to Antoine Jacoutot for support, reports, and the work
+on the related glib-kqueue project.
+
+Thanks to bugreporters: Baptiste Daroussin, Stanislav Sedov,
+Dmitry Okunev, luoqi-git.
+
+
+
+License
+-------
+
+libinotify-kqueue is redistributed under the terms of MIT License.
+See file LICENSE for details.
