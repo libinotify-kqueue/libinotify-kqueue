@@ -60,15 +60,20 @@ ik_barrier_impl_init (ik_barrier_impl *impl, int count)
 static void
 ik_barrier_impl_wait (ik_barrier_impl *impl)
 {
+    while (impl->entered == 0 && impl->sleeping != 0);
+
     pthread_mutex_lock (&impl->mtx);
     impl->entered++;
     if (impl->entered == impl->count) {
+        impl->entered = 0;
         pthread_cond_broadcast (&impl->cnd);
     } else {
-        while (pthread_cond_wait (&impl->cnd, &impl->mtx) != 0 &&
-               impl->entered != impl->count);
+        ++impl->sleeping;
+        while (pthread_cond_wait (&impl->cnd, &impl->mtx) != 0
+               && impl->entered != 0);
+        --impl->sleeping;
     }
-    pthread_mutex_unlock(&impl->mtx);
+    pthread_mutex_unlock (&impl->mtx);
 }
 
 
@@ -87,6 +92,7 @@ ik_barrier_impl_destroy (ik_barrier_impl *impl)
 
     impl->count = 0;
     impl->entered = 0;
+    impl->sleeping = 0;
 }
 
 

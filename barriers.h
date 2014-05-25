@@ -28,6 +28,7 @@
 typedef struct {
     int count;               /* the number of threads to wait on a barrier */
     volatile int entered;    /* the number of threads entered on a barrier */
+    volatile int sleeping;   /* the number of threads still sleeping */
 
     pthread_mutex_t mtx;     /* barrier's internal mutex.. */
     pthread_cond_t  cnd;     /* ..and a condition variable */

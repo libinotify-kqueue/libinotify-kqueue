@@ -133,7 +133,6 @@ inotify_add_watch (int         fd,
 
             worker_cmd_wait (&wrk->cmd);
             int retval = wrk->cmd.retval;
-            worker_cmd_release (&wrk->cmd);
 
             pthread_mutex_unlock (&wrk->mutex);
 
@@ -194,7 +193,6 @@ inotify_rm_watch (int fd,
 
             worker_cmd_wait (&wrk->cmd);
             int retval = wrk->cmd.retval;
-            worker_cmd_release (&wrk->cmd);
 
             pthread_mutex_unlock (&wrk->mutex);
 

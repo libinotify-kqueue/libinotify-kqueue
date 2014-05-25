@@ -36,13 +36,6 @@ action::~action ()
     ik_barrier_destroy (&barrier);
 }
 
-void action::init ()
-{
-    LOG (name << ": Initializing");
-    interrupted = false;
-    ik_barrier_init (&barrier, 2);
-}
-
 bool action::wait ()
 {
     ik_barrier_wait (&barrier);
@@ -59,8 +52,7 @@ void action::interrupt ()
 void action::reset ()
 {
     LOG (name << ": Resetting");
-    ik_barrier_destroy (&barrier);
-    init ();
+    interrupted = false;
 }
 
 std::string action::named () const

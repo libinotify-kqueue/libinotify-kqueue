@@ -45,8 +45,21 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags);
 static void
 worker_cmd_reset (worker_cmd *cmd);
 
+
 /**
- * Initialize a command with the data of the inotify_add_watch() call.
+ * Initialize resources associated with worker command.
+ *
+ * @param[in] cmd A pointer to #worker_cmd.
+ **/
+void worker_cmd_init (worker_cmd *cmd)
+{
+    assert (cmd != NULL);
+    memset (cmd, 0, sizeof (worker_cmd));
+    ik_barrier_init (&cmd->sync, 2);
+}
+
+/**
+ * Prepare a command with the data of the inotify_add_watch() call.
  *
  * @param[in] cmd      A pointer to #worker_cmd.
  * @param[in] filename A file name of the watched entry.
@@ -61,13 +74,11 @@ worker_cmd_add (worker_cmd *cmd, const char *filename, uint32_t mask)
     cmd->type = WCMD_ADD;
     cmd->add.filename = strdup (filename);
     cmd->add.mask = mask;
-
-    ik_barrier_init (&cmd->sync, 2);
 }
 
 
 /**
- * Initiailize a command with the data of the inotify_rm_watch() call.
+ * Prepare a command with the data of the inotify_rm_watch() call.
  *
  * @param[in] cmd       A pointer to #worker_cmd
  * @param[in] watch_id  The identificator of a watch to remove.
@@ -80,8 +91,6 @@ worker_cmd_remove (worker_cmd *cmd, int watch_id)
 
     cmd->type = WCMD_REMOVE;
     cmd->rm_id = watch_id;
-
-    ik_barrier_init (&cmd->sync, 2);
 }
 
 /**
@@ -97,7 +106,11 @@ worker_cmd_reset (worker_cmd *cmd)
     if (cmd->type == WCMD_ADD) {
         free (cmd->add.filename);
     }
-    memset (cmd, 0, sizeof (worker_cmd));
+    cmd->type = 0;
+    cmd->retval = 0;
+    cmd->add.filename = NULL;
+    cmd->add.mask = 0;
+    cmd->rm_id = 0;
 }
 
 /**
@@ -119,8 +132,6 @@ worker_cmd_wait (worker_cmd *cmd)
  * Release a worker command.
  *
  * This function releases resources associated with worker command.
- * This function must be called after a successfull worker_cmd_wait()
- * and only by a single user of worker_cmd (an initiator).
  *
  * @param[in] cmd A pointer to #worker_cmd.
  **/
@@ -165,6 +176,8 @@ worker_create ()
     }
     pthread_mutex_init (&wrk->mutex, NULL);
 
+    worker_cmd_init (&wrk->cmd);
+
     /* create a run a worker thread */
     pthread_attr_init (&attr);
     pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
@@ -199,7 +212,7 @@ worker_free (worker *wrk)
     close (wrk->kq);
     wrk->closed = 1;
 
-    worker_cmd_reset (&wrk->cmd);
+    worker_cmd_release (&wrk->cmd);
     worker_sets_free (&wrk->sets);
     pthread_mutex_destroy (&wrk->mutex);
 

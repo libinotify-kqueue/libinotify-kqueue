@@ -30,8 +30,6 @@ extern "C" {
 }
 
 class action {
-    void init();
-
     ik_barrier barrier; 
 
     const std::string name;
