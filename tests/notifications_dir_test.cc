@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -125,7 +125,7 @@ void notifications_dir_test::run ()
                             received.end(),
                             event_matcher (event ("one", wid, IN_MOVED_TO)));
 
-    if (should ("receive both IN_MOVED_FROM and IN_MOVED_TO for rename",
+    if (should ("receive IN_MOVED_FROM and IN_MOVED_TO for rename",
                 iter_from != received.end () && iter_to != received.end())) {
         should ("both events for a rename have the same cookie",
                 iter_from->cookie == iter_to->cookie);
@@ -196,8 +196,77 @@ void notifications_dir_test::run ()
     should ("receive events from a file, which has overwritten a file in a directory",
             contains (received, event ("bar", wid, IN_ATTRIB)));
 
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("mkdir ntfsdt-working/dir");
+
+    cons.output.wait ();
+    received = cons.output.registered();
+
+    iter = std::find_if (received.begin(),
+                         received.end(),
+                         event_matcher (event ("dir", wid, IN_CREATE)));
+    should ("receive IN_CREATE with IN_ISDIR when creating a directory in directory",
+            iter != received.end() && iter->flags & IN_ISDIR);
     
 
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("touch ntfsdt-working/dir");
+
+    cons.output.wait ();
+    received = cons.output.registered();
+
+    iter = std::find_if (received.begin(),
+                         received.end(),
+                         event_matcher (event ("dir", wid, IN_ATTRIB)));
+    should ("receive IN_ATTRIB with IN_ISDIR when touching a directory in directory",
+            iter != received.end() && iter->flags & IN_ISDIR);
+
+    
+    cons.output.reset ();
+    cons.input.receive (5);
+
+    system ("mv ntfsdt-working/dir ntfsdt-working/dirr");
+
+    cons.output.wait ();
+    received = cons.output.registered();
+
+    iter_from = std::find_if (received.begin(),
+                              received.end(),
+                              event_matcher (event ("dir", wid, IN_MOVED_FROM)));
+    iter_to = std::find_if (received.begin(),
+                            received.end(),
+                            event_matcher (event ("dirr", wid, IN_MOVED_TO)));
+
+    if (should ("receive IN_MOVED_FROM and IN_MOVED_TO for directory rename in directory ",
+                iter_from != received.end () && iter_to != received.end())) {
+        should ("both events for a dir rename have the same cookie",
+                iter_from->cookie == iter_to->cookie);
+        should ("both events for a dir rename have IN_ISDIR",
+                (iter_from->flags & IN_ISDIR) && (iter_to->flags & IN_ISDIR));
+    }
+
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("rm -rf ntfsdt-working/dirr");
+
+    cons.output.wait ();
+    received = cons.output.registered();
+
+    iter = std::find_if (received.begin(),
+                         received.end(),
+                         event_matcher (event ("dirr", wid, IN_DELETE)));
+
+    should ("receive IN_DELETE with IN_ISDIR when removing directory in directory",
+            iter != received.end () &&  (iter->flags & IN_ISDIR));
+    
+    
     cons.output.reset ();
     cons.input.receive ();
 

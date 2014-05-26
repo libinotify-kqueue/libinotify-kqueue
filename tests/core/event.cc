@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -56,10 +56,9 @@ bool event_matcher::operator() (const event &ev_) const
     LOG ("matching " << ev.filename  << ':' << ev.watch  << '&' << ev.flags <<
          " against " << ev_.filename << ':' << ev_.watch << '&' << ev_.flags);
 
-    return
-        (ev.filename == ev_.filename
-         && ev.watch == ev_.watch
-         && (ev.flags & ev_.flags));
+    return (ev.filename == ev_.filename
+            && ev.watch == ev_.watch
+            && (ev.flags & ev_.flags));
 }
 
 
