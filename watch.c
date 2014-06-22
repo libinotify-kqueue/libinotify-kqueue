@@ -120,6 +120,7 @@ watch_init (watch         *w,
 
     int is_dir = 0;
     _file_information (w->fd, &is_dir, &w->inode);
+    w->is_really_dir = is_dir;
     w->is_directory = (watch_type == WATCH_USER ? is_dir : 0);
 
     EV_SET (kv,
@@ -167,7 +168,8 @@ watch_reopen (watch *w)
     /* Actually, reopen happens only for dependencies. */
     int is_dir = 0;
     _file_information (w->fd, &is_dir, &w->inode);
-    w->is_directory = (w->type == WATCH_USER ? is_dir : 0);
+    w->is_really_dir = is_dir;
+    w->is_directory  = (w->type == WATCH_USER ? is_dir : 0);
 
     free (filename);
     return 0;

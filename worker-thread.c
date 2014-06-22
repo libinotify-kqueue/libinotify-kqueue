@@ -81,6 +81,29 @@ bulk_write (bulk_events *be, void *mem, size_t size)
 }
 
 /**
+ * Check if a file under given path is/was a directory. Use worker's
+ * cached data (watches) to query file type (this function is called
+ * when something happens in a watched directory, so we SHOULD have
+ * a watch for its contents
+ *
+ * @param[in] path A file path
+ * @param[in] wrk A worker instance for which a change has been triggered.
+ *
+ * @return 1 if dir (cached), 0 otherwise.
+ **/
+static int
+check_is_dir_cached (const char *path, worker *wrk)
+{
+    int i;
+    for (i = 0; i < wrk->sets.length; i++) {
+        const watch *w = wrk->sets.watches[i];
+        if (w != NULL && strcmp (path, w->filename) == 0 && w->is_really_dir)
+            return 1;
+    }
+    return 0;
+}
+
+/**
  * Process a worker command.
  *
  * @param[in] wrk A pointer to #worker.
@@ -145,11 +168,9 @@ handle_added (void *udata, const char *path, ino_t inode)
     int ie_len = 0;
 
     ie = create_inotify_event (ctx->w->fd, IN_CREATE, 0, path, &ie_len);
-    if (ie != NULL) {
-        bulk_write (ctx->be, ie, ie_len);
-        free (ie);
-    } else {
+    if (ie == NULL) {
         perror_msg ("Failed to create an IN_CREATE event for %s", path);
+        return;
     }
 
     char *npath = path_concat (ctx->w->filename, path);
@@ -159,11 +180,17 @@ handle_added (void *udata, const char *path, ino_t inode)
             perror_msg ("Failed to start watching on a new dependency %s", npath);
         } else {
             neww->parent = ctx->w;
+            if (neww->is_really_dir) {
+                ie->mask |= IN_ISDIR;
+            }
         }
         free (npath);
     } else {
         perror_msg ("Failed to allocate a path to start watching a dependency");
     }
+
+    bulk_write (ctx->be, ie, ie_len);
+    free (ie);
 }
 
 /**
@@ -188,8 +215,9 @@ handle_removed (void *udata, const char *path, ino_t inode)
 
     struct inotify_event *ie = NULL;
     int ie_len = 0;
+    int addMask = check_is_dir_cached (path, ctx->wrk) ? IN_ISDIR : 0;
 
-    ie = create_inotify_event (ctx->w->fd, IN_DELETE, 0, path, &ie_len);
+    ie = create_inotify_event (ctx->w->fd, IN_DELETE | addMask, 0, path, &ie_len);
     if (ie != NULL) {
         bulk_write (ctx->be, ie, ie_len);
         free (ie);
@@ -227,11 +255,11 @@ handle_replaced (void       *udata,
 
     uint32_t cookie = from_inode & 0x00000000FFFFFFFF;
     int event_len = 0;
+    int addMask = check_is_dir_cached (from_path, ctx->wrk) ? IN_ISDIR : 0;
     struct inotify_event *ev;
 
-    ev = create_inotify_event (ctx->w->fd, IN_MOVED_FROM, cookie,
-                               from_path,
-                               &event_len);
+    ev = create_inotify_event (ctx->w->fd, IN_MOVED_FROM | addMask, cookie,
+                               from_path, &event_len);
     if (ev != NULL) {
         bulk_write (ctx->be, ev, event_len);
         free (ev);
@@ -240,9 +268,8 @@ handle_replaced (void       *udata,
                     from_path);
     }
 
-    ev = create_inotify_event (ctx->w->fd, IN_MOVED_TO, cookie,
-                               to_path,
-                               &event_len);
+    ev = create_inotify_event (ctx->w->fd, IN_MOVED_TO | addMask, cookie,
+                               to_path, &event_len);
     if (ev != NULL) {
         bulk_write (ctx->be, ev, event_len);
         free (ev);
@@ -285,7 +312,8 @@ handle_overwritten (void *udata, const char *path, ino_t inode)
     assert (ctx->w != NULL);
     assert (ctx->be != NULL);
 
-   int i;
+    int addMask = check_is_dir_cached (path, ctx->wrk) ? IN_ISDIR : 0;
+    int i;
     for (i = 0; i < ctx->wrk->sets.length; i++) {
         watch *wi = ctx->wrk->sets.watches[i];
         if (wi && (strcmp (wi->filename, path) == 0)
@@ -301,7 +329,7 @@ handle_overwritten (void *udata, const char *path, ino_t inode)
                 int event_len = 0;
                 struct inotify_event *ev;
 
-                ev = create_inotify_event (ctx->w->fd, IN_DELETE, cookie,
+                ev = create_inotify_event (ctx->w->fd, IN_DELETE | addMask, cookie,
                                            path,
                                            &event_len);
                 if (ev != NULL) {
@@ -312,6 +340,8 @@ handle_overwritten (void *udata, const char *path, ino_t inode)
                                 path);
                 }
 
+                /* TODO: Could a file be overwritten by a directory? What will happen to
+                 * existing watch in this case? Repoen? */
                 ev = create_inotify_event (ctx->w->fd, IN_CREATE, cookie,
                                            path,
                                            &event_len);
@@ -354,13 +384,13 @@ handle_moved (void       *udata,
     assert (ctx->w != NULL);
     assert (ctx->be != NULL);
 
+    int addMask = check_is_dir_cached (from_path, ctx->wrk) ? IN_ISDIR : 0;
     uint32_t cookie = from_inode & 0x00000000FFFFFFFF;
     int event_len = 0;
     struct inotify_event *ev;
-    
-    ev = create_inotify_event (ctx->w->fd, IN_MOVED_FROM, cookie,
-                               from_path,
-                               &event_len);
+
+    ev = create_inotify_event (ctx->w->fd, IN_MOVED_FROM | addMask, cookie,
+                               from_path, &event_len);
     if (ev != NULL) {   
         bulk_write (ctx->be, ev, event_len);
         free (ev);
@@ -369,9 +399,8 @@ handle_moved (void       *udata,
                     from_path);
     }
     
-    ev = create_inotify_event (ctx->w->fd, IN_MOVED_TO, cookie,
-                               to_path,
-                               &event_len);
+    ev = create_inotify_event (ctx->w->fd, IN_MOVED_TO | addMask, cookie,
+                               to_path, &event_len);
     if (ev != NULL) {   
         bulk_write (ctx->be, ev, event_len);
         free (ev);
@@ -546,7 +575,7 @@ produce_notifications (worker *wrk, struct kevent *event)
             int ev_len;
             ie = create_inotify_event
                 (p->fd,
-                 kqueue_to_inotify (event->fflags, w->is_directory),
+                 kqueue_to_inotify (event->fflags, w->is_really_dir),
                  0,
                  w->filename,
                  &ev_len);
