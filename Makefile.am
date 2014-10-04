@@ -56,6 +56,7 @@ check_libinotify_SOURCES = \
     tests/update_flags_test.cc \
     tests/update_flags_dir_test.cc \
     tests/open_close_test.cc \
+    tests/bugs_test.cc \
     tests/tests.cc
 
 if LINUX

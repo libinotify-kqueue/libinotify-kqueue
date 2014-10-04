@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -56,7 +56,7 @@ void      dl_print        (const dep_list *dl);
 dep_list* dl_shallow_copy (const dep_list *dl);
 void      dl_shallow_free (dep_list *dl);
 void      dl_free         (dep_list *dl);
-dep_list* dl_listing      (const char *path);
+dep_list* dl_listing      (const char *path, int *failed);
 void      dl_diff         (dep_list **before, dep_list **after);
 
 void

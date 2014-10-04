@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -483,14 +483,17 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
     assert (w->is_directory);
 
     dep_list *was = NULL, *now = NULL;
+    int failed = 0;
     was = dl_shallow_copy (w->deps);
-    now = dl_listing (w->filename);
-    if (now == NULL && errno != ENOENT) {
+    now = dl_listing (w->filename, &failed);
+
+    if (now == NULL && failed && errno != ENOENT) {
         /* Why do I skip ENOENT? Because the directory could be deleted at this
          * point */
         perror_msg ("Failed to create a listing for directory %s",
                     w->filename);
         dl_shallow_free (was);
+        printf("Bye!\n");
         return;
     }
 

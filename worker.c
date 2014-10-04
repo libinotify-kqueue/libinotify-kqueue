@@ -240,7 +240,7 @@ worker_add_dependencies (worker        *wrk,
     assert (parent->type == WATCH_USER);
     assert (event != NULL);
 
-    parent->deps = dl_listing (parent->filename);
+    parent->deps = dl_listing (parent->filename, NULL);
 
     {   dep_list *iter = parent->deps;
         while (iter != NULL) {

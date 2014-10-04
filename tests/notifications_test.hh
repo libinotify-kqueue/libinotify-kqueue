@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -20,8 +20,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#ifndef __NOTIFICAIONTS_TEST_HH__
-#define __NOTIFICAIONTS_TEST_HH__
+#ifndef __NOTIFICATIONS_TEST_HH__
+#define __NOTIFICATIONS_TEST_HH__
 
 #include "core/core.hh"
 
@@ -35,4 +35,4 @@ public:
     notifications_test (journal &j);
 };
 
-#endif // __NOTIFICAIONTS_TEST_HH__
+#endif // __NOTIFICATIONS_TEST_HH__

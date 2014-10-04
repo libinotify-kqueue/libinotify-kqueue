@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -152,16 +152,22 @@ dl_free (dep_list *dl)
  * Create a directory listing and return it as a list.
  *
  * @param[in] path A path to a directory.
+ * @param[in] failed Optional flag. Set to 1 in case of error. May be NULL.
  * @return A pointer to a list. May return NULL, check errno in this case.
  **/
 dep_list*
-dl_listing (const char *path)
+dl_listing (const char *path, int *failed)
 {
     assert (path != NULL);
 
     dep_list *head = NULL;
     dep_list *prev = NULL;
     DIR *dir = opendir (path);
+
+    if (failed) {
+        *failed = 0;
+    }
+
     if (dir != NULL) {
         struct dirent *ent;
 
@@ -203,6 +209,9 @@ dl_listing (const char *path)
     return head;
 
 error:
+    if (failed) {
+        *failed = 1;
+    }
     if (dir != NULL) {
         closedir (dir);
     }
@@ -227,9 +236,9 @@ dl_diff (dep_list **before, dep_list **after)
     assert (before != NULL);
     assert (after != NULL);
 
-    if (*before == NULL || *after == NULL) {
-        return;
-    }
+    /* if (*before == NULL || *after == NULL) { */
+    /*     return; */
+    /* } */
 
     dep_list *before_iter = *before;
     dep_list *before_prev = NULL;

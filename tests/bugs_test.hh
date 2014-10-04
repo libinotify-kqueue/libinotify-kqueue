@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -20,19 +20,19 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#ifndef __NOTIFICATIONS_DIR_TEST_HH__
-#define __NOTIFICATIONS_DIR_TEST_HH__
+#ifndef __BUGS_TEST__HH__
+#define __BUGS_TEST__HH__
 
 #include "core/core.hh"
 
-class notifications_dir_test: public test {
+class bugs_test: public test {
 protected:
     virtual void setup ();
     virtual void run ();
     virtual void cleanup ();
 
 public:
-    notifications_dir_test (journal &j);
+    bugs_test (journal &j);
 };
 
-#endif // __NOTIFICAIONS_DIR_TEST_HH__
+#endif // __BUGS_TEST_HH__

@@ -38,6 +38,10 @@ void notifications_dir_test::setup ()
 
     system ("mkdir ntfsdt-cache");
     system ("touch ntfsdt-cache/bar");
+
+    system ("mkdir ntfsdt-bugs");
+    system ("touch ntfsdt-bugs/1");
+    system ("touch ntfsdt-bugs/2");
 }
 
 void notifications_dir_test::run ()
@@ -293,7 +297,8 @@ void notifications_dir_test::run ()
             contains (received, event ("", wid, IN_DELETE_SELF)));
     should ("receive IN_IGNORED on removing a directory",
             contains (received, event ("", wid, IN_IGNORED)));
-    
+
+
     cons.input.interrupt ();
 }
 
@@ -302,4 +307,5 @@ void notifications_dir_test::cleanup ()
     system ("rm -rf ntfsdt-working-2");
     system ("rm -rf ntfsdt-working");
     system ("rm -rf ntfsdt-cache");
+    system ("rm -rf ntfsdt-bugs");
 }
