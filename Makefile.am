@@ -2,6 +2,8 @@
 #	The library
 #-----------------------------------------------------------
 
+ACLOCAL_AMFLAGS = -I m4
+
 if BUILD_LIBRARY
 lib_LTLIBRARIES = libinotify.la
 
