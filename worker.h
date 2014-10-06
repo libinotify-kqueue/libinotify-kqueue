@@ -93,5 +93,6 @@ int     worker_remove         (worker *wrk, int id);
 
 void    worker_update_paths   (worker *wrk, watch *parent);
 void    worker_remove_many    (worker *wrk, watch *parent, const dep_list* items, int remove_self);
+void    worker_remove_watch   (worker *wrk, watch *parent, const char* path);
 
 #endif /* __WORKER_H__ */

@@ -460,61 +460,48 @@ worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remov
     assert (wrk != NULL);
     assert (parent != NULL);
 
-    dep_list *to_remove = dl_shallow_copy (items);
-    
-    size_t i, j;
+    const dep_list *iter = items;
+    size_t i;
 
-    for (i = 0, j = 0; i < wrk->sets.length; i++) {
-        dep_list *iter = to_remove;
-        dep_list *prev = NULL;
-        watch *w = wrk->sets.watches[i];
+    while (iter != NULL) {
 
-        if (remove_self && w == parent) {
-            /* Remove the parent watch itself. The watch will be freed later,
-             * now just remove it from the array */
-            continue;
-        }
-
-        if (w->parent == parent) {
-            while (iter != NULL && strcmp (iter->path, w->filename) != 0) {
-                prev = iter;
-                iter = iter->next;
-            }
-
-            if (iter != NULL) {
-                /* At first, remove this entry from a list of files to remove */
-                if (prev) {
-                    prev->next = iter->next;
-                } else {
-                    to_remove = iter->next;
-                }
-
-                free (iter);
-
-                /* Then, remove the watch itself */
-                watch_free (w);
-                continue;
-            }
-        }
-
-        /* If the control reached here, keep this item */
-        if (i != j) {
-            wrk->sets.watches[j] = w;
-        }
-        ++j;
+        worker_remove_watch (wrk, parent, iter->path);
+        iter = iter->next;
     }
 
     if (remove_self) {
-        watch_free (parent);
+        for (i = 0; i < wrk->sets.length; i++) {
+            if (wrk->sets.watches[i] == parent) {
+                worker_sets_delete (&wrk->sets, i);
+                break;
+            }
+        }
     }
+}
 
-    wrk->sets.length -= (i - j);
+/**
+ * Remove a watch from worker by its path.
+ *
+ * @param[in] wrk     A pointer to #worker.
+ * @param[in] parent  A pointer to the parent #watch.
+ * @param[in] item    A watch to remove. Must be child of the specified parent.
+ **/
+void
+worker_remove_watch (worker *wrk, watch *parent, const char *path)
+{
+    assert (wrk != NULL);
+    assert (parent != NULL);
 
-    for (i = wrk->sets.length; i < wrk->sets.allocated; i++) {
-        wrk->sets.watches[i] = NULL;
+    size_t i;
+
+    for (i = 0; i < wrk->sets.length; i++) {
+        watch *w = wrk->sets.watches[i];
+
+        if ((w->parent == parent) && (strcmp (path, w->filename) == 0)) {
+            worker_sets_delete (&wrk->sets, i);
+            break;
+        }
     }
-
-    dl_shallow_free (to_remove);
 }
 
 /**
