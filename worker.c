@@ -302,8 +302,7 @@ worker_start_watching (worker      *wrk,
                     &wrk->sets.events[i],
                     path,
                     entry_name,
-                    flags,
-                    i)
+                    flags)
         == -1) {
         watch_free (wrk->sets.watches[i]);
         wrk->sets.watches[i] = NULL;
@@ -487,7 +486,6 @@ worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remov
         /* If the control reached here, keep this item */
         if (i != j) {
             wrk->sets.events[j] = wrk->sets.events[i];
-            wrk->sets.events[j].udata = INDEX_TO_UDATA (j);
             wrk->sets.watches[j] = w;
             wrk->sets.watches[j]->event = &wrk->sets.events[j];
         }

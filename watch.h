@@ -60,8 +60,7 @@ int watch_init (watch         *w,
                 struct kevent *kv,
                 const char    *path,
                 const char    *entry_name,
-                uint32_t       flags,
-                int            index);
+                uint32_t       flags);
 
 int  watch_reopen (watch *w);
 void watch_free   (watch *w);

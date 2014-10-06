@@ -529,7 +529,16 @@ produce_notifications (worker *wrk, struct kevent *event)
     assert (wrk != NULL);
     assert (event != NULL);
 
-    watch *w = wrk->sets.watches[UDATA_TO_INDEX (event->udata)];
+    watch *w = NULL;
+    size_t i;
+
+    for (i = 1; i < wrk->sets.length; i++) {
+        if (event->ident == wrk->sets.watches[i]->fd) {
+            w = wrk->sets.watches[i];
+            break;
+        }
+    }
+    assert (w != NULL);
 
     uint32_t flags = event->fflags;
 

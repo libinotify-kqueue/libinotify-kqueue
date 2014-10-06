@@ -84,7 +84,6 @@ _file_information (int fd, int *is_dir, ino_t *inode)
  * @param[in]     path       A full path to a file.
  * @param[in]     entry_name A name of a watched file (for dependency watches).
  * @param[in]     flags      A combination of the inotify watch flags.
- * @param[in]     index      The index of a watch in the worker sets.
  * @return 0 on success, -1 on failure.
  **/
 int
@@ -93,8 +92,7 @@ watch_init (watch         *w,
             struct kevent *kv,
             const char    *path,
             const char    *entry_name,
-            uint32_t       flags,
-            int            index)
+            uint32_t       flags)
 {
     assert (w != NULL);
     assert (kv != NULL);
@@ -131,7 +129,7 @@ watch_init (watch         *w,
             EV_ADD | EV_ENABLE | EV_CLEAR,
             inotify_to_kqueue (flags, w->is_really_dir, is_subwatch),
             0,
-            INDEX_TO_UDATA (index));
+            NULL);
 
     return 0;
 }

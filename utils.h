@@ -27,20 +27,6 @@
 #include <pthread.h>
 
 
-/* struct kevent is declared slightly differently on the different BSDs.
- * This macros will help to avoid cast warnings on the supported platforms.
- */
-#if defined(__NetBSD__)
-#  define INDEX_TO_UDATA(X) (X)
-#  define UDATA_TO_INDEX(X) (X)
-#elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__APPLE__)
-#  define INDEX_TO_UDATA(X) ((void *)(uintptr_t)X)
-#  define UDATA_TO_INDEX(X) ((uintptr_t)X)
-#else
-#  error Currently unsupported
-#endif
-
-
 char* path_concat (const char *dir, const char *file);
 
 struct inotify_event* create_inotify_event (int         wd,
