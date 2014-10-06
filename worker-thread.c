@@ -484,7 +484,7 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
 
     dep_list *was = NULL, *now = NULL;
     int failed = 0;
-    was = dl_shallow_copy (w->deps);
+    was = w->deps;
     now = dl_listing (w->filename, &failed);
 
     if (now == NULL && failed && errno != ENOENT) {
@@ -492,12 +492,10 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
          * point */
         perror_msg ("Failed to create a listing for directory %s",
                     w->filename);
-        dl_shallow_free (was);
         printf("Bye!\n");
         return;
     }
 
-    dl_shallow_free (w->deps);
     w->deps = now;
 
     bulk_events be;
