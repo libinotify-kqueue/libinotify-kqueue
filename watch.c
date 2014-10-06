@@ -58,7 +58,7 @@ _file_information (int fd, int *is_dir, ino_t *inode)
     }
 
     if (is_dir != NULL) {
-        *is_dir = ((st.st_mode & S_IFDIR) == S_IFDIR) ? 1 : 0;
+        *is_dir = S_ISDIR (st.st_mode);
     }
 
     if (inode != NULL) {
