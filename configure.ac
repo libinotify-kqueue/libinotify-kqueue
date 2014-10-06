@@ -31,6 +31,7 @@ AC_CHECK_HEADERS([sys/event.h],
 [
     AC_CHECK_FUNCS(kqueue,,AC_MSG_ERROR(No kqueue detected in your system!))
     AC_CHECK_FUNCS(kevent,,AC_MSG_ERROR(No kevent detected in your system!))
+    AC_DEFINE([BUILD_LIBRARY],[1],[Define to 1 if libinotify is built])
     kqueue_support=yes
 ],
 [

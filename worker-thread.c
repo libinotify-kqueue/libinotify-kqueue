@@ -26,7 +26,6 @@
 #include <stdlib.h> /* calloc, realloc */
 #include <string.h> /* memset */
 #include <stdio.h>
-#include <errno.h>
 
 #include <sys/types.h>
 #include <sys/event.h>
@@ -394,16 +393,11 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
     assert (w->is_directory);
 
     dep_list *was = NULL, *now = NULL;
-    int failed = 0;
     was = w->deps;
-    now = dl_listing (w->filename, &failed);
-
-    if (now == NULL && failed && errno != ENOENT) {
-        /* Why do I skip ENOENT? Because the directory could be deleted at this
-         * point */
+    now = dl_listing (w->filename);
+    if (now == NULL) {
         perror_msg ("Failed to create a listing for directory %s",
                     w->filename);
-        printf("Bye!\n");
         return;
     }
 

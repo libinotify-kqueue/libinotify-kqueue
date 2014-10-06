@@ -24,12 +24,20 @@
 #define __DEP_LIST_H__
 
 #include <sys/types.h> /* ino_t */
+#include <sys/queue.h> /* SLIST macroses */
+
+typedef struct dep_item {
+    ino_t inode;
+    char path[];
+} dep_item;
+
+typedef struct dep_node {
+    SLIST_ENTRY(dep_node) next;
+    dep_item *item;
+} dep_node;
 
 typedef struct dep_list {
-    struct dep_list *next;
-
-    char *path;
-    ino_t inode;
+    SLIST_HEAD(, dep_node) head;
 } dep_list;
 
 typedef void (* no_entry_cb)     (void *udata);
@@ -51,13 +59,17 @@ typedef struct traverse_cbs {
     no_entry_cb      names_updated;
 } traverse_cbs;
 
-dep_list* dl_create       (char *path, ino_t inode);
+dep_item* di_create       (const char *path, ino_t inode);
+void      di_free         (dep_item *di);
+
+dep_list* dl_create       ();
+dep_node* dl_insert       (dep_list *dl, dep_item *di);
+void      dl_remove_after (dep_list *dl, dep_node *dn);
 void      dl_print        (const dep_list *dl);
 dep_list* dl_shallow_copy (const dep_list *dl);
 void      dl_shallow_free (dep_list *dl);
 void      dl_free         (dep_list *dl);
-dep_list* dl_listing      (const char *path, int *failed);
-void      dl_diff         (dep_list **before, dep_list **after);
+dep_list* dl_listing      (const char *path);
 
 void
 dl_calculate (dep_list            *before,
