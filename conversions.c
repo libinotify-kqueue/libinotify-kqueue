@@ -34,30 +34,26 @@ static const int NOTE_MODIFIED = (NOTE_WRITE | NOTE_EXTEND);
  *
  * @param[in] flags        An inotify watch mask.
  * @param[in] is_directory 1 for directories, 0 for files.
+ * @param[in] is_subwatch  1 for subwatches, 0 for user watches.
  * @return Converted kqueue event filter flags.
  **/  
 uint32_t
-inotify_to_kqueue (uint32_t flags, int is_directory)
+inotify_to_kqueue (uint32_t flags, int is_directory, int is_subwatch)
 {
     uint32_t result = 0;
 
     if (flags & IN_ATTRIB)
         result |= (NOTE_ATTRIB | NOTE_LINK);
-    if (flags & IN_MODIFY)
+    if (flags & IN_MODIFY && is_directory == 0)
         result |= NOTE_MODIFIED;
-    if (flags & IN_MOVED_FROM && is_directory)
-        result |= NOTE_MODIFIED;
-    if (flags & IN_MOVED_TO && is_directory)
-        result |= NOTE_MODIFIED;
-    if (flags & IN_CREATE && is_directory)
-        result |= NOTE_MODIFIED;
-    if (flags & IN_DELETE && is_directory)
-        result |= NOTE_MODIFIED;
-    if (flags & IN_DELETE_SELF)
-        result |= NOTE_DELETE;
-    if (flags & IN_MOVE_SELF)
-        result |= NOTE_RENAME;
-
+    if (is_subwatch == 0) {
+        if (flags & (IN_MOVED_FROM | IN_MOVED_TO | IN_CREATE | IN_DELETE) && is_directory)
+            result |= NOTE_MODIFIED;
+        if (flags & IN_DELETE_SELF)
+            result |= NOTE_DELETE;
+        if (flags & IN_MOVE_SELF)
+            result |= NOTE_RENAME;
+    }
     return result;
 }
 
@@ -67,24 +63,24 @@ inotify_to_kqueue (uint32_t flags, int is_directory)
  *
  * @param[in] flags        A kqueue filter flags.
  * @param[in] is_directory 1 for directories, 0 for files.
+ * @param[in] is_subwatch  1 for subwatches, 0 for user watches.
  * @return Converted inotify watch mask.
  **/  
 uint32_t
-kqueue_to_inotify (uint32_t flags, int is_directory)
+kqueue_to_inotify (uint32_t flags, int is_directory, int is_subwatch)
 {
     uint32_t result = 0;
 
     if (flags & (NOTE_ATTRIB | NOTE_LINK))
         result |= IN_ATTRIB;
 
-    if ((flags & NOTE_MODIFIED)
-        && is_directory == 0)
+    if (flags & NOTE_MODIFIED && is_directory == 0)
         result |= IN_MODIFY;
 
-    if (flags & NOTE_DELETE)
+    if (flags & NOTE_DELETE && is_subwatch == 0)
         result |= IN_DELETE_SELF;
 
-    if (flags & NOTE_RENAME)
+    if (flags & NOTE_RENAME && is_subwatch == 0)
         result |= IN_MOVE_SELF;
 
     if ((result & (IN_ATTRIB | IN_OPEN | IN_CLOSE_WRITE | IN_CLOSE_NOWRITE))

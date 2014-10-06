@@ -533,9 +533,9 @@ produce_notifications (worker *wrk, struct kevent *event)
 
     watch *w = wrk->sets.watches[UDATA_TO_INDEX (event->udata)];
 
-    if (w->type == WATCH_USER) {
-        uint32_t flags = event->fflags;
+    uint32_t flags = event->fflags;
 
+    if (w->type == WATCH_USER) {
         if (w->is_directory
             && (flags & (NOTE_WRITE | NOTE_EXTEND))
             && (w->flags & (IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO))) {
@@ -547,7 +547,7 @@ produce_notifications (worker *wrk, struct kevent *event)
             struct inotify_event *ie = NULL;
             int ev_len;
             ie = create_inotify_event (w->fd,
-                                       kqueue_to_inotify (flags, w->is_directory),
+                                       kqueue_to_inotify (flags, w->is_really_dir, 0),
                                        0,
                                        NULL,
                                        &ev_len);
@@ -578,7 +578,7 @@ produce_notifications (worker *wrk, struct kevent *event)
             int ev_len;
             ie = create_inotify_event
                 (p->fd,
-                 kqueue_to_inotify (event->fflags, w->is_really_dir),
+                 kqueue_to_inotify (flags, w->is_really_dir, 1),
                  0,
                  w->filename,
                  &ev_len);
