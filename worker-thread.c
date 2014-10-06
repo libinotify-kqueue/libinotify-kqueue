@@ -39,11 +39,7 @@
 #include "worker-thread.h"
 
 void worker_erase (worker *wrk);
-static void handle_moved (void       *udata,
-                          const char *from_path,
-                          ino_t       from_inode,
-                          const char *to_path,
-                          ino_t       to_inode);
+static void handle_moved (void *udata, dep_item *from_di, dep_item *to_di);
 
 /**
  * Create a new inotify event and place it to event queue.
@@ -114,18 +110,18 @@ flush_events (worker *wrk)
  * when something happens in a watched directory, so we SHOULD have
  * a watch for its contents
  *
- * @param[in] path A file path
  * @param[in] wrk A worker instance for which a change has been triggered.
+ * @param[in] di  A dependency list item
  *
  * @return 1 if dir (cached), 0 otherwise.
  **/
 static int
-check_is_dir_cached (const char *path, worker *wrk)
+check_is_dir_cached (worker *wrk, const dep_item *di)
 {
     int i;
     for (i = 0; i < wrk->sets.length; i++) {
         const watch *w = wrk->sets.watches[i];
-        if (w != NULL && strcmp (path, w->filename) == 0 && w->is_really_dir)
+        if (w != NULL && strcmp (di->path, w->filename) == 0 && w->is_really_dir)
             return 1;
     }
     return 0;
@@ -178,11 +174,10 @@ typedef struct {
  * routines.
  *
  * @param[in] udata  A pointer to user data (#handle_context).
- * @param[in] path   File name of a new file.
- * @param[in] inode  Inode number of a new file.
+ * @param[in] di     File name & inode number of a new file.
  **/
 static void
-handle_added (void *udata, const char *path, ino_t inode)
+handle_added (void *udata, dep_item *di)
 {
     assert (udata != NULL);
 
@@ -191,9 +186,9 @@ handle_added (void *udata, const char *path, ino_t inode)
     assert (ctx->w != NULL);
 
     int addMask = 0;
-    char *npath = path_concat (ctx->w->filename, path);
+    char *npath = path_concat (ctx->w->filename, di->path);
     if (npath != NULL) {
-        watch *neww = worker_start_watching (ctx->wrk, npath, path, ctx->w->flags, WATCH_DEPENDENCY);
+        watch *neww = worker_start_watching (ctx->wrk, npath, di->path, ctx->w->flags, WATCH_DEPENDENCY);
         if (neww == NULL) {
             perror_msg ("Failed to start watching on a new dependency %s", npath);
         } else {
@@ -207,7 +202,7 @@ handle_added (void *udata, const char *path, ino_t inode)
         perror_msg ("Failed to allocate a path to start watching a dependency");
     }
 
-    enqueue_event (ctx->wrk, ctx->w->fd, IN_CREATE | addMask, 0, path);
+    enqueue_event (ctx->wrk, ctx->w->fd, IN_CREATE | addMask, 0, di->path);
 }
 
 /**
@@ -217,11 +212,10 @@ handle_added (void *udata, const char *path, ino_t inode)
  * routines.
  *
  * @param[in] udata  A pointer to user data (#handle_context).
- * @param[in] path   File name of the removed file.
- * @param[in] inode  Inode number of the removed file.
+ * @param[in] di     File name & inode number of the removed file.
  **/
 static void
-handle_removed (void *udata, const char *path, ino_t inode)
+handle_removed (void *udata, dep_item *di)
 {
     assert (udata != NULL);
 
@@ -229,8 +223,8 @@ handle_removed (void *udata, const char *path, ino_t inode)
     assert (ctx->wrk != NULL);
     assert (ctx->w != NULL);
 
-    int addMask = check_is_dir_cached (path, ctx->wrk) ? IN_ISDIR : 0;
-    enqueue_event (ctx->wrk, ctx->w->fd, IN_DELETE | addMask, 0, path);
+    int addMask = check_is_dir_cached (ctx->wrk, di) ? IN_ISDIR : 0;
+    enqueue_event (ctx->wrk, ctx->w->fd, IN_DELETE | addMask, 0, di->path);
 }
 
 /**
@@ -240,18 +234,12 @@ handle_removed (void *udata, const char *path, ino_t inode)
  * This function is used as a callback and is invoked from the dep-list
  * routines.
  *
- * @param[in] udata       A pointer to user data (#handle_context).
- * @param[in] from_path   File name of the source file.
- * @param[in] from_inode  Inode number of the source file.
- * @param[in] to_path     File name of the replaced file.
- * @param[in] to_inode    Inode number of the replaced file.
-**/
+ * @param[in] udata   A pointer to user data (#handle_context).
+ * @param[in] from_di A file name & inode number of the source file.
+ * @param[in] to_di   A file name & inode number of the replaced file.
+ **/
 static void
-handle_replaced (void       *udata,
-                 const char *from_path,
-                 ino_t       from_inode,
-                 const char *to_path,
-                 ino_t       to_inode)
+handle_replaced (void *udata, dep_item *from_di, dep_item *to_di)
 {
     assert (udata != NULL);
 
@@ -259,8 +247,8 @@ handle_replaced (void       *udata,
     assert (ctx->wrk != NULL);
     assert (ctx->w != NULL);
 
-    handle_moved (udata, from_path, from_inode, to_path, to_inode);
-    worker_remove_watch (ctx->wrk, ctx->w, to_path);
+    handle_moved (udata, from_di, to_di);
+    worker_remove_watch (ctx->wrk, ctx->w, to_di);
 }
 
 /**
@@ -271,11 +259,10 @@ handle_replaced (void       *udata,
  * routines.
  *
  * @param[in] udata  A pointer to user data (#handle_context).
- * @param[in] path   File name of the overwritten file.
- * @param[in] inode  Inode number of the overwritten file.
+ * @param[in] di     File name & inode number of the overwritten file.
  **/
 static void
-handle_overwritten (void *udata, const char *path, ino_t inode)
+handle_overwritten (void *udata, dep_item *di)
 {
     assert (udata != NULL);
 
@@ -283,9 +270,9 @@ handle_overwritten (void *udata, const char *path, ino_t inode)
     assert (ctx->wrk != NULL);
     assert (ctx->w != NULL);
 
-    handle_removed (udata, path, inode);
-    handle_added (udata, path, inode);
-    worker_remove_watch (ctx->wrk, ctx->w, path);
+    handle_removed (udata, di);
+    handle_added (udata, di);
+    worker_remove_watch (ctx->wrk, ctx->w, di);
 }
 
 /**
@@ -294,18 +281,12 @@ handle_overwritten (void *udata, const char *path, ino_t inode)
  * This function is used as a callback and is invoked from the dep-list
  * routines.
  *
- * @param[in] udata       A pointer to user data (#handle_context).
- * @param[in] from_path   The old name of the file.
- * @param[in] from_inode  Inode number of the old file.
- * @param[in] to_path     The new name of the file.
- * @param[in] to_inode    Inode number of the new file.
-**/
+ * @param[in] udata   A pointer to user data (#handle_context).
+ * @param[in] from_di A old name & inode number of the file.
+ * @param[in] to_di   A new name & inode number of the file.
+ **/
 static void
-handle_moved (void       *udata,
-              const char *from_path,
-              ino_t       from_inode,
-              const char *to_path,
-              ino_t       to_inode)
+handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
 {
     assert (udata != NULL);
 
@@ -313,11 +294,11 @@ handle_moved (void       *udata,
     assert (ctx->wrk != NULL);
     assert (ctx->w != NULL);
 
-    int addMask = check_is_dir_cached (from_path, ctx->wrk) ? IN_ISDIR : 0;
-    uint32_t cookie = from_inode & 0x00000000FFFFFFFF;
+    int addMask = check_is_dir_cached (ctx->wrk, from_di) ? IN_ISDIR : 0;
+    uint32_t cookie = from_di->inode & 0x00000000FFFFFFFF;
 
-    enqueue_event (ctx->wrk, ctx->w->fd, IN_MOVED_FROM | addMask, cookie, from_path);
-    enqueue_event (ctx->wrk, ctx->w->fd, IN_MOVED_TO | addMask, cookie, to_path);
+    enqueue_event (ctx->wrk, ctx->w->fd, IN_MOVED_FROM | addMask, cookie, from_di->path);
+    enqueue_event (ctx->wrk, ctx->w->fd, IN_MOVED_TO | addMask, cookie, to_di->path);
 }
 
 /**

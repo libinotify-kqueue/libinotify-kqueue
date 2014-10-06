@@ -41,10 +41,10 @@ typedef struct dep_list {
 } dep_list;
 
 typedef void (* no_entry_cb)     (void *udata);
-typedef void (* single_entry_cb) (void *udata, const char *path, ino_t inode);
+typedef void (* single_entry_cb) (void *udata, dep_item *di);
 typedef void (* dual_entry_cb)   (void *udata,
-                                  const char *from_path, ino_t from_inode,
-                                  const char *to_path,   ino_t to_inode);
+                                  dep_item *from_di,
+                                  dep_item *to_di);
 typedef void (* list_cb)         (void *udata, const dep_list *list);
 
 

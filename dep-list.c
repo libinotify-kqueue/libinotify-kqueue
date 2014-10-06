@@ -429,9 +429,7 @@ dl_detect_moves (dep_list            *removed,
         (removed, added,
          (removed_iter->item->inode == added_iter->item->inode),
          {
-             cb_invoke (cbs, moved, udata,
-                        removed_iter->item->path, removed_iter->item->inode,
-                        added_iter->item->path, added_iter->item->inode);
+             cb_invoke (cbs, moved, udata, removed_iter->item, added_iter->item);
          });
 }
 
@@ -470,9 +468,7 @@ dl_detect_replacements (dep_list            *removed,
         (removed, current,
          (removed_iter->item->inode == current_iter->item->inode),
          {
-            cb_invoke (cbs, replaced, udata,
-                        removed_iter->item->path, removed_iter->item->inode,
-                        current_iter->item->path, current_iter->item->inode);
+            cb_invoke (cbs, replaced, udata, removed_iter->item, current_iter->item);
          });
 }
 
@@ -516,7 +512,7 @@ dl_detect_overwrites (dep_list            *previous,
          (strcmp (previous_iter->item->path, current_iter->item->path) == 0
           && previous_iter->item->inode != current_iter->item->inode),
          {
-             cb_invoke (cbs, overwritten, udata, current_iter->item->path, current_iter->item->inode);
+             cb_invoke (cbs, overwritten, udata, current_iter->item);
          });
 }
 
@@ -539,7 +535,7 @@ dl_emit_single_cb_on (dep_list        *list,
         return;
 
     SLIST_FOREACH (iter, &list->head, next) {
-        (cb) (udata, iter->item->path, iter->item->inode);
+        (cb) (udata, iter->item);
     }
 }
 

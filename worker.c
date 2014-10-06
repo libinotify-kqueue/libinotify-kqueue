@@ -468,7 +468,7 @@ worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remov
     if (items != NULL) {
         SLIST_FOREACH (iter, &items->head, next) {
 
-            worker_remove_watch (wrk, parent, iter->item->path);
+            worker_remove_watch (wrk, parent, iter->item);
         }
     }
 
@@ -490,7 +490,7 @@ worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remov
  * @param[in] item    A watch to remove. Must be child of the specified parent.
  **/
 void
-worker_remove_watch (worker *wrk, watch *parent, const char *path)
+worker_remove_watch (worker *wrk, watch *parent, const dep_item *item)
 {
     assert (wrk != NULL);
     assert (parent != NULL);
@@ -500,7 +500,7 @@ worker_remove_watch (worker *wrk, watch *parent, const char *path)
     for (i = 0; i < wrk->sets.length; i++) {
         watch *w = wrk->sets.watches[i];
 
-        if ((w->parent == parent) && (strcmp (path, w->filename) == 0)) {
+        if ((w->parent == parent) && (strcmp (item->path, w->filename) == 0)) {
             worker_sets_delete (&wrk->sets, i);
             break;
         }
