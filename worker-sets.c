@@ -59,7 +59,7 @@ worker_sets_init (worker_sets *ws,
     EV_SET (&ws->events[0],
             fd,
             EVFILT_READ,
-            EV_ADD | EV_ENABLE | EV_ONESHOT,
+            EV_ADD | EV_ENABLE | EV_CLEAR,
             NOTE_LOWAT,
             1,
             0);

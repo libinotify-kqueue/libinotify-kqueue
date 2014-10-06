@@ -128,7 +128,7 @@ watch_init (watch         *w,
     EV_SET (kv,
             w->fd,
             EVFILT_VNODE,
-            EV_ADD | EV_ENABLE | EV_ONESHOT,
+            EV_ADD | EV_ENABLE | EV_CLEAR,
             inotify_to_kqueue (flags, w->is_really_dir, is_subwatch),
             0,
             INDEX_TO_UDATA (index));
