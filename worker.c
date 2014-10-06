@@ -448,12 +448,11 @@ worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remov
     assert (parent != NULL);
 
     dep_list *to_remove = dl_shallow_copy (items);
-    dep_list *to_head = to_remove;
     
     size_t i, j;
 
     for (i = 1, j = 1; i < wrk->sets.length; i++) {
-        dep_list *iter = to_head;
+        dep_list *iter = to_remove;
         dep_list *prev = NULL;
         watch *w = wrk->sets.watches[i];
 
@@ -474,8 +473,10 @@ worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remov
                 if (prev) {
                     prev->next = iter->next;
                 } else {
-                    to_head = iter->next;
+                    to_remove = iter->next;
                 }
+
+                free (iter);
 
                 /* Then, remove the watch itself */
                 watch_free (w);
@@ -525,15 +526,14 @@ worker_update_paths (worker *wrk, watch *parent)
     }
 
     dep_list *to_update = dl_shallow_copy (parent->deps);
-    dep_list *to_head = to_update;
-    size_t i, j;
+    size_t i;
 
-    for (i = 1, j = 1; i < wrk->sets.length; i++) {
-        dep_list *iter = to_head;
+    for (i = 1; i < wrk->sets.length; i++) {
+        dep_list *iter = to_update;
         dep_list *prev = NULL;
         watch *w = wrk->sets.watches[i];
 
-        if (to_head == NULL) {
+        if (to_update == NULL) {
             break;
         }
 
@@ -547,13 +547,15 @@ worker_update_paths (worker *wrk, watch *parent)
                 if (prev) {
                     prev->next = iter->next;
                 } else {
-                    to_head = iter->next;
+                    to_update = iter->next;
                 }
 
                 if (strcmp (iter->path, w->filename)) {
                     free (w->filename);
                     w->filename = strdup (iter->path);
                 }
+
+                free (iter);
             }
         }
     }
