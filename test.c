@@ -129,9 +129,11 @@ void get_event (int fd, const char * target)
             strcat(action, " moved into watched directory");
         if (pevent->mask & IN_OPEN)
             strcat(action, " was opened");
+        if (pevent->mask & IN_IGNORED)
+            strcat(action, " was ignored");
 
         /*
-          printf ("wd=%d mask=%d cookie=%d len=%d dir=%s\n",
+          printf ("wd=%d mask=%x cookie=%d len=%d dir=%s\n",
           pevent->wd, pevent->mask, pevent->cookie, pevent->len,
           (pevent->mask & IN_ISDIR)?"yes":"no");
 
