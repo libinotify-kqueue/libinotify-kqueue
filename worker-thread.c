@@ -560,17 +560,10 @@ produce_notifications (worker *wrk, struct kevent *event)
             } else {
                 perror_msg ("Failed to create a new inotify event");
             }
+        }
 
-            if ((flags & NOTE_DELETE) && w->flags & IN_DELETE_SELF) {
-                /* TODO: really look on IN_DETELE_SELF? */
-                ie = create_inotify_event (w->fd, IN_IGNORED, 0, NULL, &ev_len);
-                if (ie != NULL) {
-                    safe_write (wrk->io[KQUEUE_FD], ie, ev_len);
-                    free (ie);
-                } else {
-                    perror_msg ("Failed to create a new IN_IGNORED event on remove");
-                }
-            }
+        if (flags & NOTE_DELETE) {
+            worker_remove (wrk, w->fd);
         }
     } else {
         /* for dependency events, ignore some notifications */
