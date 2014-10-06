@@ -537,7 +537,7 @@ produce_notifications (worker *wrk, struct kevent *event)
 
     if (w->type == WATCH_USER) {
         if (w->is_directory
-            && (flags & (NOTE_WRITE | NOTE_EXTEND))
+            && (flags & NOTE_WRITE)
             && (w->flags & (IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO))) {
             produce_directory_diff (wrk, w, event);
             flags &= ~(NOTE_WRITE | NOTE_EXTEND);
@@ -571,7 +571,7 @@ produce_notifications (worker *wrk, struct kevent *event)
         }
     } else {
         /* for dependency events, ignore some notifications */
-        if (event->fflags & (NOTE_ATTRIB | NOTE_LINK | NOTE_WRITE | NOTE_EXTEND)) {
+        if (flags & (NOTE_ATTRIB | NOTE_LINK | NOTE_WRITE)) {
             struct inotify_event *ie = NULL;
             watch *p = w->parent;
             assert (p != NULL);

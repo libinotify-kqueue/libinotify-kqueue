@@ -26,9 +26,6 @@
 #include "sys/inotify.h"
 #include "conversions.h"
 
-/* It is just a shortctut */
-static const int NOTE_MODIFIED = (NOTE_WRITE | NOTE_EXTEND);
-
 /**
  * Convert the inotify watch mask to the kqueue event filter flags.
  *
@@ -45,10 +42,10 @@ inotify_to_kqueue (uint32_t flags, int is_directory, int is_subwatch)
     if (flags & IN_ATTRIB)
         result |= (NOTE_ATTRIB | NOTE_LINK);
     if (flags & IN_MODIFY && is_directory == 0)
-        result |= NOTE_MODIFIED;
+        result |= NOTE_WRITE;
     if (is_subwatch == 0) {
         if (flags & (IN_MOVED_FROM | IN_MOVED_TO | IN_CREATE | IN_DELETE) && is_directory)
-            result |= NOTE_MODIFIED;
+            result |= NOTE_WRITE;
         if (flags & IN_DELETE_SELF)
             result |= NOTE_DELETE;
         if (flags & IN_MOVE_SELF)
@@ -74,7 +71,7 @@ kqueue_to_inotify (uint32_t flags, int is_directory, int is_subwatch)
     if (flags & (NOTE_ATTRIB | NOTE_LINK))
         result |= IN_ATTRIB;
 
-    if (flags & NOTE_MODIFIED && is_directory == 0)
+    if (flags & NOTE_WRITE && is_directory == 0)
         result |= IN_MODIFY;
 
     if (flags & NOTE_DELETE && is_subwatch == 0)
