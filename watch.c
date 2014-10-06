@@ -108,7 +108,6 @@ watch_register_event (watch *w, int kq, uint32_t fflags)
  *
  * @param[in,out] w          A pointer to a watch.
  * @param[in]     watch_type The type of the watch.
- * @param[in,out] kv         A pointer to the associated kqueue event.
  * @param[in]     kq         A kqueue descriptor.
  * @param[in]     path       A full path to a file.
  * @param[in]     entry_name A name of a watched file (for dependency watches).
@@ -118,18 +117,15 @@ watch_register_event (watch *w, int kq, uint32_t fflags)
 int
 watch_init (watch         *w,
             watch_type_t   watch_type,
-            struct kevent *kv,
             int            kq,
             const char    *path,
             const char    *entry_name,
             uint32_t       flags)
 {
     assert (w != NULL);
-    assert (kv != NULL);
     assert (path != NULL);
 
     memset (w, 0, sizeof (watch));
-    memset (kv, 0, sizeof (struct kevent));
 
     w->fd = open (path, O_RDONLY);
     if (w->fd == -1) {
@@ -144,7 +140,6 @@ watch_init (watch         *w,
     w->type = watch_type;
     w->flags = flags;
     w->filename = strdup (watch_type == WATCH_USER ? path : entry_name);
-    w->event = kv;
 
     int is_dir = 0;
     _file_information (w->fd, &is_dir, &w->inode);
@@ -152,15 +147,6 @@ watch_init (watch         *w,
     w->is_directory = (watch_type == WATCH_USER ? is_dir : 0);
 
     int is_subwatch = watch_type != WATCH_USER;
-
-    EV_SET (kv,
-            w->fd,
-            EVFILT_VNODE,
-            EV_ADD | EV_ENABLE | EV_CLEAR,
-            inotify_to_kqueue (flags, w->is_really_dir, is_subwatch),
-            0,
-            NULL);
-
     uint32_t fflags = inotify_to_kqueue (flags, w->is_really_dir, is_subwatch);
     if (watch_register_event (w, kq, fflags) == -1) {
         close (w->fd);
@@ -183,7 +169,6 @@ watch_reopen (watch *w, int kq)
 {
     assert (w != NULL);
     assert (w->parent != NULL);
-    assert (w->event != NULL);
     if (w->fd != -1) {
         close (w->fd);
     }
@@ -209,8 +194,6 @@ watch_reopen (watch *w, int kq)
         w->fd = -1;
         return -1;
     }
-
-    w->event->ident = w->fd;
 
     /* Actually, reopen happens only for dependencies. */
     int is_dir = 0;

@@ -29,13 +29,12 @@
 #include "watch.h"
 
 typedef struct worker_sets {
-    struct kevent *events;    /* kevent entries */
     struct watch **watches;   /* appropriate watches with additional info */
     size_t length;            /* size of active entries */
     size_t allocated;         /* size of allocated entries */
 } worker_sets;
 
-int  worker_sets_init   (worker_sets *ws, int fd);
+int  worker_sets_init   (worker_sets *ws);
 int  worker_sets_extend (worker_sets *ws, int count);
 void worker_sets_free   (worker_sets *ws);
 

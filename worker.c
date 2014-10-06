@@ -173,7 +173,7 @@ worker_create ()
         goto failure;
     }
 
-    if (worker_sets_init (&wrk->sets, wrk->io[KQUEUE_FD]) == -1) {
+    if (worker_sets_init (&wrk->sets) == -1) {
         goto failure;
     }
 
@@ -241,20 +241,17 @@ worker_free (worker *wrk)
  * This function creates and initializes additional watches for a directory.
  *
  * @param[in] wrk    A pointer to #worker.
- * @param[in] event  A pointer to the associated kqueue event.
  * @param[in] parent A pointer to the parent #watch, i.e. the watch we add
  *     dependencies for.
  * @return 0 on success, -1 otherwise.
  **/
 static int
 worker_add_dependencies (worker        *wrk,
-                         struct kevent *event,
                          watch         *parent)
 {
     assert (wrk != NULL);
     assert (parent != NULL);
     assert (parent->type == WATCH_USER);
-    assert (event != NULL);
 
     parent->deps = dl_listing (parent->filename, NULL);
 
@@ -315,7 +312,6 @@ worker_start_watching (worker      *wrk,
     wrk->sets.watches[i] = calloc (1, sizeof (struct watch));
     if (watch_init (wrk->sets.watches[i],
                     type,
-                    &wrk->sets.events[i],
                     wrk->kq,
                     path,
                     entry_name,
@@ -328,7 +324,7 @@ worker_start_watching (worker      *wrk,
     ++wrk->sets.length;
 
     if (type == WATCH_USER && wrk->sets.watches[i]->is_directory) {
-        worker_add_dependencies (wrk, &wrk->sets.events[i], wrk->sets.watches[i]);
+        worker_add_dependencies (wrk, wrk->sets.watches[i]);
     }
     return wrk->sets.watches[i];
 }
@@ -350,13 +346,11 @@ worker_add_or_modify (worker     *wrk,
     assert (wrk != NULL);
 
     worker_sets *sets = &wrk->sets;
-
-    assert (sets->events != NULL);
     assert (sets->watches != NULL);
 
     /* look up for an entry with this filename */
     size_t i = 0;
-    for (i = 1; i < sets->length; i++) {
+    for (i = 0; i < sets->length; i++) {
         const char *evpath = sets->watches[i]->filename;
         assert (evpath != NULL);
 
@@ -387,8 +381,8 @@ worker_remove (worker *wrk,
     assert (id != -1);
 
     size_t i;
-    for (i = 1; i < wrk->sets.length; i++) {
-        if (wrk->sets.events[i].ident == id) {
+    for (i = 0; i < wrk->sets.length; i++) {
+        if (wrk->sets.watches[i]->fd == id) {
             int ie_len = 0;
             struct inotify_event *ie;
             ie = create_inotify_event (id, IN_IGNORED, 0, "", &ie_len);
@@ -426,11 +420,10 @@ static void
 worker_update_flags (worker *wrk, watch *w, uint32_t flags)
 {
     assert (w != NULL);
-    assert (w->event != NULL);
 
     w->flags = flags;
-    w->event->fflags = inotify_to_kqueue (flags, w->is_really_dir, 0);
-    watch_register_event (w, wrk->kq, w->event->fflags);
+    uint32_t fflags = inotify_to_kqueue (flags, w->is_really_dir, 0);
+    watch_register_event (w, wrk->kq, fflags);
 
     /* Propagate the flag changes also on all dependent watches */
     if (w->deps) {
@@ -439,12 +432,14 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags)
          * while we have a linked list of its dependencies.
          * TODO improve it */
         size_t i;
-        for (i = 1; i < wrk->sets.length; i++) {
+        for (i = 0; i < wrk->sets.length; i++) {
             watch *depw = wrk->sets.watches[i];
             if (depw->parent == w) {
                 depw->flags = flags;
-                depw->event->fflags = inotify_to_kqueue (flags, depw->is_really_dir, 1);
-                watch_register_event (depw, wrk->kq, depw->event->fflags);
+                uint32_t fflags = inotify_to_kqueue (flags,
+                                                     depw->is_really_dir,
+                                                     1);
+                watch_register_event (depw, wrk->kq, fflags);
             }
         }
     }
@@ -469,7 +464,7 @@ worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remov
     
     size_t i, j;
 
-    for (i = 1, j = 1; i < wrk->sets.length; i++) {
+    for (i = 0, j = 0; i < wrk->sets.length; i++) {
         dep_list *iter = to_remove;
         dep_list *prev = NULL;
         watch *w = wrk->sets.watches[i];
@@ -504,9 +499,7 @@ worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remov
 
         /* If the control reached here, keep this item */
         if (i != j) {
-            wrk->sets.events[j] = wrk->sets.events[i];
             wrk->sets.watches[j] = w;
-            wrk->sets.watches[j]->event = &wrk->sets.events[j];
         }
         ++j;
     }
@@ -545,7 +538,7 @@ worker_update_paths (worker *wrk, watch *parent)
     dep_list *to_update = dl_shallow_copy (parent->deps);
     size_t i;
 
-    for (i = 1; i < wrk->sets.length; i++) {
+    for (i = 0; i < wrk->sets.length; i++) {
         dep_list *iter = to_update;
         dep_list *prev = NULL;
         watch *w = wrk->sets.watches[i];

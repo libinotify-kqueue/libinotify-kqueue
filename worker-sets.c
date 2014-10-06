@@ -41,12 +41,10 @@
  * Initialize the worker sets.
  *
  * @param[in] ws A pointer to the worker sets.
- * @param[in] fd A control file descriptor.
  * @return 0 on success, -1 on failure.
  **/
 int
-worker_sets_init (worker_sets *ws,
-                  int          fd)
+worker_sets_init (worker_sets *ws)
 {
     assert (ws != NULL);
 
@@ -56,14 +54,7 @@ worker_sets_init (worker_sets *ws,
         return -1;
     }
 
-    EV_SET (&ws->events[0],
-            fd,
-            EVFILT_READ,
-            EV_ADD | EV_ENABLE | EV_CLEAR,
-            NOTE_LOWAT,
-            1,
-            0);
-    ws->length = 1;
+    ws->length = 0;
     return 0;
 }
 
@@ -84,15 +75,6 @@ worker_sets_extend (worker_sets *ws,
         long to_allocate = ws->allocated + count + WS_RESERVED;
 
         void *ptr = NULL;
-        ptr = realloc (ws->events, sizeof (struct kevent) * to_allocate);
-        if (ptr == NULL) {
-            perror_msg ("Failed to extend events memory in the worker sets "
-                        "to %d items",
-                        to_allocate);
-            return -1;
-        }
-        ws->events = ptr;
-
         ptr = realloc (ws->watches, sizeof (struct watch *) * to_allocate);
         if (ptr == NULL) {
             perror_msg ("Failed to extend watches memory in the worker sets "
@@ -117,7 +99,6 @@ void
 worker_sets_free (worker_sets *ws)
 {
     assert (ws != NULL);
-    assert (ws->events != NULL);
     assert (ws->watches != NULL);
 
     size_t i;
@@ -127,7 +108,6 @@ worker_sets_free (worker_sets *ws)
         }
     }
 
-    free (ws->events);
     free (ws->watches);
     memset (ws, 0, sizeof (worker_sets));
 }

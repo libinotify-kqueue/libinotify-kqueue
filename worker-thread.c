@@ -279,7 +279,7 @@ handle_replaced (void       *udata,
     }
 
     int i;
-    for (i = 1; i < ctx->wrk->sets.length; i++) {
+    for (i = 0; i < ctx->wrk->sets.length; i++) {
         watch *iw = ctx->wrk->sets.watches[i];
         if (iw && iw->parent == ctx->w && strcmp (to_path, iw->filename) == 0) {
             dep_list *dl = dl_create (iw->filename, iw->inode);
@@ -532,7 +532,7 @@ produce_notifications (worker *wrk, struct kevent *event)
     watch *w = NULL;
     size_t i;
 
-    for (i = 1; i < wrk->sets.length; i++) {
+    for (i = 0; i < wrk->sets.length; i++) {
         if (event->ident == wrk->sets.watches[i]->fd) {
             w = wrk->sets.watches[i];
             break;
