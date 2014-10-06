@@ -536,6 +536,11 @@ produce_notifications (worker *wrk, struct kevent *event)
     uint32_t flags = event->fflags;
 
     if (w->type == WATCH_USER) {
+        /* Treat deletes as link number changes if links still exist */
+        if (flags & NOTE_DELETE && !w->is_really_dir && !is_deleted (w->fd)) {
+            flags = (flags | NOTE_LINK) & ~NOTE_DELETE;
+        }
+
         if (w->is_directory
             && (flags & NOTE_WRITE)
             && (w->flags & (IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO))) {

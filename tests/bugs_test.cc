@@ -92,6 +92,27 @@ void bugs_test::run ()
     should ("Not receive IN_ATTRIB for bugst-workdir on subdirectory deletion",
             !contains (received, event ("", wid, IN_ATTRIB)));
 
+
+    /* Test for not issuing IN_DELETE_SELF on hardlink deletes */
+    system ("touch bugst-workdir/1");
+    system ("ln bugst-workdir/1 bugst-workdir/2");
+
+    cons.input.setup ("bugst-workdir/1", IN_ATTRIB | IN_DELETE_SELF);
+    cons.output.wait ();
+    wid = cons.output.added_watch_id ();
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("rm bugst-workdir/2");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_ATTRIB for bugst-workdir/1 on hardlink delete",
+            contains (received, event ("", wid, IN_ATTRIB)));
+    should ("Not receive IN_DELETE_SELF for bugst-workdir/1 on hardlink delete",
+            !contains (received, event ("", wid, IN_DELETE_SELF)));
+
     cons.input.interrupt ();
 }
 

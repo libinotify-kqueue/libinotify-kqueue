@@ -53,6 +53,7 @@ int safe_read  (int fd, void *data, size_t size);
 int safe_write (int fd, const void *data, size_t size);
 
 int is_opened (int fd);
+int is_deleted (int fd);
 
 void perror_msg (const char *msg, ...);
 
