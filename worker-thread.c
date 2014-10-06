@@ -541,9 +541,7 @@ produce_notifications (worker *wrk, struct kevent *event)
             flags = (flags | NOTE_LINK) & ~NOTE_DELETE;
         }
 
-        if (w->is_directory
-            && (flags & NOTE_WRITE)
-            && (w->flags & (IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO))) {
+        if (flags & NOTE_WRITE && w->is_directory) {
             produce_directory_diff (wrk, w, event);
             flags &= ~(NOTE_WRITE | NOTE_EXTEND | NOTE_LINK);
         }

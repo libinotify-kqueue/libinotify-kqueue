@@ -113,6 +113,26 @@ void bugs_test::run ()
     should ("Not receive IN_DELETE_SELF for bugst-workdir/1 on hardlink delete",
             !contains (received, event ("", wid, IN_DELETE_SELF)));
 
+
+    /* Test subwatch adding when no IN_(CREATE|DELETE|MOVE) flags specified */
+    cons.input.setup ("bugst-workdir", IN_ATTRIB | IN_MODIFY);
+    cons.output.wait ();
+    wid = cons.output.added_watch_id ();
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("touch bugst-workdir/2");
+    system ("touch bugst-workdir/2");
+    system ("echo test > bugst-workdir/2");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_ATTRIB for bugst-workdir/2 on touch",
+            contains (received, event ("2", wid, IN_ATTRIB)));
+    should ("receive IN_MODIFY for bugst-workdir/2 on echo",
+            contains (received, event ("2", wid, IN_MODIFY)));
+
     cons.input.interrupt ();
 }
 

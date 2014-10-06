@@ -44,7 +44,7 @@ inotify_to_kqueue (uint32_t flags, int is_directory, int is_subwatch)
     if (flags & IN_MODIFY && is_directory == 0)
         result |= NOTE_WRITE;
     if (is_subwatch == 0) {
-        if (flags & (IN_MOVED_FROM | IN_MOVED_TO | IN_CREATE | IN_DELETE) && is_directory)
+        if (is_directory)
             result |= NOTE_WRITE;
         if (flags & IN_ATTRIB && is_directory == 0)
             result |= NOTE_LINK;
