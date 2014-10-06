@@ -540,7 +540,7 @@ produce_notifications (worker *wrk, struct kevent *event)
             && (flags & NOTE_WRITE)
             && (w->flags & (IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO))) {
             produce_directory_diff (wrk, w, event);
-            flags &= ~(NOTE_WRITE | NOTE_EXTEND);
+            flags &= ~(NOTE_WRITE | NOTE_EXTEND | NOTE_LINK);
         }
 
         if (flags) {

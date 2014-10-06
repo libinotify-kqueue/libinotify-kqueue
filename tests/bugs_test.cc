@@ -66,6 +66,32 @@ void bugs_test::run ()
     should ("receive IN_DELETE for bugst-workdir/2",
             contains (received, event ("2", wid, IN_DELETE)));
 
+
+    /* Test for extraneous IN_ATTRIB event on subdirectory creation and deletion */
+    cons.output.reset ();
+    cons.input.receive (2);
+
+    system ("mkdir bugst-workdir/1");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_CREATE for bugst-workdir/1",
+            contains (received, event ("1", wid, IN_CREATE)));
+    should ("Not receive IN_ATTRIB for bugst-workdir on subdirectory creation",
+            !contains (received, event ("", wid, IN_ATTRIB)));
+
+    cons.output.reset ();
+    cons.input.receive (2);
+
+    system ("rmdir bugst-workdir/1");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_DELETE for bugst-workdir/1",
+            contains (received, event ("1", wid, IN_DELETE)));
+    should ("Not receive IN_ATTRIB for bugst-workdir on subdirectory deletion",
+            !contains (received, event ("", wid, IN_ATTRIB)));
+
     cons.input.interrupt ();
 }
 
