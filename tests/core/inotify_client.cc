@@ -23,6 +23,7 @@
 #include <cassert>
 #include <cstring>
 #include <poll.h>
+#include <stdio.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include "inotify_client.hh"
@@ -121,5 +122,7 @@ long inotify_client::bytes_available (int fd)
     size_t bytes;
 
     if (ioctl (fd, FIONREAD, (char *) &bytes) >= 0)
-        return avail = (long int) *((int *) &bytes);
+        avail = (long int) *((int *) &bytes);
+
+    return avail;
 }
