@@ -60,7 +60,6 @@ int watch_init (watch         *w,
                 const char    *entry_name,
                 uint32_t       flags);
 
-int  watch_reopen (watch *w, int kq);
 void watch_free   (watch *w);
 
 int  watch_register_event (watch *w, int kq, uint32_t fflags);

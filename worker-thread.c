@@ -40,6 +40,11 @@
 #include "worker-thread.h"
 
 void worker_erase (worker *wrk);
+static void handle_moved (void       *udata,
+                          const char *from_path,
+                          ino_t       from_inode,
+                          const char *to_path,
+                          ino_t       to_inode);
 
 /**
  * This structure represents a sequence of packets.
@@ -253,43 +258,9 @@ handle_replaced (void       *udata,
     assert (ctx->w != NULL);
     assert (ctx->be != NULL);
 
-    uint32_t cookie = from_inode & 0x00000000FFFFFFFF;
-    int event_len = 0;
-    int addMask = check_is_dir_cached (from_path, ctx->wrk) ? IN_ISDIR : 0;
-    struct inotify_event *ev;
-
-    ev = create_inotify_event (ctx->w->fd, IN_MOVED_FROM | addMask, cookie,
-                               from_path, &event_len);
-    if (ev != NULL) {
-        bulk_write (ctx->be, ev, event_len);
-        free (ev);
-    }  else {
-        perror_msg ("Failed to create an IN_MOVED_FROM event (*) for %s",
-                    from_path);
-    }
-
-    ev = create_inotify_event (ctx->w->fd, IN_MOVED_TO | addMask, cookie,
-                               to_path, &event_len);
-    if (ev != NULL) {
-        bulk_write (ctx->be, ev, event_len);
-        free (ev);
-    } else {
-        perror_msg ("Failed to create an IN_MOVED_TO event (*) for %s",
-                    to_path);
-    }
-
-    int i;
-    for (i = 0; i < ctx->wrk->sets.length; i++) {
-        watch *iw = ctx->wrk->sets.watches[i];
-        if (iw && iw->parent == ctx->w && strcmp (to_path, iw->filename) == 0) {
-            dep_list *dl = dl_create (iw->filename, iw->inode);
-            worker_remove_many (ctx->wrk, ctx->w, dl, 0);
-            dl_shallow_free (dl);
-            break;
-        }
-    }
+    handle_moved (udata, from_path, from_inode, to_path, to_inode);
+    worker_remove_watch (ctx->wrk, ctx->w, to_path);
 }
-
 
 /**
  * Produce an IN_DELETE/IN_CREATE notifications pair for an overwritten file.
@@ -312,50 +283,9 @@ handle_overwritten (void *udata, const char *path, ino_t inode)
     assert (ctx->w != NULL);
     assert (ctx->be != NULL);
 
-    int addMask = check_is_dir_cached (path, ctx->wrk) ? IN_ISDIR : 0;
-    int i;
-    for (i = 0; i < ctx->wrk->sets.length; i++) {
-        watch *wi = ctx->wrk->sets.watches[i];
-        if (wi && (strcmp (wi->filename, path) == 0)
-            && wi->parent == ctx->w) {
-            if (watch_reopen (wi, ctx->wrk->kq) == -1) {
-                /* I dont know, what to do */
-                /* Not a very beautiful way to remove a single dependency */
-                dep_list *dl = dl_create (wi->filename, wi->inode);
-                worker_remove_many (ctx->wrk, ctx->w, dl, 0);
-                dl_shallow_free (dl);
-            } else {
-                uint32_t cookie = inode & 0x00000000FFFFFFFF;
-                int event_len = 0;
-                struct inotify_event *ev;
-
-                ev = create_inotify_event (ctx->w->fd, IN_DELETE | addMask, cookie,
-                                           path,
-                                           &event_len);
-                if (ev != NULL) {
-                    bulk_write (ctx->be, ev, event_len);
-                    free (ev);
-                }  else {
-                    perror_msg ("Failed to create an IN_DELETE event (*) for %s",
-                                path);
-                }
-
-                /* TODO: Could a file be overwritten by a directory? What will happen to
-                 * existing watch in this case? Repoen? */
-                ev = create_inotify_event (ctx->w->fd, IN_CREATE, cookie,
-                                           path,
-                                           &event_len);
-                if (ev != NULL) {
-                    bulk_write (ctx->be, ev, event_len);
-                    free (ev);
-                } else {
-                    perror_msg ("Failed to create an IN_CREATE event (*) for %s",
-                                path);
-                }
-            }
-            break;
-        }
-    }
+    handle_removed (udata, path, inode);
+    handle_added (udata, path, inode);
+    worker_remove_watch (ctx->wrk, ctx->w, path);
 }
 
 /**

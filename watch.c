@@ -158,54 +158,6 @@ watch_init (watch         *w,
 }
 
 /**
- * Reopen a watch.
- *
- * @param[in] w  A pointer to a watch.
- * @param[in] kq A kqueue descriptor.
- * @return 0 on success, -1 on failure.
- **/
-int
-watch_reopen (watch *w, int kq)
-{
-    assert (w != NULL);
-    assert (w->parent != NULL);
-    if (w->fd != -1) {
-        close (w->fd);
-    }
-
-    char *filename = path_concat (w->parent->filename, w->filename);
-    if (filename == NULL) {
-        perror_msg ("Failed to create a filename to make a reopen");
-        return -1;
-    }
-
-    w->fd = open (filename, O_RDONLY);
-    if (w->fd == -1) {
-        perror_msg ("Failed to reopen a file %s", filename);
-        free (filename);
-        return -1;
-    }
-    free (filename);
-
-    uint32_t fflags = inotify_to_kqueue (w->flags,
-                                         w->is_really_dir,
-                                         w->type == WATCH_DEPENDENCY);
-    if (watch_register_event (w, kq, fflags) == -1) {
-        close (w->fd);
-        w->fd = -1;
-        return -1;
-    }
-
-    /* Actually, reopen happens only for dependencies. */
-    int is_dir = 0;
-    _file_information (w->fd, &is_dir, &w->inode);
-    w->is_really_dir = is_dir;
-    w->is_directory  = (w->type == WATCH_USER ? is_dir : 0);
-
-    return 0;
-}
-
-/**
  * Free a watch and all the associated memory.
  *
  * @param[in] w A pointer to a watch.
