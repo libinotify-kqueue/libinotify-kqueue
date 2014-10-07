@@ -291,6 +291,7 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
 
     enqueue_event (ctx->wrk, ctx->w->fd, IN_MOVED_FROM | addMask, cookie, from_di->path);
     enqueue_event (ctx->wrk, ctx->w->fd, IN_MOVED_TO | addMask, cookie, to_di->path);
+    worker_rename_watch (ctx->wrk, ctx->w, from_di, to_di);
 }
 
 /**
@@ -313,26 +314,6 @@ handle_many_removed (void *udata, const dep_list *list)
     }
 }
 
-/**
- * Update file names for the renamed files.
- *
- * This function is used as a callback and is invoked from the dep-list
- * routines.
- *
- * @param[in] udata  A pointer to user data (#handle_context).
- **/
-static void
-handle_names_updated (void *udata)
-{
-    assert (udata != NULL);
-
-    handle_context *ctx = (handle_context *) udata;
-    assert (ctx->wrk != NULL);
-    assert (ctx->w != NULL);
-
-    worker_update_paths (ctx->wrk, ctx->w);
-}
-
 
 static const traverse_cbs cbs = {
     NULL, /* handle_unchanged */
@@ -343,7 +324,7 @@ static const traverse_cbs cbs = {
     handle_moved,
     NULL, /* many_added */
     handle_many_removed,
-    handle_names_updated,
+    NULL, /* names_updated */
 };
 
 /**

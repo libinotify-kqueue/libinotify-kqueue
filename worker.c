@@ -547,7 +547,8 @@ worker_remove_watch (worker *wrk, watch *parent, const dep_item *item)
     for (i = 0; i < wrk->sets.length; i++) {
         watch *w = wrk->sets.watches[i];
 
-        if ((w->parent == parent) && (strcmp (item->path, w->filename) == 0)) {
+        if ((w->parent == parent) && (item->inode == w->inode)
+          && (strcmp (item->path, w->filename) == 0)) {
             worker_sets_delete (&wrk->sets, i);
             break;
         }
@@ -555,49 +556,37 @@ worker_remove_watch (worker *wrk, watch *parent, const dep_item *item)
 }
 
 /**
- * Update paths of child watches for a specified watch.
+ * Update path of child watch for a specified watch.
  *
  * It is necessary when renames in the watched directory occur.
  *
  * @param[in] wrk    A pointer to #worker.
  * @param[in] parent A pointer to parent #watch.
+ * @param[in] from   A rename from. Must be child of the specified parent.
+ * @param[in] to     A rename to. Must be child of the specified parent.
  **/
 void
-worker_update_paths (worker *wrk, watch *parent)
+worker_rename_watch (worker *wrk, watch *parent, dep_item *from, dep_item *to)
 {
     assert (wrk != NULL);
     assert (parent != NULL);
+    assert (from != NULL);
+    assert (to != NULL);
 
     if (parent->deps == NULL) {
         return;
     }
 
-    dep_list *to_update = dl_shallow_copy (parent->deps);
     size_t i;
 
     for (i = 0; i < wrk->sets.length; i++) {
-        dep_node *iter;
-        dep_node *prev = NULL;
         watch *w = wrk->sets.watches[i];
 
-        if (w->parent == parent) {
-            SLIST_FOREACH (iter, &to_update->head, next) {
-                if (iter->item->inode == w->inode) {
-                    break;
-                }
-                prev = iter;
-            }
-
-            if (iter != NULL) {
-                if (strcmp (iter->item->path, w->filename)) {
-                    free (w->filename);
-                    w->filename = strdup (iter->item->path);
-                }
-
-                dl_remove_after (to_update, prev);
-            }
+        if ((w->parent == parent) && (from->inode == w->inode)
+          && (strcmp (from->path, w->filename) == 0)) {
+            free (w->filename);
+            w->filename = strdup (to->path);
+            break;
         }
     }
-    
-    dl_shallow_free (to_update);
 }
