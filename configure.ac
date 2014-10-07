@@ -111,4 +111,19 @@ if test "$have_o_symlink" = "no"; then
 fi
 
 
+AC_MSG_CHECKING(for O_EVTONLY in fcntl.h)
+AC_COMPILE_IFELSE(
+    [AC_LANG_PROGRAM([@%:@include <fcntl.h>], [int a = O_EVTONLY;])],
+    have_o_evtonly=yes,
+    have_o_evtonly=no
+)
+AC_MSG_RESULT($have_o_evtonly)
+
+if test "$have_o_evtonly" = "yes"; then
+    AC_DEFINE([HAVE_O_EVTONLY],[1],[Define to 1 if O_EVTONLY defined in fcntl.h])
+else
+    AC_MSG_WARN([O_EVTONLY open(2) flag is not supported on your system. Unmounting of fs where watch located is unavailable])
+fi
+
+
 AC_OUTPUT
