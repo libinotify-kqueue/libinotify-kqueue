@@ -217,6 +217,7 @@ handle_removed (void *udata, dep_item *di)
 
     int addMask = check_is_dir_cached (ctx->wrk, di) ? IN_ISDIR : 0;
     enqueue_event (ctx->wrk, ctx->w->fd, IN_DELETE | addMask, 0, di->path);
+    worker_remove_watch (ctx->wrk, ctx->w, di);
 }
 
 /**
@@ -258,13 +259,8 @@ handle_overwritten (void *udata, dep_item *from_di, dep_item *to_di)
 {
     assert (udata != NULL);
 
-    handle_context *ctx = (handle_context *) udata;
-    assert (ctx->wrk != NULL);
-    assert (ctx->w != NULL);
-
     handle_removed (udata, from_di);
     handle_added (udata, to_di);
-    worker_remove_watch (ctx->wrk, ctx->w, from_di);
 }
 
 /**
@@ -294,26 +290,6 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
     worker_rename_watch (ctx->wrk, ctx->w, from_di, to_di);
 }
 
-/**
- * Remove the appropriate watches if the files were removed from the directory.
- * 
- * This function is used as a callback and is invoked from the dep-list
- * routines.
- *
- * @param[in] udata  A pointer to user data (#handle_context).
- * @param[in] list   A list of the removed files. 
- **/
-static void
-handle_many_removed (void *udata, const dep_list *list)
-{
-    assert (udata != NULL);
-    handle_context *ctx = (handle_context *) udata;
-
-    if (list) {
-        worker_remove_many (ctx->wrk, ctx->w, list, 0);
-    }
-}
-
 
 static const traverse_cbs cbs = {
     NULL, /* handle_unchanged */
@@ -323,7 +299,7 @@ static const traverse_cbs cbs = {
     handle_overwritten,
     handle_moved,
     NULL, /* many_added */
-    handle_many_removed,
+    NULL, /* many_removed */
     NULL, /* names_updated */
 };
 
