@@ -318,48 +318,6 @@ error:
     return NULL;
 }
 
-/**
- * Perform a diff on lists.
- *
- * This function performs something like a set intersection. The same items
- * will be removed from the both lists. Items are comapred by a filename.
- * 
- * @param[in] before A pointer to a pointer to a list. Will contain items
- *     which were not found in the `after' list.
- * @param[in] after  A pointer to a pointer to a list. Will contain items
- *     which were not found in the `before' list.
- **/
-void
-dl_diff (dep_list *before, dep_list *after)
-{
-    assert (before != NULL);
-    assert (after != NULL);
-
-    dep_node *before_iter, *tmp;
-    dep_node *before_prev = NULL;
-
-    SLIST_FOREACH_SAFE (before_iter, &before->head, next, tmp) {
-        dep_node *after_iter;
-        dep_node *after_prev = NULL;
-
-        int matched = 0;
-        SLIST_FOREACH (after_iter, &after->head, next) {
-            if (strcmp (before_iter->item->path, after_iter->item->path) == 0) {
-                matched = 1;
-                /* removing the entry from the both lists */
-                dl_remove_after (before, before_prev);
-                dl_remove_after (after, after_prev);
-                break;
-            }
-            after_prev = after_iter;
-        }
-
-        if (matched == 0) {
-            before_prev = before_iter;
-        }
-    }
-}
-
 
 /**
  * Traverses two lists. Compares items with a supplied expression
@@ -497,9 +455,10 @@ dl_detect_replacements (dep_list            *removed,
 
     EXCLUDE_SIMILAR
         (removed, current,
-         (removed_iter->item->inode == current_iter->item->inode),
+         (strcmp (removed_iter->item->path, current_iter->item->path) == 0
+          && removed_iter->item->inode != current_iter->item->inode),
          {
-            cb_invoke (cbs, replaced, udata, removed_iter->item, current_iter->item);
+            cb_invoke (cbs, replaced, udata, removed_iter->item);
          });
 }
 
@@ -543,7 +502,7 @@ dl_detect_overwrites (dep_list            *previous,
          (strcmp (previous_iter->item->path, current_iter->item->path) == 0
           && previous_iter->item->inode != current_iter->item->inode),
          {
-             cb_invoke (cbs, overwritten, udata, current_iter->item);
+             cb_invoke (cbs, overwritten, udata, previous_iter->item, current_iter->item);
          });
 }
 
@@ -596,14 +555,11 @@ dl_calculate (dep_list           *before,
 
     dl_detect_unchanged (was, now, cbs, udata);
 
-    dep_list *pre = dl_shallow_copy (was);
     dep_list *lst = dl_shallow_copy (now);
 
-    dl_diff (was, now);
-
     need_update += dl_detect_moves (was, now, cbs, udata);
+    dl_detect_overwrites (was, now, cbs, udata);
     need_update += dl_detect_replacements (was, lst, cbs, udata);
-    dl_detect_overwrites (pre, lst, cbs, udata);
  
     if (need_update) {
         cb_invoke (cbs, names_updated, udata);
@@ -617,7 +573,6 @@ dl_calculate (dep_list           *before,
     
     dl_shallow_free (lst);
     dl_shallow_free (now);
-    dl_shallow_free (pre);
     dl_shallow_free (was);
 }
 

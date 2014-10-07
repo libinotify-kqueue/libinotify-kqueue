@@ -52,8 +52,8 @@ typedef struct traverse_cbs {
     dual_entry_cb    unchanged;
     single_entry_cb  added;
     single_entry_cb  removed;
-    dual_entry_cb    replaced;
-    single_entry_cb  overwritten;
+    single_entry_cb  replaced;
+    dual_entry_cb    overwritten;
     dual_entry_cb    moved;
     list_cb          many_added;
     list_cb          many_removed;

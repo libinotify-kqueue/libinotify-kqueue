@@ -228,18 +228,18 @@ handle_removed (void *udata, dep_item *di)
 }
 
 /**
- * Produce an IN_MOVED_FROM/IN_MOVED_TO notifications pair for a replaced file.
- * Also stops wathing on the replaced file.
+ * Stop watching on the replaced file.
+ * Do not produce an IN_MOVED_FROM/IN_MOVED_TO notifications pair
+ * for a replaced file as it has already been done on handle_moved call.
  *
  * This function is used as a callback and is invoked from the dep-list
  * routines.
  *
- * @param[in] udata   A pointer to user data (#handle_context).
- * @param[in] from_di A file name & inode number of the source file.
- * @param[in] to_di   A file name & inode number of the replaced file.
+ * @param[in] udata A pointer to user data (#handle_context).
+ * @param[in] di    A file name & inode number of the replaced file.
  **/
 static void
-handle_replaced (void *udata, dep_item *from_di, dep_item *to_di)
+handle_replaced (void *udata, dep_item *di)
 {
     assert (udata != NULL);
 
@@ -247,8 +247,7 @@ handle_replaced (void *udata, dep_item *from_di, dep_item *to_di)
     assert (ctx->wrk != NULL);
     assert (ctx->w != NULL);
 
-    handle_moved (udata, from_di, to_di);
-    worker_remove_watch (ctx->wrk, ctx->w, to_di);
+    worker_remove_watch (ctx->wrk, ctx->w, di);
 }
 
 /**
@@ -258,11 +257,12 @@ handle_replaced (void *udata, dep_item *from_di, dep_item *to_di)
  * This function is used as a callback and is invoked from the dep-list
  * routines.
  *
- * @param[in] udata  A pointer to user data (#handle_context).
- * @param[in] di     File name & inode number of the overwritten file.
+ * @param[in] udata   A pointer to user data (#handle_context).
+ * @param[in] from_di A file name & inode number of the deleted file.
+ * @param[in] to_di   A file name & inode number of the appeared file.
  **/
 static void
-handle_overwritten (void *udata, dep_item *di)
+handle_overwritten (void *udata, dep_item *from_di, dep_item *to_di)
 {
     assert (udata != NULL);
 
@@ -270,9 +270,9 @@ handle_overwritten (void *udata, dep_item *di)
     assert (ctx->wrk != NULL);
     assert (ctx->w != NULL);
 
-    handle_removed (udata, di);
-    handle_added (udata, di);
-    worker_remove_watch (ctx->wrk, ctx->w, di);
+    handle_removed (udata, from_di);
+    handle_added (udata, to_di);
+    worker_remove_watch (ctx->wrk, ctx->w, from_di);
 }
 
 /**
