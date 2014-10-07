@@ -49,6 +49,7 @@ typedef void (* list_cb)         (void *udata, const dep_list *list);
 
 
 typedef struct traverse_cbs {
+    dual_entry_cb    unchanged;
     single_entry_cb  added;
     single_entry_cb  removed;
     dual_entry_cb    replaced;

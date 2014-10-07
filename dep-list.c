@@ -404,6 +404,37 @@ dl_diff (dep_list *before, dep_list *after)
     } while (0)
 
 /**
+ * Detect and notify about files remained unmoved between directory scans
+ *
+ * This function produces symmetric diffrence of two sets. The same items will
+ * be removed from the both lists. Items are compared by name and inode number.
+ * 
+ * @param[in] before A pointer to a list. Will contain items
+ *     which were not found in the `after' list.
+ * @param[in] after  A pointer to a list. Will contain items
+ *     which were not found in the `before' list.
+ * @param[in] cbs    A pointer to #traverse_cbs, an user-defined set of
+ *     traverse callbacks.
+ * @param[in] udata  A pointer to the user-defined data.
+ **/
+static int
+dl_detect_unchanged (dep_list            *before,
+                     dep_list            *after,
+                     const traverse_cbs  *cbs,
+                     void                *udata)
+{
+    assert (cbs != NULL);
+
+    EXCLUDE_SIMILAR
+        (before, after,
+         (before_iter->item->inode == after_iter->item->inode &&
+          strcmp(before_iter->item->path, after_iter->item->path) == 0),
+         {
+             cb_invoke (cbs, unchanged, udata, before_iter->item, after_iter->item);
+         });
+}
+
+/**
  * Detect and notify about moves in the watched directory.
  *
  * A move is what happens when you rename a file in a directory, and
@@ -561,9 +592,12 @@ dl_calculate (dep_list           *before,
     int need_update = 0;
 
     dep_list *was = dl_shallow_copy (before);
-    dep_list *pre = dl_shallow_copy (before);
     dep_list *now = dl_shallow_copy (after);
-    dep_list *lst = dl_shallow_copy (after);
+
+    dl_detect_unchanged (was, now, cbs, udata);
+
+    dep_list *pre = dl_shallow_copy (was);
+    dep_list *lst = dl_shallow_copy (now);
 
     dl_diff (was, now);
 

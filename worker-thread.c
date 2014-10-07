@@ -343,6 +343,7 @@ handle_names_updated (void *udata)
 
 
 static const traverse_cbs cbs = {
+    NULL, /* handle_unchanged */
     handle_added,
     handle_removed,
     handle_replaced,
