@@ -93,7 +93,7 @@ create_inotify_event (int         wd,
                       uint32_t    mask,
                       uint32_t    cookie,
                       const char *name,
-                      int        *event_len)
+                      size_t     *event_len)
 {
     struct inotify_event *event = NULL;
     size_t name_len = name ? strlen (name) + 1 : 0;

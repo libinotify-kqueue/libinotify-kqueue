@@ -23,9 +23,13 @@
 #ifndef __WORKER_H__
 #define __WORKER_H__
 
+#include <sys/uio.h> /* iovec */
+
 #include <pthread.h>
 #include <stdint.h>
-#include <pthread.h>
+
+typedef struct worker worker;
+
 #include "compat.h"
 #include "worker-thread.h"
 #include "worker-sets.h"
@@ -66,16 +70,19 @@ void worker_cmd_remove  (worker_cmd *cmd, int watch_id);
 void worker_cmd_wait    (worker_cmd *cmd);
 void worker_cmd_release (worker_cmd *cmd);
 
-typedef struct {
+struct worker {
     int kq;                /* kqueue descriptor */
     volatile int io[2];    /* a socket pair */
+    struct iovec *iov;     /* inotify events to send */
+    int iovcnt;            /* number of events enqueued */
+    int iovalloc;          /* number of iovs allocated */
     pthread_t thread;      /* worker thread */
     worker_sets sets;      /* filenames, etc */
     volatile int closed;   /* closed flag */
 
     pthread_mutex_t mutex; /* worker mutex */
     worker_cmd cmd;        /* operation to perform on a worker */
-} worker;
+};
 
 
 worker* worker_create         ();

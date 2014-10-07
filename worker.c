@@ -162,6 +162,10 @@ worker_create ()
         goto failure;
     }
 
+    wrk->iovalloc = 0;
+    wrk->iovcnt = 0;
+    wrk->iov = NULL;
+
     wrk->kq = kqueue ();
     if (wrk->kq == -1) {
         perror_msg ("Failed to create a new kqueue");
@@ -222,6 +226,8 @@ worker_free (worker *wrk)
 {
     assert (wrk != NULL);
 
+    int i;
+
     close (wrk->io[KQUEUE_FD]);
     wrk->io[KQUEUE_FD] = -1;
 
@@ -230,6 +236,11 @@ worker_free (worker *wrk)
 
     worker_cmd_release (&wrk->cmd);
     worker_sets_free (&wrk->sets);
+
+    for (i = 0; i < wrk->iovcnt; i++) {
+        free (wrk->iov[i].iov_base);
+    }
+    free (wrk->iov);
     pthread_mutex_destroy (&wrk->mutex);
 
     free (wrk);
@@ -383,21 +394,13 @@ worker_remove (worker *wrk,
     size_t i;
     for (i = 0; i < wrk->sets.length; i++) {
         if (wrk->sets.watches[i]->fd == id) {
-            int ie_len = 0;
-            struct inotify_event *ie;
-            ie = create_inotify_event (id, IN_IGNORED, 0, "", &ie_len);
-
             worker_remove_many (wrk,
                                 wrk->sets.watches[i],
                                 wrk->sets.watches[i]->deps,
                                 1);
 
-            if (ie != NULL) {
-                safe_write (wrk->io[KQUEUE_FD], ie, ie_len);
-                free (ie);
-            } else {
-                perror_msg ("Failed to create an IN_IGNORED event on stopping a watch");
-            }
+            enqueue_event (wrk, id, IN_IGNORED, 0, NULL);
+            flush_events (wrk);
             break;
         }
     }

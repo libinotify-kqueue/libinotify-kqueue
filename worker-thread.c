@@ -47,42 +47,66 @@ static void handle_moved (void       *udata,
                           ino_t       to_inode);
 
 /**
- * This structure represents a sequence of packets.
- * It is used to accumulate inotify events in a single piece
- * of memory and to write it via a single call to write().
- * 
- * Such accumulation is needed when processing directory changes and
- * a lot of events are expected to be sent to the user.
- **/
-typedef struct bulk_events {
-    void *memory;
-    size_t size;
-} bulk_events;
-
-/**
- * Write a packet to the buffer. Extend the buffer, if needed.
+ * Create a new inotify event and place it to event queue.
  *
- * @param[in] be  A pointer to #bulk_events.
- * @param[in] mem A pointer to data to write.
- * @param[in] size The number of bytes to write.
+ * @param[in] wrk    A pointer to #worker. 
+ * @param[in] wd     An associated watch's id.
+ * @param[in] mask   An inotify watch mask.
+ * @param[in] cookie Event cookie.
+ * @param[in] name   File name (may be NULL).
+ * @return 0 on success, -1 otherwise.
  **/
 int
-bulk_write (bulk_events *be, void *mem, size_t size)
+enqueue_event (worker     *wrk,
+               int         wd,
+               uint32_t    mask,
+               uint32_t    cookie,
+               const char *name)
 {
-    assert (be != NULL);
-    assert (mem != NULL);
+    assert (wrk != NULL);
 
-    void *ptr = realloc (be->memory, be->size + size);
-    if (ptr == NULL) {
-        perror_msg ("Failed to extend the bulk events buffer on %d bytes", 
-                    size);
+    if (wrk->iovcnt >= wrk->iovalloc) {
+        int to_allocate = wrk->iovcnt + 1;
+        void *ptr = realloc (wrk->iov, sizeof (struct iovec) * to_allocate);
+        if (ptr == NULL) {
+            perror_msg ("Failed to extend events to %d items", to_allocate);       
+            return -1;
+        }
+        wrk->iov = ptr;
+        wrk->iovalloc = to_allocate;
+    }
+
+    wrk->iov[wrk->iovcnt].iov_base = create_inotify_event (wd, mask,
+        cookie, name, &wrk->iov[wrk->iovcnt].iov_len);
+
+    if (wrk->iov[wrk->iovcnt].iov_base != NULL) {
+        ++wrk->iovcnt;
+    } else {
+        perror_msg ("Failed to create a inotify event %x", mask);
         return -1;
     }
 
-    be->memory = ptr;
-    memcpy ((char *)be->memory + be->size, mem, size);
-    be->size += size;
     return 0;
+}
+
+/**
+ * Flush inotify events queue to socket
+ *
+ * @param[in] wrk A pointer to #worker.
+ **/
+void
+flush_events (worker *wrk)
+{
+    if (safe_writev (wrk->io[KQUEUE_FD], wrk->iov, wrk->iovcnt) == -1) {
+        perror_msg ("Sending of inotify events to socket failed");
+    }
+
+    int i;
+    for (i = 0; i < wrk->iovcnt; i++) {
+        free (wrk->iov[i].iov_base);
+    }
+
+    wrk->iovcnt = 0;
 }
 
 /**
@@ -146,7 +170,6 @@ process_command (worker *wrk)
 typedef struct {
     worker *wrk;
     watch *w;
-    bulk_events *be;
 } handle_context;
 
 /**
@@ -167,17 +190,8 @@ handle_added (void *udata, const char *path, ino_t inode)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->wrk != NULL);
     assert (ctx->w != NULL);
-    assert (ctx->be != NULL);
 
-    struct inotify_event *ie = NULL;
-    int ie_len = 0;
-
-    ie = create_inotify_event (ctx->w->fd, IN_CREATE, 0, path, &ie_len);
-    if (ie == NULL) {
-        perror_msg ("Failed to create an IN_CREATE event for %s", path);
-        return;
-    }
-
+    int addMask = 0;
     char *npath = path_concat (ctx->w->filename, path);
     if (npath != NULL) {
         watch *neww = worker_start_watching (ctx->wrk, npath, path, ctx->w->flags, WATCH_DEPENDENCY);
@@ -186,7 +200,7 @@ handle_added (void *udata, const char *path, ino_t inode)
         } else {
             neww->parent = ctx->w;
             if (neww->is_really_dir) {
-                ie->mask |= IN_ISDIR;
+                addMask = IN_ISDIR;
             }
         }
         free (npath);
@@ -194,8 +208,7 @@ handle_added (void *udata, const char *path, ino_t inode)
         perror_msg ("Failed to allocate a path to start watching a dependency");
     }
 
-    bulk_write (ctx->be, ie, ie_len);
-    free (ie);
+    enqueue_event (ctx->wrk, ctx->w->fd, IN_CREATE | addMask, 0, path);
 }
 
 /**
@@ -216,19 +229,9 @@ handle_removed (void *udata, const char *path, ino_t inode)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->wrk != NULL);
     assert (ctx->w != NULL);
-    assert (ctx->be != NULL);
 
-    struct inotify_event *ie = NULL;
-    int ie_len = 0;
     int addMask = check_is_dir_cached (path, ctx->wrk) ? IN_ISDIR : 0;
-
-    ie = create_inotify_event (ctx->w->fd, IN_DELETE | addMask, 0, path, &ie_len);
-    if (ie != NULL) {
-        bulk_write (ctx->be, ie, ie_len);
-        free (ie);
-    } else {
-        perror_msg ("Failed to create an IN_DELETE event for %s", path);
-    }
+    enqueue_event (ctx->wrk, ctx->w->fd, IN_DELETE | addMask, 0, path);
 }
 
 /**
@@ -256,7 +259,6 @@ handle_replaced (void       *udata,
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->wrk != NULL);
     assert (ctx->w != NULL);
-    assert (ctx->be != NULL);
 
     handle_moved (udata, from_path, from_inode, to_path, to_inode);
     worker_remove_watch (ctx->wrk, ctx->w, to_path);
@@ -281,7 +283,6 @@ handle_overwritten (void *udata, const char *path, ino_t inode)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->wrk != NULL);
     assert (ctx->w != NULL);
-    assert (ctx->be != NULL);
 
     handle_removed (udata, path, inode);
     handle_added (udata, path, inode);
@@ -312,32 +313,12 @@ handle_moved (void       *udata,
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->wrk != NULL);
     assert (ctx->w != NULL);
-    assert (ctx->be != NULL);
 
     int addMask = check_is_dir_cached (from_path, ctx->wrk) ? IN_ISDIR : 0;
     uint32_t cookie = from_inode & 0x00000000FFFFFFFF;
-    int event_len = 0;
-    struct inotify_event *ev;
 
-    ev = create_inotify_event (ctx->w->fd, IN_MOVED_FROM | addMask, cookie,
-                               from_path, &event_len);
-    if (ev != NULL) {   
-        bulk_write (ctx->be, ev, event_len);
-        free (ev);
-    } else {
-        perror_msg ("Failed to create an IN_MOVED_FROM event for %s",
-                    from_path);
-    }
-    
-    ev = create_inotify_event (ctx->w->fd, IN_MOVED_TO | addMask, cookie,
-                               to_path, &event_len);
-    if (ev != NULL) {   
-        bulk_write (ctx->be, ev, event_len);
-        free (ev);
-    } else {
-        perror_msg ("Failed to create an IN_MOVED_TO event for %s",
-                    to_path);
-    }
+    enqueue_event (ctx->wrk, ctx->w->fd, IN_MOVED_FROM | addMask, cookie, from_path);
+    enqueue_event (ctx->wrk, ctx->w->fd, IN_MOVED_TO | addMask, cookie, to_path);
 }
 
 /**
@@ -428,22 +409,13 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
 
     w->deps = now;
 
-    bulk_events be;
-    memset (&be, 0, sizeof (be));
-
     handle_context ctx;
     memset (&ctx, 0, sizeof (ctx));
     ctx.wrk = wrk;
     ctx.w = w;
-    ctx.be = &be;
     
     dl_calculate (was, now, &cbs, &ctx);
     
-    if (be.memory) {
-        safe_write (wrk->io[KQUEUE_FD], be.memory, be.size);
-        free (be.memory);
-    }
-
     dl_free (was);
 }
 
@@ -484,19 +456,11 @@ produce_notifications (worker *wrk, struct kevent *event)
         }
 
         if (flags) {
-            struct inotify_event *ie = NULL;
-            int ev_len;
-            ie = create_inotify_event (w->fd,
-                                       kqueue_to_inotify (flags, w->is_really_dir, 0),
-                                       0,
-                                       NULL,
-                                       &ev_len);
-            if (ie != NULL) {
-                safe_write (wrk->io[KQUEUE_FD], ie, ev_len);
-                free (ie);
-            } else {
-                perror_msg ("Failed to create a new inotify event");
-            }
+            enqueue_event (wrk,
+                           w->fd,
+                           kqueue_to_inotify (flags, w->is_really_dir, 0),
+                           0,
+                           NULL);
         }
 
         if (flags & NOTE_DELETE) {
@@ -505,25 +469,16 @@ produce_notifications (worker *wrk, struct kevent *event)
     } else {
         /* for dependency events, ignore some notifications */
         if (flags & (NOTE_ATTRIB | NOTE_LINK | NOTE_WRITE)) {
-            struct inotify_event *ie = NULL;
             watch *p = w->parent;
             assert (p != NULL);
-            int ev_len;
-            ie = create_inotify_event
-                (p->fd,
-                 kqueue_to_inotify (flags, w->is_really_dir, 1),
-                 0,
-                 w->filename,
-                 &ev_len);
-
-            if (ie != NULL) {
-                safe_write (wrk->io[KQUEUE_FD], ie, ev_len);
-                free (ie);
-            } else {
-                perror_msg ("Failed to create a new inotify event for dependency");
-            }
+            enqueue_event (wrk,
+                           p->fd,
+                           kqueue_to_inotify (flags, w->is_really_dir, 1),
+                           0,
+                           w->filename);
         }
     }
+    flush_events (wrk);
 }
 
 /**
