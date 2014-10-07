@@ -52,12 +52,12 @@ typedef struct watch {
     };
 } watch;
 
-
+int watch_open (const char *dir, const char *path);
 int watch_init (watch         *w,
                 watch_type_t   watch_type,
                 int            kq,
                 const char    *path,
-                const char    *entry_name,
+                int            fd,
                 uint32_t       flags);
 
 void watch_free   (watch *w);

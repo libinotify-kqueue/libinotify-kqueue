@@ -251,8 +251,8 @@ worker_free (worker *wrk)
  * Start watching a file or a directory.
  *
  * @param[in] wrk        A pointer to #worker.
- * @param[in] path       Path to watch.
- * @param[in] entry_name Entry name. Used for dependencies.
+ * @param[in] path       A file name of a watched file.
+ * @param[in] fd         A file descriptor of a watched entry.
  * @param[in] flags      A combination of inotify event flags.
  * @param[in] type       The type of a watch.
  * @return A pointer to a created watch.
@@ -260,7 +260,7 @@ worker_free (worker *wrk)
 static watch*
 worker_start_watching (worker      *wrk,
                        const char  *path,
-                       const char  *entry_name,
+                       int          fd,
                        uint32_t     flags,
                        watch_type_t type)
 {
@@ -280,7 +280,7 @@ worker_start_watching (worker      *wrk,
                     type,
                     wrk->kq,
                     path,
-                    entry_name,
+                    fd,
                     flags)
         == -1) {
         watch_free (wrk->sets.watches[i]);
@@ -310,9 +310,16 @@ worker_add_watch (worker     *wrk,
     assert (wrk != NULL);
     assert (path != NULL);
 
+    int fd = watch_open (NULL, path);
+    if (fd == -1) {
+        perror_msg ("Failed to open watch %s", path);
+        return NULL;
+    }
+
     struct stat st;
-    if (stat (path, &st) == -1) {
-        perror_msg ("stat failed on %s", path);
+    if (fstat (fd, &st) == -1) {
+        perror_msg ("Failed to fstat watch %s on init", path);
+        close (fd);
         return NULL;
     }
 
@@ -321,15 +328,17 @@ worker_add_watch (worker     *wrk,
         deps = dl_listing (path);
         if (deps == NULL) {
             perror_msg ("Directory listing of %s failed", path);
+            close (fd);
             return NULL;
         }
     }
 
-    watch *parent = worker_start_watching (wrk, path, path, flags, WATCH_USER);
+    watch *parent = worker_start_watching (wrk, path, fd, flags, WATCH_USER);
     if (parent == NULL) {
         if (S_ISDIR (st.st_mode)) {
             dl_free (deps);
         }
+        close (fd);
         return NULL;
     }
 
@@ -365,15 +374,15 @@ worker_add_subwatch (worker *wrk, watch *parent, dep_item *di)
     assert (parent != NULL);
     assert (di != NULL);
 
-    char *path = path_concat (parent->filename, di->path);
-    if (path == NULL) {
-        perror_msg ("Failed to allocate a path while adding a dependency");
+    int fd = watch_open (parent->filename, di->path);
+    if (fd == -1) {
+        perror_msg ("Failed to open file %s/%s", parent->filename, di->path);
         return NULL;
     }
 
     watch *w = worker_start_watching (wrk,
-                                      path,
                                       di->path,
+                                      fd,
                                       parent->flags,
                                       WATCH_DEPENDENCY);
     if (w == NULL) {
