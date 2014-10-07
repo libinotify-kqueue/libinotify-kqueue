@@ -390,9 +390,11 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
     ctx.wrk = wrk;
     ctx.w = w;
     
-    dl_calculate (was, now, &cbs, &ctx);
-    
-    dl_free (was);
+    if (dl_calculate (was, now, &cbs, &ctx) == -1) {
+        w->deps = was;
+        dl_free (now);
+        perror_msg ("Failed to produce directory diff for %s", w->filename);
+    }
 }
 
 /**

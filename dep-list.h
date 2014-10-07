@@ -72,7 +72,7 @@ void      dl_shallow_free (dep_list *dl);
 void      dl_free         (dep_list *dl);
 dep_list* dl_listing      (const char *path);
 
-void
+int
 dl_calculate (dep_list            *before,
               dep_list            *after,
               const traverse_cbs  *cbs,

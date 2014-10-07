@@ -341,6 +341,7 @@ error:
                 ++productive;                                           \
                 matched_code;                                           \
                                                                         \
+                di_free (removed_list##_iter->item);                    \
                 dl_remove_after (removed_list, removed_list##_prev);    \
                 dl_remove_after (added_list, added_list##_prev);        \
                 break;                                                  \
@@ -534,45 +535,62 @@ dl_emit_single_cb_on (dep_list        *list,
  * Recognize all the changes in the directory, invoke the appropriate callbacks.
  *
  * This is the core function of directory diffing submodule.
+ * It deletes before list content on successful completion.
  *
  * @param[in] before The previous contents of the directory.
  * @param[in] after  The current contents of the directory.
  * @param[in] cbs    A pointer to user callbacks (#traverse_callbacks).
  * @param[in] udata  A pointer to user data.
+ * @return 0 on success, -1 otherwise.
  **/
-void
+int
 dl_calculate (dep_list           *before,
               dep_list           *after,
               const traverse_cbs *cbs,
               void               *udata)
 {
+    assert (before != NULL);
+    assert (after != NULL);
     assert (cbs != NULL);
 
     int need_update = 0;
 
-    dep_list *was = dl_shallow_copy (before);
     dep_list *now = dl_shallow_copy (after);
+    if (now == NULL) {
+        return -1;
+    }
 
-    dl_detect_unchanged (was, now, cbs, udata);
+    dl_detect_unchanged (before, now, cbs, udata);
 
     dep_list *lst = dl_shallow_copy (now);
 
-    need_update += dl_detect_moves (was, now, cbs, udata);
-    dl_detect_overwrites (was, now, cbs, udata);
-    need_update += dl_detect_replacements (was, lst, cbs, udata);
+    /*
+     * at this point dl_calculate cannot be undone on dl_shallow_copy failure
+     * as some before list items has been already deleted. Handle this with
+     * skipping replacements detection routines. It not so bad as we continue
+     * to invoke handle_removed callback on this items instead of
+     * handle_replacements
+     */
+    need_update += dl_detect_moves (before, now, cbs, udata);
+    dl_detect_overwrites (before, now, cbs, udata);
+    if (lst != NULL) {
+        need_update += dl_detect_replacements (before, lst, cbs, udata);
+        dl_shallow_free (lst);
+    }
  
     if (need_update) {
         cb_invoke (cbs, names_updated, udata);
     }
 
-    dl_emit_single_cb_on (was, cbs->removed, udata);
+    dl_emit_single_cb_on (before, cbs->removed, udata);
     dl_emit_single_cb_on (now, cbs->added, udata);
 
     cb_invoke (cbs, many_added, udata, now);
-    cb_invoke (cbs, many_removed, udata, was);
+    cb_invoke (cbs, many_removed, udata, before);
     
-    dl_shallow_free (lst);
     dl_shallow_free (now);
-    dl_shallow_free (was);
+    dl_free (before);
+
+    return 0;
 }
 
