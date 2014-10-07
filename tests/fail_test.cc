@@ -29,6 +29,8 @@ fail_test::fail_test (journal &j)
 
 void fail_test::setup ()
 {
+    cleanup ();
+    system ("touch fail-working");
 }
 
 void fail_test::run ()
@@ -37,15 +39,23 @@ void fail_test::run ()
     int wid = 0;
 
     /* Add a watch, should fail */
-    cons.input.setup ("fail-working", IN_ALL_EVENTS);
+    cons.input.setup ("non-existent", IN_ALL_EVENTS);
     cons.output.wait ();
 
     wid = cons.output.added_watch_id ();
     should ("watch id is -1 when starting watching a non-existent file", wid == -1);
+
+    cons.output.reset ();
+    cons.input.setup ("fail-working", IN_ATTRIB | IN_ONLYDIR);
+    cons.output.wait ();
+
+    wid = cons.output.added_watch_id ();
+    should ("do not start watching a file if IN_ONLYDIR flag is set", wid == -1);
 
     cons.input.interrupt ();
 }
 
 void fail_test::cleanup ()
 {
+    system ("rm -rf fail-working");
 }

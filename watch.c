@@ -20,6 +20,7 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <errno.h>  /* errno */
 #include <fcntl.h>  /* open */
 #include <unistd.h> /* close */
 #include <string.h> /* strdup */
@@ -123,11 +124,33 @@ watch_open (int dirfd, const char *path, uint32_t flags)
     if (flags & IN_DONT_FOLLOW) {
         openflags |= O_SYMLINK;
     }
+#ifdef O_DIRECTORY
+    if (flags & IN_ONLYDIR) {
+        openflags |= O_DIRECTORY;
+    }
+#endif
 
     int fd = openat (dirfd, path, openflags);
     if (fd == -1) {
         return -1;
     }
+
+#ifndef O_DIRECTORY
+    if (flags & IN_ONLYDIR) {
+        struct stat st;
+        if (fstat (fd, &st) == -1) {
+            perror_msg ("Failed to fstat on watch open %s", path);
+            close (fd);
+            return -1;
+        }
+
+        if (!S_ISDIR (st.st_mode)) {
+            errno = ENOTDIR;
+            close (fd);
+            return -1;
+        }
+    }
+#endif
 
 #ifndef O_CLOEXEC
     if (set_cloexec_flag (fd, 1) == -1) {
