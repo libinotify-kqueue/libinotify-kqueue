@@ -22,7 +22,6 @@
 
 #include <stddef.h> /* NULL */
 #include <assert.h>
-#include <unistd.h> /* write */
 #include <stdlib.h> /* calloc, realloc */
 #include <string.h> /* memset */
 #include <stdio.h>
@@ -186,21 +185,14 @@ handle_added (void *udata, dep_item *di)
     assert (ctx->w != NULL);
 
     int addMask = 0;
-    char *npath = path_concat (ctx->w->filename, di->path);
-    if (npath != NULL) {
-        watch *neww = worker_start_watching (ctx->wrk, npath, di->path, ctx->w->flags, WATCH_DEPENDENCY);
+    watch *neww = worker_add_subwatch (ctx->wrk, ctx->w, di);
         if (neww == NULL) {
-            perror_msg ("Failed to start watching on a new dependency %s", npath);
+            perror_msg ("Failed to start watching on a new dependency %s", di->path);
         } else {
-            neww->parent = ctx->w;
             if (neww->is_really_dir) {
                 addMask = IN_ISDIR;
             }
         }
-        free (npath);
-    } else {
-        perror_msg ("Failed to allocate a path to start watching a dependency");
-    }
 
     enqueue_event (ctx->wrk, ctx->w->fd, IN_CREATE | addMask, 0, di->path);
 }
