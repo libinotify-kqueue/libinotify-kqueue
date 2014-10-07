@@ -312,7 +312,7 @@ dl_listing (int fd)
         return NULL;
     }
 
-#ifdef HAVE_FDOPENDIR
+#if defined (HAVE_FDOPENDIR) && !defined (DIRECTORY_LISTING_REWINDS)
     /*
      * Make a fresh copy of fd so it wont be destroyed on closedir.
      * I found out that openat(fd, ".", ...) works more reliable then
@@ -373,12 +373,18 @@ dl_listing (int fd)
             }
         }
 
+#ifdef DIRECTORY_LISTING_REWINDS
+        rewinddir (dir);
+#endif
         closedir (dir);
     }
     return head;
 
 error:
     if (dir != NULL) {
+#ifdef DIRECTORY_LISTING_REWINDS
+        rewinddir (dir);
+#endif
         closedir (dir);
     }
     dl_free (head);

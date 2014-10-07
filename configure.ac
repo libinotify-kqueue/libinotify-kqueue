@@ -265,4 +265,20 @@ AC_CHECK_MEMBER([struct dirent.d_type],
 ])
 
 
+# There are two ways we can reread directory opened already. Namely:
+# 1. Open directory by realtive path "." to file descriptor than read & close
+# 2. Rewind directory than read it one more time and leave opened
+# Former one is more reliable but latter is prefered when system has NOTE_OPEN
+# or NOTE_CLOSE events and we dont want that kqueue catches open and closedirs
+# issued by directory diffing routines.
+#
+# Define this if we can reuse filedes opened once before or leave undefined if
+# we have to execute open/close pair on every directory read.
+
+if test "$ac_cv_func_fdopendir" = "yes" -a "$have_o_evtonly" = "no" -a \
+    \( "$have_note_open" = "yes" -o "$have_note_close" = "yes" \) ; then
+    AC_DEFINE([DIRECTORY_LISTING_REWINDS], [1], [Define to 1 if reusing of watched dir filedes is necessary])
+fi
+
+
 AC_OUTPUT
