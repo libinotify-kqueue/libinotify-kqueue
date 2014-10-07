@@ -203,9 +203,6 @@ watch_free (watch *w)
     if (w->fd != -1) {
         close (w->fd);
     }
-    if (w->type == WATCH_USER && w->is_directory && w->deps) {
-        dl_free (w->deps);
-    }
     free (w->filename);
     free (w);
 }

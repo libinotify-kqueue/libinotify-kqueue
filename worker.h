@@ -93,7 +93,6 @@ watch*  worker_add_subwatch   (worker *wrk, watch *parent, dep_item *di);
 int     worker_add_or_modify  (worker *wrk, const char *path, uint32_t flags);
 int     worker_remove         (worker *wrk, int id);
 
-void    worker_remove_many    (worker *wrk, watch *parent, const dep_list* items, int remove_self);
 void    worker_remove_watch   (worker *wrk, watch *parent, const dep_item* item);
 void    worker_rename_watch   (worker *wrk, watch *parent, dep_item *from, dep_item *to);
 

@@ -41,6 +41,9 @@
 #include "worker.h"
 
 static void
+worker_remove_many (worker *wrk, watch *parent);
+
+static void
 worker_update_flags (worker *wrk, watch *w, uint32_t flags);
 
 static void
@@ -440,10 +443,7 @@ worker_remove (worker *wrk,
     size_t i;
     for (i = 0; i < wrk->sets.length; i++) {
         if (wrk->sets.watches[i]->fd == id) {
-            worker_remove_many (wrk,
-                                wrk->sets.watches[i],
-                                wrk->sets.watches[i]->deps,
-                                1);
+            worker_remove_many (wrk, wrk->sets.watches[i]);
 
             enqueue_event (wrk, id, IN_IGNORED, 0, NULL);
             flush_events (wrk);
@@ -495,36 +495,27 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags)
 }
 
 /**
- * Remove a list of watches, probably with their parent watch.
+ * Remove parent watch with its subwatches.
  *
  * @param[in] wrk     A pointer to #worker.
  * @param[in] parent  A pointer to the parent #watch.
- * @param[in] items   A list of watches to remove. All items must be childs of
- *     of the specified parent.
- * @param[in] remove_self Set to 1 to remove the parent watch too.
  **/
-void
-worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remove_self)
+static void
+worker_remove_many (worker *wrk, watch *parent)
 {
     assert (wrk != NULL);
     assert (parent != NULL);
 
-    dep_node *iter;
     size_t i;
 
-    if (items != NULL) {
-        SLIST_FOREACH (iter, &items->head, next) {
-
-            worker_remove_watch (wrk, parent, iter->item);
-        }
+    if (parent->deps != NULL) {
+        dl_free (parent->deps);
     }
 
-    if (remove_self) {
-        for (i = 0; i < wrk->sets.length; i++) {
-            if (wrk->sets.watches[i] == parent) {
-                worker_sets_delete (&wrk->sets, i);
-                break;
-            }
+    for (i = wrk->sets.length; i > 0; i--) {
+        if (wrk->sets.watches[i-1]->parent == parent
+         || wrk->sets.watches[i-1] == parent) {
+            worker_sets_delete (&wrk->sets, i-1);
         }
     }
 }
