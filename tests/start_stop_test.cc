@@ -38,12 +38,15 @@ void start_stop_test::setup ()
 {
     cleanup ();
     system ("touch sst-working");
+    system ("ln sst-working sst-working2");
+    system ("ln -s sst-working sst-working3");
 }
 
 void start_stop_test::run ()
 {
     consumer cons;
     int wid = 0;
+    int wid2 = 0;
     events received;
 
     /* Add a watch */
@@ -109,10 +112,28 @@ void start_stop_test::run ()
     should ("all produced events are registered after resume",
             contains (received, event ("", wid, IN_ATTRIB)));
 
+    cons.output.reset ();
+    cons.input.setup ("sst-working2", IN_ATTRIB);
+    cons.output.wait ();
+
+    wid2 = cons.output.added_watch_id ();
+    should ("pair of hardlinked files should be opened with the same watch ID", wid == wid2);
+
+    cons.output.reset ();
+    cons.input.setup ("sst-working3", IN_ATTRIB);
+    cons.output.wait ();
+
+    wid2 = cons.output.added_watch_id ();
+    if (should ("watch on file is added successfully via softlink", wid2 != -1)) {
+        should ("pair of softlinked files should be opened with the same watch ID", wid == wid2);
+    }
+
     cons.input.interrupt ();
 }
 
 void start_stop_test::cleanup ()
 {
     system ("rm -rf sst-working");
+    system ("rm -rf sst-working2");
+    system ("rm -rf sst-working3");
 }

@@ -37,6 +37,8 @@ struct i_watch {
     int wd;                    /* watch descriptor */
     worker *wrk;               /* pointer to a parent worker structure */
     uint32_t flags;            /* flags in the inotify format */
+    ino_t inode;               /* inode number of watched inode */
+    dev_t dev;                 /* device number of watched inode */
     dep_list *deps;            /* dependence list of inotify watch */
     worker_sets watches;       /* kqueue watches of inotify watch */
     SLIST_ENTRY(i_watch) next; /* pointer to the next inotify watch in list */

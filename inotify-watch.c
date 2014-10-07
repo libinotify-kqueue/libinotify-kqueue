@@ -106,6 +106,8 @@ iwatch_init (worker     *wrk,
     iw->wrk = wrk;
     iw->wd = fd;
     iw->flags = flags;
+    iw->inode = st.st_ino;
+    iw->dev = st.st_dev;
 
     if (worker_sets_init (&iw->watches) == -1) {
         if (S_ISDIR (st.st_mode)) {

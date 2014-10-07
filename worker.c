@@ -283,25 +283,24 @@ worker_add_or_modify (worker     *wrk,
         return -1;
     }
 
-    /* look up for an entry with this filename */
+    struct stat st;
+    if (fstat (fd, &st) == -1) {
+        perror_msg ("Failed to stat file %s", path);
+        close (fd);
+        return -1;
+    }
+
+    /* look up for an entry with these inode&device numbers */
     i_watch *iw;
     SLIST_FOREACH (iw, &wrk->head, next) {
-
-        size_t i = 0;
-        for (i = 0; i < iw->watches.length; i++) {
-            const char *evpath = iw->watches.watches[i]->filename;
-            assert (evpath != NULL);
-
-            if (!(iw->watches.watches[i]->flags & WF_ISSUBWATCH) &&
-                strcmp (path, evpath) == 0) {
-                close (fd);
-                iwatch_update_flags (iw, flags);
-                return iw->wd;
-            }
+        if (iw->inode == st.st_ino && iw->dev == st.st_dev) {
+            close (fd);
+            iwatch_update_flags (iw, flags);
+            return iw->wd;
         }
     }
 
-    /* create a new entry if path is not found */
+    /* create a new entry if watch is not found */
     iw = iwatch_init (wrk, path, fd, flags);
     if (iw == NULL) {
         close (fd);
