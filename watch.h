@@ -52,16 +52,15 @@ typedef struct watch {
     };
 } watch;
 
-int watch_open (const char *dir, const char *path);
-int watch_init (watch         *w,
-                watch_type_t   watch_type,
-                int            kq,
-                const char    *path,
-                int            fd,
-                uint32_t       flags);
+int    watch_open (const char *dir, const char *path);
+watch *watch_init (watch_type_t   watch_type,
+                   int            kq,
+                   const char    *path,
+                   int            fd,
+                   uint32_t       flags);
 
-void watch_free   (watch *w);
+void   watch_free (watch *w);
 
-int  watch_register_event (watch *w, int kq, uint32_t fflags);
+int    watch_register_event (watch *w, int kq, uint32_t fflags);
 
 #endif /* __WATCH_H__ */

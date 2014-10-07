@@ -267,29 +267,20 @@ worker_start_watching (worker      *wrk,
     assert (wrk != NULL);
     assert (path != NULL);
 
-    int i;
-
     if (worker_sets_extend (&wrk->sets, 1) == -1) {
         perror_msg ("Failed to extend worker sets");
         return NULL;
     }
 
-    i = wrk->sets.length;
-    wrk->sets.watches[i] = calloc (1, sizeof (struct watch));
-    if (watch_init (wrk->sets.watches[i],
-                    type,
-                    wrk->kq,
-                    path,
-                    fd,
-                    flags)
-        == -1) {
-        watch_free (wrk->sets.watches[i]);
-        wrk->sets.watches[i] = NULL;
+    watch *w = watch_init (type, wrk->kq, path, fd, flags);
+    if (w == NULL) {
         return NULL;
     }
+    wrk->sets.watches[wrk->sets.length] = w;
+
     ++wrk->sets.length;
 
-    return wrk->sets.watches[i];
+    return w;
 }
 
 /**
@@ -386,6 +377,7 @@ worker_add_subwatch (worker *wrk, watch *parent, dep_item *di)
                                       parent->flags,
                                       WATCH_DEPENDENCY);
     if (w == NULL) {
+        close (fd);
         return NULL;
     }
 

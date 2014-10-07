@@ -125,27 +125,28 @@ watch_open (const char *dir, const char *path)
 /**
  * Initialize a watch.
  *
- * @param[in,out] w          A pointer to a watch.
- * @param[in]     watch_type The type of the watch.
- * @param[in]     kq         A kqueue descriptor.
- * @param[in]     path       A file name of a watched file.
- * @param[in]     fd         A file descriptor of a watched entry.
- * @param[in]     flags      A combination of the inotify watch flags.
- * @return 0 on success, -1 on failure.
+ * @param[in] watch_type The type of the watch.
+ * @param[in] kq         A kqueue descriptor.
+ * @param[in] path       A file name of a watched file.
+ * @param[in] fd         A file descriptor of a watched entry.
+ * @param[in] flags      A combination of the inotify watch flags.
+ * @return A pointer to a watch on success, NULL on failure.
  **/
-int
-watch_init (watch         *w,
-            watch_type_t   watch_type,
+watch *
+watch_init (watch_type_t   watch_type,
             int            kq,
             const char    *path,
             int            fd,
             uint32_t       flags)
 {
-    assert (w != NULL);
     assert (path != NULL);
     assert (fd != -1);
 
-    memset (w, 0, sizeof (watch));
+    watch *w = calloc (1, sizeof (struct watch));
+    if (w == NULL) {
+        perror_msg ("Failed to allocate watch");
+        return NULL;
+    }
 
     w->fd = fd;
 
@@ -165,10 +166,11 @@ watch_init (watch         *w,
     int is_subwatch = watch_type != WATCH_USER;
     uint32_t fflags = inotify_to_kqueue (flags, w->is_really_dir, is_subwatch);
     if (watch_register_event (w, kq, fflags) == -1) {
-        return -1;
+        free (w);
+        return NULL;
     }
 
-    return 0;
+    return w;
 }
 
 /**
