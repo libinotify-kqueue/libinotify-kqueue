@@ -122,7 +122,7 @@ watch_open (int dirfd, const char *path, uint32_t flags)
         openflags |= O_CLOEXEC;
 #endif
     if (flags & IN_DONT_FOLLOW) {
-        openflags |= O_NOFOLLOW;
+        openflags |= O_SYMLINK;
     }
 
     int fd = openat (dirfd, path, openflags);

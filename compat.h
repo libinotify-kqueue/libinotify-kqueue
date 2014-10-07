@@ -40,6 +40,10 @@
 #include <pthread.h>
 
 #ifdef BUILD_LIBRARY
+#ifndef O_SYMLINK
+#define O_SYMLINK O_NOFOLLOW
+#endif
+
 #ifndef SLIST_FOREACH_SAFE
 #define SLIST_FOREACH_SAFE(var, head, field, tvar)                      \
         for ((var) = SLIST_FIRST((head));                               \

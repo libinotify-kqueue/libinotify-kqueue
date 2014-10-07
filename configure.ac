@@ -98,4 +98,17 @@ if test "$atfuncs_support" = "no" -a \
 fi
 
 
+AC_MSG_CHECKING(for O_SYMLINK in fcntl.h)
+AC_COMPILE_IFELSE(
+    [AC_LANG_PROGRAM([@%:@include <fcntl.h>], [int a = O_SYMLINK;])],
+    have_o_symlink=yes,
+    have_o_symlink=no
+)
+AC_MSG_RESULT($have_o_symlink)
+
+if test "$have_o_symlink" = "no"; then
+    AC_MSG_WARN([O_SYMLINK open(2) flag is not supported on your system. Watching for symbolic links is unavailable])
+fi
+
+
 AC_OUTPUT
