@@ -368,7 +368,7 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
 
     dep_list *was = NULL, *now = NULL;
     was = w->deps;
-    now = dl_listing (w->filename);
+    now = dl_listing (w->fd);
     if (now == NULL) {
         perror_msg ("Failed to create a listing for directory %s",
                     w->filename);

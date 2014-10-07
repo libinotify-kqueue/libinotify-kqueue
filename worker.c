@@ -301,7 +301,7 @@ worker_add_watch (worker     *wrk,
     assert (wrk != NULL);
     assert (path != NULL);
 
-    int fd = watch_open (NULL, path);
+    int fd = watch_open (AT_FDCWD, path);
     if (fd == -1) {
         perror_msg ("Failed to open watch %s", path);
         return NULL;
@@ -316,7 +316,7 @@ worker_add_watch (worker     *wrk,
 
     dep_list *deps = NULL;
     if (S_ISDIR (st.st_mode)) {
-        deps = dl_listing (path);
+        deps = dl_listing (fd);
         if (deps == NULL) {
             perror_msg ("Directory listing of %s failed", path);
             close (fd);
@@ -365,9 +365,9 @@ worker_add_subwatch (worker *wrk, watch *parent, dep_item *di)
     assert (parent != NULL);
     assert (di != NULL);
 
-    int fd = watch_open (parent->filename, di->path);
+    int fd = watch_open (parent->fd, di->path);
     if (fd == -1) {
-        perror_msg ("Failed to open file %s/%s", parent->filename, di->path);
+        perror_msg ("Failed to open file %s", di->path);
         return NULL;
     }
 

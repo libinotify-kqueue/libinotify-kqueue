@@ -46,39 +46,6 @@
 #include "config.h"
 
 /**
- * Create a file path using its name and a path to its directory.
- *
- * @param[in] dir  A path to a file directory. May end with a '/'.
- * @param[in] file File name.
- * @return A concatenated path. Should be freed with free().
- **/
-char*
-path_concat (const char *dir, const char *file)
-{
-    size_t dir_len = strlen (dir);
-    size_t file_len = strlen (file);
-    size_t alloc_sz = dir_len + file_len + 2;
-
-    char *path = malloc (alloc_sz);
-    if (path == NULL) {
-        perror_msg ("Failed to allocate memory (%d bytes) "
-                    "for path concatenation",
-                    alloc_sz);
-        return NULL;
-    }
-
-    strlcpy (path, dir, alloc_sz);
-
-    if (dir[dir_len - 1] != '/') {
-        ++dir_len;
-        path[dir_len - 1] = '/';
-    }
-
-    strlcpy (path + dir_len, file, file_len + 1);
-    return path;
-}
-
-/**
  * Create a new inotify event.
  *
  * @param[in] wd     An associated watch's id.

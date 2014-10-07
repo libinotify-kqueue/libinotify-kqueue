@@ -32,6 +32,7 @@
 #include <stdio.h>    /* snprintf */
 
 #include "utils.h"
+#include "compat.h"
 #include "conversions.h"
 #include "watch.h"
 #include "sys/inotify.h"
@@ -106,18 +107,18 @@ watch_register_event (watch *w, int kq, uint32_t fflags)
 /**
  * Opens a file descriptor of kqueue watch
  *
- * @param[in] dir  A path to a parent directory or NULL
- * @param[in] path A pointer to filename
+ * @param[in] dirfd A filedes of parent directory or AT_FDCWD.
+ * @param[in] path  A pointer to filename
  * @return A file descriptor of opened kqueue watch
  **/
 int
-watch_open (const char *dir, const char *path)
+watch_open (int dirfd, const char *path)
 {
     assert (path != NULL);
 
-    char *fullpath = (dir != NULL) ? path_concat (dir, path) : strdup (path);
-    int fd = open (fullpath, O_RDONLY);
-    free (fullpath);
+    int openflags = O_RDONLY;
+
+    int fd = openat (dirfd, path, openflags);
 
     return fd;
 }
