@@ -217,6 +217,11 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
 {
     assert (iw != NULL);
 
+    /* merge flags if IN_MASK_ADD flag is set */
+    if (flags & IN_MASK_ADD) {
+        flags |= iw->flags;
+    }
+
     iw->flags = flags;
 
     watch *w;

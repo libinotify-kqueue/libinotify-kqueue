@@ -119,6 +119,25 @@ void update_flags_test::run ()
     should ("do not receive notifications on touch with flags = IN_MODIFY ",
             received.empty());
 
+
+    cons.output.reset ();
+    cons.input.setup ("uft-working", IN_ATTRIB | IN_MASK_ADD);
+    cons.output.wait ();
+    updated_wid = cons.output.added_watch_id ();
+    should ("modify flags updated successfully, again", wid == updated_wid);
+
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("echo Hello >> uft-working");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive notifications on modify after watch with IN_MODIFY flag "
+            "set has been updated with IN_MASK_ADD set and IN_MODIFY unset",
+            contains (received, event ("", updated_wid, IN_MODIFY)));
+
     cons.input.interrupt ();
 }
 
