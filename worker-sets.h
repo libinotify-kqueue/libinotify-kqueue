@@ -25,8 +25,8 @@
 
 #include <stdint.h>
 #include <sys/types.h> /* size_t */
+#include <sys/stat.h>  /* ino_t */
 
-#include "dep-list.h"
 #include "watch.h"
 
 typedef struct worker_sets {
@@ -39,7 +39,7 @@ int  worker_sets_init   (worker_sets *ws);
 void worker_sets_free   (worker_sets *ws);
 void worker_sets_delete (worker_sets *ws, size_t index);
 int  worker_sets_insert (worker_sets *ws, watch *w);
-watch *worker_sets_find (worker_sets *ws, const dep_item *di);
+watch *worker_sets_find (worker_sets *ws, ino_t inode);
 
 
 #endif /* __WORKER_SETS_H__ */

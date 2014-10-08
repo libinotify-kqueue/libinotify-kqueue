@@ -37,19 +37,14 @@ typedef enum watch_type {
 
 typedef struct watch {
     uint32_t flags;           /* A watch flags. Not in inotify/kqueue format */
-    char *filename;           /* file name of a watched file
-                               * NB: an entry file name for dependencies! */
+    size_t refcount;          /* number of dependency list items corresponding
+                               * to that watch */ 
     int fd;                   /* file descriptor of a watched entry */
     ino_t inode;              /* inode number for the watched entry */
 } watch;
 
 int    watch_open (int dirfd, const char *path, uint32_t flags);
-watch *watch_init (watch_type_t   watch_type,
-                   int            kq,
-                   const char    *path,
-                   int            fd,
-                   uint32_t       flags);
-
+watch *watch_init (watch_type_t watch_type, int kq, int fd, uint32_t flags);
 void   watch_free (watch *w);
 
 int    watch_register_event (watch *w, int kq, uint32_t fflags);

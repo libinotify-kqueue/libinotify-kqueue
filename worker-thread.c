@@ -256,7 +256,6 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
 
     enqueue_event (ctx->iw, IN_MOVED_FROM | addMask, cookie, from_di->path);
     enqueue_event (ctx->iw, IN_MOVED_TO | addMask, cookie, to_di->path);
-    iwatch_rename_subwatch (ctx->iw, from_di, to_di);
 }
 
 
@@ -366,12 +365,17 @@ found:
     } else {
         /* for dependency events, ignore some notifications */
         if (flags & (NOTE_ATTRIB | NOTE_LINK | NOTE_WRITE)) {
-            enqueue_event (iw,
-                           kqueue_to_inotify (flags,
-                                              w->flags & WF_ISDIR,
-                                              w->flags & WF_ISSUBWATCH),
-                           0,
-                           w->filename);
+            uint32_t i_flags = kqueue_to_inotify (flags,
+                                                  w->flags & WF_ISDIR,
+                                                  w->flags & WF_ISSUBWATCH);
+            dep_node *iter = NULL;
+            SLIST_FOREACH (iter, &iw->deps->head, next) {
+                dep_item *di = iter->item;
+
+                if (di->inode == w->inode) {
+                    enqueue_event (iw, i_flags, 0, di->path);
+                }
+            }
         }
     }
     flush_events (wrk);

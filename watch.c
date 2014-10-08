@@ -136,17 +136,12 @@ watch_open (int dirfd, const char *path, uint32_t flags)
  *
  * @param[in] watch_type The type of the watch.
  * @param[in] kq         A kqueue descriptor.
- * @param[in] path       A file name of a watched file.
  * @param[in] fd         A file descriptor of a watched entry.
  * @param[in] flags      A combination of the inotify watch flags.
  * @return A pointer to a watch on success, NULL on failure.
  **/
 watch *
-watch_init (watch_type_t   watch_type,
-            int            kq,
-            const char    *path,
-            int            fd,
-            uint32_t       flags)
+watch_init (watch_type_t watch_type, int kq, int fd, uint32_t flags)
 {
     assert (path != NULL);
     assert (fd != -1);
@@ -159,7 +154,7 @@ watch_init (watch_type_t   watch_type,
 
     w->fd = fd;
     w->flags = watch_type != WATCH_USER ? WF_ISSUBWATCH : 0;
-    w->filename = strdup (path);
+    w->refcount = 0;
 
     int is_dir = 0;
     _file_information (w->fd, &is_dir, &w->inode);
@@ -188,6 +183,5 @@ watch_free (watch *w)
     if (w->fd != -1) {
         close (w->fd);
     }
-    free (w->filename);
     free (w);
 }

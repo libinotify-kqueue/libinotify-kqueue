@@ -301,7 +301,7 @@ worker_add_or_modify (worker     *wrk,
     }
 
     /* create a new entry if watch is not found */
-    iw = iwatch_init (wrk, path, fd, flags);
+    iw = iwatch_init (wrk, fd, flags);
     if (iw == NULL) {
         close (fd);
         return -1;
