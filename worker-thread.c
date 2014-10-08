@@ -35,7 +35,6 @@
 #include "conversions.h"
 #include "inotify-watch.h"
 #include "worker.h"
-#include "worker-sets.h"
 #include "worker-thread.h"
 
 void worker_erase (worker *wrk);
@@ -319,22 +318,12 @@ produce_notifications (worker *wrk, struct kevent *event)
     assert (wrk != NULL);
     assert (event != NULL);
 
-    watch *w = NULL;
-    i_watch *iw = NULL;
-    size_t i;
-
-    SLIST_FOREACH (iw, &wrk->head, next) {
-        for (i = 0; i < iw->watches.length; i++) {
-            if (event->ident == iw->watches.watches[i]->fd) {
-                w = iw->watches.watches[i];
-                goto found;
-            }
-        }
-    }
-
-found:
-    assert (iw != NULL);
+    watch *w = (watch *)event->udata;
     assert (w != NULL);
+    assert (w->fd == event->ident);
+
+    i_watch *iw = w->iw;
+    assert (worker_sets_find (&iw->watches, w->inode) == w);
 
     uint32_t flags = event->fflags;
 

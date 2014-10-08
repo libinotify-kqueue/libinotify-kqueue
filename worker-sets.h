@@ -27,13 +27,13 @@
 #include <sys/types.h> /* size_t */
 #include <sys/stat.h>  /* ino_t */
 
-#include "watch.h"
-
 typedef struct worker_sets {
     struct watch **watches;   /* appropriate watches with additional info */
     size_t length;            /* size of active entries */
     size_t allocated;         /* size of allocated entries */
 } worker_sets;
+
+#include "watch.h"
 
 int  worker_sets_init   (worker_sets *ws);
 void worker_sets_free   (worker_sets *ws);

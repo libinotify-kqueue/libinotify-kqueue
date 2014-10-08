@@ -68,18 +68,26 @@ _file_information (int fd, int *is_dir, ino_t *inode)
     }
 }
 
+/* struct kevent is declared slightly differently on the different BSDs.
+ * This macros will help to avoid cast warnings on the supported platforms. */
+#if defined (__NetBSD__)
+#define PTR_TO_UDATA(X) ((intptr_t)X)
+#else
+#define PTR_TO_UDATA(X) (X)
+#endif
+
 /**
  * Register vnode kqueue watch in kernel kqueue(2) subsystem
  *
  * @param[in] w      A pointer to a watch
- * @param[in] kq     A kqueue descriptor
  * @param[in] fflags A filter flags in kqueue format
  * @return 1 on success, -1 on error and 0 if no events have been registered
  **/
 int
-watch_register_event (watch *w, int kq, uint32_t fflags)
+watch_register_event (watch *w, uint32_t fflags)
 {
     assert (w != NULL);
+    int kq = w->iw->wrk->kq;
     assert (kq != -1);
 
     struct kevent ev;
@@ -90,7 +98,7 @@ watch_register_event (watch *w, int kq, uint32_t fflags)
             EV_ADD | EV_ENABLE | EV_CLEAR,
             fflags,
             0,
-            NULL);
+            PTR_TO_UDATA (w));
 
     return kevent (kq, &ev, 1, NULL, 0, NULL);
 }
@@ -134,16 +142,15 @@ watch_open (int dirfd, const char *path, uint32_t flags)
 /**
  * Initialize a watch.
  *
+ * @param[in] iw;        A backreference to parent #i_watch.
  * @param[in] watch_type The type of the watch.
- * @param[in] kq         A kqueue descriptor.
  * @param[in] fd         A file descriptor of a watched entry.
- * @param[in] flags      A combination of the inotify watch flags.
  * @return A pointer to a watch on success, NULL on failure.
  **/
 watch *
-watch_init (watch_type_t watch_type, int kq, int fd, uint32_t flags)
+watch_init (i_watch *iw, watch_type_t watch_type, int fd)
 {
-    assert (path != NULL);
+    assert (iw != NULL);
     assert (fd != -1);
 
     watch *w = calloc (1, sizeof (struct watch));
@@ -152,6 +159,7 @@ watch_init (watch_type_t watch_type, int kq, int fd, uint32_t flags)
         return NULL;
     }
 
+    w->iw = iw;
     w->fd = fd;
     w->flags = watch_type != WATCH_USER ? WF_ISSUBWATCH : 0;
     w->refcount = 0;
@@ -160,10 +168,10 @@ watch_init (watch_type_t watch_type, int kq, int fd, uint32_t flags)
     _file_information (w->fd, &is_dir, &w->inode);
     w->flags |= is_dir ? WF_ISDIR : 0;
 
-    uint32_t fflags = inotify_to_kqueue (flags,
+    uint32_t fflags = inotify_to_kqueue (iw->flags,
                                          w->flags & WF_ISDIR,
                                          w->flags & WF_ISSUBWATCH);
-    if (watch_register_event (w, kq, fflags) == -1) {
+    if (watch_register_event (w, fflags) == -1) {
         free (w);
         return NULL;
     }

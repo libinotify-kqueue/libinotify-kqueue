@@ -111,7 +111,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
         return NULL;
     }
 
-    watch *parent = watch_init (WATCH_USER, iw->wrk->kq, fd, iw->flags);
+    watch *parent = watch_init (iw, WATCH_USER, fd);
     if (parent == NULL) {
         worker_sets_free (&iw->watches);
         if (S_ISDIR (st.st_mode)) {
@@ -186,7 +186,7 @@ iwatch_add_subwatch (i_watch *iw, const dep_item *di)
         return NULL;
     }
 
-    w = watch_init (WATCH_DEPENDENCY, iw->wrk->kq, fd, iw->flags);
+    w = watch_init (iw, WATCH_DEPENDENCY, fd);
     if (w == NULL) {
         close (fd);
         return NULL;
@@ -247,7 +247,7 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
         uint32_t fflags = inotify_to_kqueue (flags,
                                              w->flags & WF_ISDIR,
                                              w->flags & WF_ISSUBWATCH);
-        watch_register_event (w, iw->wrk->kq, fflags);
+        watch_register_event (w, fflags);
     }
 }
 
