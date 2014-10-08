@@ -83,10 +83,8 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
         if (mask & IN_MOVE) {
             cookie = di->inode & 0x00000000FFFFFFFF;
         }
-        if (mask & (IN_CREATE | IN_DELETE | IN_MOVE)) {
-            if (iwatch_subwatch_is_dir (iw, di)) {
-                mask |= IN_ISDIR;
-            }
+        if (S_ISDIR (di->type)) {
+            mask |= IN_ISDIR;
         }
     }
 
@@ -163,6 +161,27 @@ process_command (worker *wrk)
 typedef struct {
     i_watch *iw;
 } handle_context;
+
+/**
+ * Copy type of item from old directory listing to a new one.
+ * Do not produces any notifications.
+ *
+ * This function is used as a callback and is invoked from the dep-list
+ * routines.
+ *
+ * @param[in] udata   A pointer to user data (#handle_context).
+ * @param[in] from_di The old name & inode number of the file.
+ * @param[in] to_di   The new name & inode number of the file.
+ **/
+static void
+handle_unchanged (void *udata, dep_item *from_di, dep_item *to_di)
+{
+    assert (udata != NULL);
+
+    if (to_di->type == S_IFUNK) {
+        to_di->type = from_di->type;
+    }
+}
 
 /**
  * Produce an IN_CREATE notification for a new file and start wathing on it.
@@ -270,13 +289,17 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
+    if (to_di->type == S_IFUNK) {
+        to_di->type = from_di->type;
+    }
+
     enqueue_event (ctx->iw, IN_MOVED_FROM, from_di);
     enqueue_event (ctx->iw, IN_MOVED_TO, to_di);
 }
 
 
 static const traverse_cbs cbs = {
-    NULL, /* handle_unchanged */
+    handle_unchanged,
     handle_added,
     handle_removed,
     handle_replaced,

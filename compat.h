@@ -34,6 +34,7 @@
 #include <sys/tree.h>  /* RB tree macroses */
 #endif
 
+#include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>
 #endif /* BUILD_LIBRARY */
@@ -45,6 +46,10 @@
 #endif
 #ifndef O_EVTONLY
 #define O_EVTONLY O_RDONLY
+#endif
+
+#ifndef DTTOIF
+#define DTTOIF(dirtype) ((dirtype) << 12)
 #endif
 
 #ifndef SLIST_FOREACH_SAFE
@@ -91,12 +96,18 @@ void pthread_barrier_destroy (pthread_barrier_t *impl);
 #ifndef AT_FDCWD
 #define AT_FDCWD		-100
 #endif
+#ifndef AT_SYMLINK_NOFOLLOW
+#define AT_SYMLINK_NOFOLLOW	0x200 /* Do not follow symbolic links */
+#endif
 
 #ifndef HAVE_OPENAT
 int openat (int fd, const char *path, int flags, ...);
 #endif
 #ifndef HAVE_FDOPENDIR
 DIR *fdopendir (int fd);
+#endif
+#ifndef HAVE_FSTATAT
+int fstatat (int fd, const char *path, struct stat *buf, int flag);
 #endif
 #endif /* BUILD_LIBRARY */
 

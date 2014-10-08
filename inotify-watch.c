@@ -170,21 +170,24 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
 
     watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL) {
+        di->type = w->flags & WF_ISDIR ? S_IFDIR : S_IFREG;
         goto hold;
     }
 
     int fd = watch_open (iw->wd, di->path, IN_DONT_FOLLOW);
     if (fd == -1) {
         perror_msg ("Failed to open file %s", di->path);
-        return NULL;
+        goto lstat;
     }
 
     struct stat st;
     if (fstat (fd, &st) == -1) {
         perror_msg ("Failed to stat subwatch %s", di->path);
         close (fd);
-        return NULL;
+        goto lstat;
     }
+
+    di->type = st.st_mode & S_IFMT;
 
     /* Correct inode number if opened file is not a listed one */
     if (di->inode != st.st_ino) {
@@ -214,6 +217,16 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
 hold:
     ++w->refcount;
     return w;
+
+lstat:
+    if (S_ISUNK (di->type)) {
+        if (fstatat (iw->wd, di->path, &st, AT_SYMLINK_NOFOLLOW) != -1) {
+            di->type = st.st_mode & S_IFMT;
+        } else {
+            perror_msg ("Failed to lstat subwatch %s", di->path);
+        }
+    }
+    return NULL;
 }
 
 /**
@@ -267,25 +280,4 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
                                              w->flags & WF_ISSUBWATCH);
         watch_register_event (w, fflags);
     }
-}
-
-/**
- * Check if a file under given path is/was a directory. Use worker's
- * cached data (watches) to query file type (this function is called
- * when something happens in a watched directory, so we SHOULD have
- * a watch for its contents
- *
- * @param[in] iw  A inotify watch for which a change has been triggered.
- * @param[in] di  A dependency list item
- *
- * @return 1 if dir (cached), 0 otherwise.
- **/
-int
-iwatch_subwatch_is_dir (i_watch *iw, const dep_item *di)
-{
-    watch *w = watch_set_find (&iw->watches, di->inode);
-    if (w != NULL && w->flags & WF_ISDIR) {
-            return 1;
-    }
-    return 0;
 }
