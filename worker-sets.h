@@ -37,7 +37,7 @@ typedef struct worker_sets {
 
 int  worker_sets_init   (worker_sets *ws);
 void worker_sets_free   (worker_sets *ws);
-void worker_sets_delete (worker_sets *ws, size_t index);
+void worker_sets_delete (worker_sets *ws, watch *w);
 int  worker_sets_insert (worker_sets *ws, watch *w);
 watch *worker_sets_find (worker_sets *ws, ino_t inode);
 

@@ -220,14 +220,7 @@ iwatch_del_subwatch (i_watch *iw, const dep_item *di)
         --w->refcount;
 
         if (w->refcount == 0) {
-            size_t i;
-
-            for (i = 0; i < iw->watches.length; i++) {
-                if (w == iw->watches.watches[i]) {
-                    worker_sets_delete (&iw->watches, i);
-                    break;
-                }
-            }
+            worker_sets_delete (&iw->watches, w);
         }
     }
 }

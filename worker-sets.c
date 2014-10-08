@@ -116,17 +116,28 @@ worker_sets_free (worker_sets *ws)
 /**
  * Remove a watch from worker sets.
  *
- * @param[in] ws    A pointer to the worker sets.
- * @param[in] index A array index of watch to remove.
+ * @param[in] ws A pointer to the worker sets.
+ * @param[in] w  A pointer to watch to remove.
  **/
 void
-worker_sets_delete (worker_sets *ws, size_t index)
+worker_sets_delete (worker_sets *ws, watch *w)
 {
     assert (ws != NULL);
-    assert (index < ws->length);
+    assert (w != NULL);
+
+    size_t i, index = ws->length;
+
+    for (i = 0; i < ws->length; i++) {
+        if (w == ws->watches[i]) {
+            index = i;
+            break;
+        }
+    }
+
+    assert (index != ws->length);
 
     /*  remove the watch itself */
-    watch_free (ws->watches[index]);
+    watch_free (w);
 
     memmove(&ws->watches[index],
             &ws->watches[index+1],
