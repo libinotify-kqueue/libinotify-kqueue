@@ -25,6 +25,8 @@
 
 #include "compat.h"
 
+#include <stdint.h>
+
 typedef struct i_watch i_watch;
 
 #include "dep-list.h"
@@ -38,5 +40,15 @@ struct i_watch {
     worker_sets watches;       /* kqueue watches of inotify watch */
     SLIST_ENTRY(i_watch) next; /* pointer to the next inotify watch in list */
 };
+
+i_watch *iwatch_init (worker *wrk, const char *path, uint32_t flags);
+void     iwatch_free (i_watch *iw);
+
+void     iwatch_update_flags    (i_watch *iw, uint32_t flags);
+
+watch*   iwatch_add_subwatch    (i_watch *iw, const dep_item *di);
+void     iwatch_del_subwatch    (i_watch *iw, const dep_item *di);
+void     iwatch_rename_subwatch (i_watch *iw, dep_item *from, dep_item *to);
+int      iwatch_subwatch_is_dir (i_watch *iw, const dep_item *di);
 
 #endif /* __INOTIFY_WATCH_H__ */

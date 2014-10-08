@@ -105,29 +105,6 @@ flush_events (worker *wrk)
 }
 
 /**
- * Check if a file under given path is/was a directory. Use worker's
- * cached data (watches) to query file type (this function is called
- * when something happens in a watched directory, so we SHOULD have
- * a watch for its contents
- *
- * @param[in] iw  A inotify watch for which a change has been triggered.
- * @param[in] di  A dependency list item
- *
- * @return 1 if dir (cached), 0 otherwise.
- **/
-static int
-check_is_dir_cached (i_watch *iw, const dep_item *di)
-{
-    int i;
-    for (i = 0; i < iw->watches.length; i++) {
-        const watch *w = iw->watches.watches[i];
-        if (w != NULL && strcmp (di->path, w->filename) == 0 && w->is_really_dir)
-            return 1;
-    }
-    return 0;
-}
-
-/**
  * Process a worker command.
  *
  * @param[in] wrk A pointer to #worker.
@@ -184,7 +161,7 @@ handle_added (void *udata, dep_item *di)
     assert (ctx->iw != NULL);
 
     int addMask = 0;
-    watch *neww = worker_add_subwatch (ctx->iw, di);
+    watch *neww = iwatch_add_subwatch (ctx->iw, di);
         if (neww == NULL) {
             perror_msg ("Failed to start watching on a new dependency %s", di->path);
         } else {
@@ -213,9 +190,9 @@ handle_removed (void *udata, dep_item *di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
-    int addMask = check_is_dir_cached (ctx->iw, di) ? IN_ISDIR : 0;
+    int addMask = iwatch_subwatch_is_dir (ctx->iw, di) ? IN_ISDIR : 0;
     enqueue_event (ctx->iw, IN_DELETE | addMask, 0, di->path);
-    worker_remove_watch (ctx->iw, di);
+    iwatch_del_subwatch (ctx->iw, di);
 }
 
 /**
@@ -237,7 +214,7 @@ handle_replaced (void *udata, dep_item *di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
-    worker_remove_watch (ctx->iw, di);
+    iwatch_del_subwatch (ctx->iw, di);
 }
 
 /**
@@ -278,12 +255,12 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
-    int addMask = check_is_dir_cached (ctx->iw, from_di) ? IN_ISDIR : 0;
+    int addMask = iwatch_subwatch_is_dir (ctx->iw, from_di) ? IN_ISDIR : 0;
     uint32_t cookie = from_di->inode & 0x00000000FFFFFFFF;
 
     enqueue_event (ctx->iw, IN_MOVED_FROM | addMask, cookie, from_di->path);
     enqueue_event (ctx->iw, IN_MOVED_TO | addMask, cookie, to_di->path);
-    worker_rename_watch (ctx->iw, from_di, to_di);
+    iwatch_rename_subwatch (ctx->iw, from_di, to_di);
 }
 
 
@@ -327,7 +304,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     handle_context ctx;
     memset (&ctx, 0, sizeof (ctx));
     ctx.iw = iw;
-    
+
     if (dl_calculate (was, now, &cbs, &ctx) == -1) {
         iw->deps = was;
         dl_free (now);

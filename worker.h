@@ -89,12 +89,7 @@ struct worker {
 worker* worker_create         ();
 void    worker_free           (worker *wrk);
 
-watch*  worker_add_subwatch   (i_watch *iw, dep_item *di);
-
 int     worker_add_or_modify  (worker *wrk, const char *path, uint32_t flags);
 int     worker_remove         (worker *wrk, int id);
-
-void    worker_remove_watch   (i_watch *iw, const dep_item* item);
-void    worker_rename_watch   (i_watch *iw, dep_item *from, dep_item *to);
 
 #endif /* __WORKER_H__ */
