@@ -92,6 +92,7 @@ iwatch_init (worker     *wrk,
     iw->deps = deps;
     iw->wrk = wrk;
     iw->wd = fd;
+    iw->flags = flags;
 
     if (worker_sets_init (&iw->watches) == -1) {
         if (S_ISDIR (st.st_mode)) {
@@ -102,7 +103,7 @@ iwatch_init (worker     *wrk,
         return NULL;
     }
 
-    watch *parent = watch_init (WATCH_USER, iw->wrk->kq, path, fd, flags);
+    watch *parent = watch_init (WATCH_USER, iw->wrk->kq, path, fd, iw->flags);
     if (parent == NULL) {
         worker_sets_free (&iw->watches);
         if (S_ISDIR (st.st_mode)) {
@@ -178,7 +179,7 @@ iwatch_add_subwatch (i_watch *iw, const dep_item *di)
                            iw->wrk->kq,
                            di->path,
                            fd,
-                           iw->watches.watches[0]->flags);
+                           iw->flags);
     if (w == NULL) {
         close (fd);
         return NULL;
@@ -231,10 +232,11 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
 {
     assert (iw != NULL);
 
+    iw->flags = flags;
+
     size_t i;
     for (i = 0; i < iw->watches.length; i++) {
         watch *w = iw->watches.watches[i];
-        w->flags = flags;
         uint32_t fflags = inotify_to_kqueue (flags,
                                              w->is_really_dir,
                                              w->type != WATCH_USER);

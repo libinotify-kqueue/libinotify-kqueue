@@ -37,8 +37,6 @@ typedef struct watch {
     int is_directory;         /* legacy. 1 if directory IF AND ONLY IF it is a
                                * USER watch. 0 otherwise. TODO: rename this field */
     int is_really_dir;        /* a flag, a directory or not. */
-
-    uint32_t flags;           /* flags in the inotify format */
     char *filename;           /* file name of a watched file
                                * NB: an entry file name for dependencies! */
     int fd;                   /* file descriptor of a watched entry */
