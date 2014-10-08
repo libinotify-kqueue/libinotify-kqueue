@@ -200,11 +200,7 @@ handle_added (void *udata, dep_item *di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
-    watch *neww = iwatch_add_subwatch (ctx->iw, di);
-    if (neww == NULL) {
-        perror_msg ("Failed to start watching on a new dependency %s", di->path);
-    }
-
+    iwatch_add_subwatch (ctx->iw, di);
     enqueue_event (ctx->iw, IN_CREATE, di);
 }
 

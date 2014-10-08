@@ -123,11 +123,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
 
         dep_node *iter;
         SLIST_FOREACH (iter, &iw->deps->head, next) {
-            watch *neww = iwatch_add_subwatch (iw, iter->item);
-            if (neww == NULL) {
-                perror_msg ("Failed to start watching a dependency %s",
-                            iter->item->path);
-            }
+            iwatch_add_subwatch (iw, iter->item);
         }
     }
     return iw;
@@ -172,6 +168,12 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
     if (w != NULL) {
         di->type = w->flags & WF_ISDIR ? S_IFDIR : S_IFREG;
         goto hold;
+    }
+
+    /* Don`t open a watches with empty kqueue filter flags */
+    if (!S_ISUNK (di->type)
+      && inotify_to_kqueue (iw->flags, S_ISDIR (di->type), 1) == 0) {
+        return NULL;
     }
 
     int fd = watch_open (iw->wd, di->path, IN_DONT_FOLLOW);
@@ -273,11 +275,35 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
 
     iw->flags = flags;
 
-    watch *w;
-    RB_FOREACH (w, watch_set, &iw->watches) {
+    watch *w, *tmpw;
+    /* update kwatches or close those we dont need to watch */
+    RB_FOREACH_SAFE (w, watch_set, &iw->watches, tmpw) {
         uint32_t fflags = inotify_to_kqueue (flags,
                                              w->flags & WF_ISDIR,
                                              w->flags & WF_ISSUBWATCH);
-        watch_register_event (w, fflags);
+        if (fflags == 0) {
+            watch_set_delete (&iw->watches, w);
+        } else {
+            watch_register_event (w, fflags);
+        }
+    }
+
+    if (iw->deps != NULL) {
+        /* create list of unwatched subfiles */
+        dep_list *dl = dl_shallow_copy (iw->deps);
+        dep_node *iter, *tmpdn, *prev = NULL;
+        SLIST_FOREACH_SAFE (iter, &iw->deps->head, next, tmpdn) {
+            if (watch_set_find (&iw->watches, iter->item->inode)) {
+                dl_remove_after (dl, prev);
+            } else {
+                prev = iter;
+            }
+        }
+
+        /* And finally try to watch that list */
+        SLIST_FOREACH (iter, &dl->head, next) {
+            iwatch_add_subwatch (iw, iter->item);
+        }
+        dl_shallow_free (dl);
     }
 }

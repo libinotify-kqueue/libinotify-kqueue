@@ -146,6 +146,14 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
     assert (iw != NULL);
     assert (fd != -1);
 
+    uint32_t fflags = inotify_to_kqueue (iw->flags,
+                                         S_ISDIR (st->st_mode),
+                                         watch_type == WATCH_DEPENDENCY);
+    /* Skip watches with empty kqueue filter flags */
+    if (fflags == 0) {
+        return NULL;
+    }
+
     watch *w = calloc (1, sizeof (struct watch));
     if (w == NULL) {
         perror_msg ("Failed to allocate watch");
@@ -161,9 +169,6 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
      * differs from readdir`s one at mount points. */
     w->inode = st->st_ino;
 
-    uint32_t fflags = inotify_to_kqueue (iw->flags,
-                                         w->flags & WF_ISDIR,
-                                         w->flags & WF_ISSUBWATCH);
     if (watch_register_event (w, fflags) == -1) {
         free (w);
         return NULL;
