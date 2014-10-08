@@ -91,6 +91,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
     iw->flags = flags;
     iw->inode = st.st_ino;
     iw->dev = st.st_dev;
+    iw->is_closed = 0;
 
     watch_set_init (&iw->watches);
 
@@ -155,6 +156,10 @@ iwatch_add_subwatch (i_watch *iw, const dep_item *di)
     assert (iw != NULL);
     assert (iw->deps != NULL);
     assert (di != NULL);
+
+    if (iw->is_closed) {
+        return NULL;
+    }
 
     watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL) {

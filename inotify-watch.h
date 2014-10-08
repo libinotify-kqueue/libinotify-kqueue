@@ -37,6 +37,7 @@ typedef struct i_watch i_watch;
 struct i_watch {
     int wd;                    /* watch descriptor */
     worker *wrk;               /* pointer to a parent worker structure */
+    int is_closed;             /* inotify watch is stopped but not freed yet */
     uint32_t flags;            /* flags in the inotify format */
     ino_t inode;               /* inode number of watched inode */
     dev_t dev;                 /* device number of watched inode */

@@ -56,8 +56,12 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
     assert (wrk != NULL);
 
     mask &= (~IN_ALL_EVENTS | iw->flags);
-    if (!mask) {
+    if (!((mask & IN_ALL_EVENTS && !iw->is_closed) || mask & ~IN_ALL_EVENTS)) {
         return 0;
+    }
+
+    if (iw->flags & IN_ONESHOT) {
+        iw->is_closed = 1;
     }
 
     if (wrk->iovcnt >= wrk->iovalloc) {
@@ -355,7 +359,7 @@ produce_notifications (worker *wrk, struct kevent *event)
                        NULL);
 
         if (flags & NOTE_DELETE) {
-            worker_remove (wrk, iw->wd);
+            iw->is_closed = 1;
         }
     } else {
         uint32_t i_flags = kqueue_to_inotify (flags,
@@ -371,6 +375,10 @@ produce_notifications (worker *wrk, struct kevent *event)
         }
     }
     flush_events (wrk);
+
+    if (iw->is_closed) {
+        worker_remove (wrk, iw->wd);
+    }
 }
 
 /**

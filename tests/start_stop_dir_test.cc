@@ -180,6 +180,35 @@ void start_stop_dir_test::run ()
             "receive only a single event from a file watch",
             contains (received, event ("", child_wid, IN_ATTRIB)));
 
+    /* IN_ONESHOT flag tests */
+    cons.input.setup ("ssdt-working", IN_CREATE | IN_DELETE | IN_ONESHOT);
+    cons.output.wait ();
+    wid = cons.output.added_watch_id ();
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("touch ssdt-working/4");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_CREATE for ssdt_working on touch",
+            contains (received, event ("4", wid, IN_CREATE)));
+    should ("receive IN_IGNORED after one event have been received "
+            "if watch was opened with IN_ONESHOT flag set",
+            contains (received, event ("", wid, IN_IGNORED)));
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("rm ssdt-working/4");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("Stop receiving events after one event have been received "
+            "if watch was opened with IN_ONESHOT flag set",
+            !contains (received, event ("4", wid, IN_DELETE)));
+
     cons.input.interrupt ();
 }
 
