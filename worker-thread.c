@@ -43,21 +43,22 @@ static void handle_moved (void *udata, dep_item *from_di, dep_item *to_di);
 /**
  * Create a new inotify event and place it to event queue.
  *
- * @param[in] iw     A pointer to #i_watch.
- * @param[in] mask   An inotify watch mask.
- * @param[in] cookie Event cookie.
- * @param[in] name   File name (may be NULL).
+ * @param[in] iw   A pointer to #i_watch.
+ * @param[in] mask An inotify watch mask.
+ * @param[in] di   A pointer to dependency item for subfiles (NULL for user).
  * @return 0 on success, -1 otherwise.
  **/
 int
-enqueue_event (i_watch    *iw,
-               uint32_t    mask,
-               uint32_t    cookie,
-               const char *name)
+enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
 {
     assert (iw != NULL);
     worker *wrk = iw->wrk;
     assert (wrk != NULL);
+
+    mask &= (~IN_ALL_EVENTS | iw->flags);
+    if (!mask) {
+        return 0;
+    }
 
     if (wrk->iovcnt >= wrk->iovalloc) {
         int to_allocate = wrk->iovcnt + 1;
@@ -68,6 +69,20 @@ enqueue_event (i_watch    *iw,
         }
         wrk->iov = ptr;
         wrk->iovalloc = to_allocate;
+    }
+
+    const char *name = NULL;
+    uint32_t cookie = 0;
+    if (di != NULL) {
+        name = di->path;
+        if (mask & IN_MOVE) {
+            cookie = di->inode & 0x00000000FFFFFFFF;
+        }
+        if (mask & (IN_CREATE | IN_DELETE | IN_MOVE)) {
+            if (iwatch_subwatch_is_dir (iw, di)) {
+                mask |= IN_ISDIR;
+            }
+        }
     }
 
     wrk->iov[wrk->iovcnt].iov_base = create_inotify_event (iw->wd, mask,
@@ -164,8 +179,7 @@ handle_added (void *udata, dep_item *di)
         perror_msg ("Failed to start watching on a new dependency %s", di->path);
     }
 
-    int addMask = iwatch_subwatch_is_dir (ctx->iw, di) ? IN_ISDIR : 0;
-    enqueue_event (ctx->iw, IN_CREATE | addMask, 0, di->path);
+    enqueue_event (ctx->iw, IN_CREATE, di);
 }
 
 /**
@@ -185,8 +199,7 @@ handle_removed (void *udata, dep_item *di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
-    int addMask = iwatch_subwatch_is_dir (ctx->iw, di) ? IN_ISDIR : 0;
-    enqueue_event (ctx->iw, IN_DELETE | addMask, 0, di->path);
+    enqueue_event (ctx->iw, IN_DELETE, di);
     iwatch_del_subwatch (ctx->iw, di);
 }
 
@@ -250,11 +263,8 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
-    int addMask = iwatch_subwatch_is_dir (ctx->iw, from_di) ? IN_ISDIR : 0;
-    uint32_t cookie = from_di->inode & 0x00000000FFFFFFFF;
-
-    enqueue_event (ctx->iw, IN_MOVED_FROM | addMask, cookie, from_di->path);
-    enqueue_event (ctx->iw, IN_MOVED_TO | addMask, cookie, to_di->path);
+    enqueue_event (ctx->iw, IN_MOVED_FROM, from_di);
+    enqueue_event (ctx->iw, IN_MOVED_TO, to_di);
 }
 
 
@@ -336,34 +346,27 @@ produce_notifications (worker *wrk, struct kevent *event)
 
         if (flags & NOTE_WRITE && w->flags & WF_ISDIR) {
             produce_directory_diff (iw, event);
-            flags &= ~(NOTE_WRITE | NOTE_EXTEND | NOTE_LINK);
         }
 
-        if (flags) {
-            enqueue_event (iw,
-                           kqueue_to_inotify (flags,
-                                              w->flags & WF_ISDIR,
-                                              w->flags & WF_ISSUBWATCH),
-                           0,
-                           NULL);
-        }
+        enqueue_event (iw,
+                       kqueue_to_inotify (flags,
+                                          w->flags & WF_ISDIR,
+                                          w->flags & WF_ISSUBWATCH),
+                       NULL);
 
         if (flags & NOTE_DELETE) {
             worker_remove (wrk, iw->wd);
         }
     } else {
-        /* for dependency events, ignore some notifications */
-        if (flags & (NOTE_ATTRIB | NOTE_LINK | NOTE_WRITE)) {
-            uint32_t i_flags = kqueue_to_inotify (flags,
-                                                  w->flags & WF_ISDIR,
-                                                  w->flags & WF_ISSUBWATCH);
-            dep_node *iter = NULL;
-            SLIST_FOREACH (iter, &iw->deps->head, next) {
-                dep_item *di = iter->item;
+        uint32_t i_flags = kqueue_to_inotify (flags,
+                                              w->flags & WF_ISDIR,
+                                              w->flags & WF_ISSUBWATCH);
+        dep_node *iter = NULL;
+        SLIST_FOREACH (iter, &iw->deps->head, next) {
+            dep_item *di = iter->item;
 
-                if (di->inode == w->inode) {
-                    enqueue_event (iw, i_flags, 0, di->path);
-                }
+            if (di->inode == w->inode) {
+                enqueue_event (iw, i_flags, di);
             }
         }
     }
