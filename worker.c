@@ -286,7 +286,7 @@ worker_add_or_modify (worker     *wrk,
             const char *evpath = iw->watches.watches[i]->filename;
             assert (evpath != NULL);
 
-            if (iw->watches.watches[i]->type == WATCH_USER &&
+            if (!(iw->watches.watches[i]->flags & WF_ISSUBWATCH) &&
                 strcmp (path, evpath) == 0) {
                 iwatch_update_flags (iw, flags);
                 return iw->wd;

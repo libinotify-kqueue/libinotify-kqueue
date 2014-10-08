@@ -339,20 +339,23 @@ found:
 
     uint32_t flags = event->fflags;
 
-    if (w->type == WATCH_USER) {
+    if (!(w->flags & WF_ISSUBWATCH)) {
         /* Treat deletes as link number changes if links still exist */
-        if (flags & NOTE_DELETE && !w->is_really_dir && !is_deleted (w->fd)) {
+        if (flags & NOTE_DELETE && !(w->flags & WF_ISDIR)
+          && !is_deleted (w->fd)) {
             flags = (flags | NOTE_LINK) & ~NOTE_DELETE;
         }
 
-        if (flags & NOTE_WRITE && w->is_directory) {
+        if (flags & NOTE_WRITE && w->flags & WF_ISDIR) {
             produce_directory_diff (iw, event);
             flags &= ~(NOTE_WRITE | NOTE_EXTEND | NOTE_LINK);
         }
 
         if (flags) {
             enqueue_event (iw,
-                           kqueue_to_inotify (flags, w->is_really_dir, 0),
+                           kqueue_to_inotify (flags,
+                                              w->flags & WF_ISDIR,
+                                              w->flags & WF_ISSUBWATCH),
                            0,
                            NULL);
         }
@@ -364,7 +367,9 @@ found:
         /* for dependency events, ignore some notifications */
         if (flags & (NOTE_ATTRIB | NOTE_LINK | NOTE_WRITE)) {
             enqueue_event (iw,
-                           kqueue_to_inotify (flags, w->is_really_dir, 1),
+                           kqueue_to_inotify (flags,
+                                              w->flags & WF_ISDIR,
+                                              w->flags & WF_ISSUBWATCH),
                            0,
                            w->filename);
         }

@@ -26,6 +26,9 @@
 #include <stdint.h>    /* uint32_t */
 #include <dirent.h>    /* ino_t */
 
+#define WF_ISSUBWATCH (1<<0)  /* a type of watch */
+#define WF_ISDIR      (1<<1)  /* watched item is a directory */
+
 typedef enum watch_type {
     WATCH_USER,
     WATCH_DEPENDENCY,
@@ -33,10 +36,7 @@ typedef enum watch_type {
 
 
 typedef struct watch {
-    watch_type_t type;        /* a type of a watch */
-    int is_directory;         /* legacy. 1 if directory IF AND ONLY IF it is a
-                               * USER watch. 0 otherwise. TODO: rename this field */
-    int is_really_dir;        /* a flag, a directory or not. */
+    uint32_t flags;           /* A watch flags. Not in inotify/kqueue format */
     char *filename;           /* file name of a watched file
                                * NB: an entry file name for dependencies! */
     int fd;                   /* file descriptor of a watched entry */

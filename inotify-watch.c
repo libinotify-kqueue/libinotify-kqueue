@@ -238,8 +238,8 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
     for (i = 0; i < iw->watches.length; i++) {
         watch *w = iw->watches.watches[i];
         uint32_t fflags = inotify_to_kqueue (flags,
-                                             w->is_really_dir,
-                                             w->type != WATCH_USER);
+                                             w->flags & WF_ISDIR,
+                                             w->flags & WF_ISSUBWATCH);
         watch_register_event (w, iw->wrk->kq, fflags);
     }
 }
@@ -283,7 +283,7 @@ int
 iwatch_subwatch_is_dir (i_watch *iw, const dep_item *di)
 {
     watch *w = worker_sets_find (&iw->watches, di);
-    if (w != NULL && w->is_really_dir) {
+    if (w != NULL && w->flags & WF_ISDIR) {
             return 1;
     }
     return 0;

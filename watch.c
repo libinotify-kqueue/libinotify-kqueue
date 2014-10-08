@@ -158,16 +158,16 @@ watch_init (watch_type_t   watch_type,
     }
 
     w->fd = fd;
-    w->type = watch_type;
+    w->flags = watch_type != WATCH_USER ? WF_ISSUBWATCH : 0;
     w->filename = strdup (path);
 
     int is_dir = 0;
     _file_information (w->fd, &is_dir, &w->inode);
-    w->is_really_dir = is_dir;
-    w->is_directory = (watch_type == WATCH_USER ? is_dir : 0);
+    w->flags |= is_dir ? WF_ISDIR : 0;
 
-    int is_subwatch = watch_type != WATCH_USER;
-    uint32_t fflags = inotify_to_kqueue (flags, w->is_really_dir, is_subwatch);
+    uint32_t fflags = inotify_to_kqueue (flags,
+                                         w->flags & WF_ISDIR,
+                                         w->flags & WF_ISSUBWATCH);
     if (watch_register_event (w, kq, fflags) == -1) {
         free (w);
         return NULL;
