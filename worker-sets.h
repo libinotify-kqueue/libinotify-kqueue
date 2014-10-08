@@ -23,23 +23,22 @@
 #ifndef __WORKER_SETS_H__
 #define __WORKER_SETS_H__
 
-#include <stdint.h>
+#include "compat.h"
+
 #include <sys/types.h> /* size_t */
 #include <sys/stat.h>  /* ino_t */
 
-typedef struct worker_sets {
-    struct watch **watches;   /* appropriate watches with additional info */
-    size_t length;            /* size of active entries */
-    size_t allocated;         /* size of allocated entries */
-} worker_sets;
+typedef RB_HEAD(worker_sets, watch) worker_sets;
 
 #include "watch.h"
 
-int  worker_sets_init   (worker_sets *ws);
+void worker_sets_init   (worker_sets *ws);
 void worker_sets_free   (worker_sets *ws);
 void worker_sets_delete (worker_sets *ws, watch *w);
-int  worker_sets_insert (worker_sets *ws, watch *w);
+void worker_sets_insert (worker_sets *ws, watch *w);
 watch *worker_sets_find (worker_sets *ws, ino_t inode);
+
+RB_PROTOTYPE(worker_sets, watch, link, watch_cmp);
 
 
 #endif /* __WORKER_SETS_H__ */

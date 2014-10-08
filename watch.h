@@ -23,6 +23,8 @@
 #ifndef __WATCH_H__
 #define __WATCH_H__
 
+#include "compat.h"
+
 #include <stdint.h>    /* uint32_t */
 #include <dirent.h>    /* ino_t */
 
@@ -46,6 +48,7 @@ struct watch {
                                * to that watch */ 
     int fd;                   /* file descriptor of a watched entry */
     ino_t inode;              /* inode number for the watched entry */
+    RB_ENTRY(watch) link;     /* RB tree links */
 };
 
 int    watch_open (int dirfd, const char *path, uint32_t flags);

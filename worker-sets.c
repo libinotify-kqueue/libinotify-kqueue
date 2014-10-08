@@ -20,75 +20,27 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include "compat.h"
+
 #include <assert.h>
-#include <stdlib.h> /* realloc */
-#include <string.h> /* memset */
 #include <stddef.h> /* NULL */
-#include <fcntl.h>  /* open, fstat */
-#include <dirent.h> /* opendir, readdir, closedir */
 #include <sys/types.h>
 #include <sys/stat.h>  /* ino_t */
-#include <sys/event.h>
 
-#include "sys/inotify.h"
-
-#include "utils.h"
+#include "watch.h"
 #include "worker-sets.h"
-
-
-#define WS_RESERVED 10
-
-static int worker_sets_extend (worker_sets *ws, int count);
 
 /**
  * Initialize the worker sets.
  *
  * @param[in] ws A pointer to the worker sets.
- * @return 0 on success, -1 on failure.
  **/
-int
+void
 worker_sets_init (worker_sets *ws)
 {
     assert (ws != NULL);
 
-    memset (ws, 0, sizeof (worker_sets));
-    if (worker_sets_extend (ws, 1) == -1) {
-        perror_msg ("Failed to initialize worker sets");
-        return -1;
-    }
-
-    ws->length = 0;
-    return 0;
-}
-
-/**
- * Extend the memory allocated for the worker sets.
- *
- * @param[in] ws    A pointer to the worker sets.
- * @param[in] count The number of items to grow.
- * @return 0 on success, -1 on error.
- **/
-static int
-worker_sets_extend (worker_sets *ws,
-                    int          count)
-{
-    assert (ws != NULL);
-
-    if (ws->length + count > ws->allocated) {
-        long to_allocate = ws->allocated + count + WS_RESERVED;
-
-        void *ptr = NULL;
-        ptr = realloc (ws->watches, sizeof (struct watch *) * to_allocate);
-        if (ptr == NULL) {
-            perror_msg ("Failed to extend watches memory in the worker sets "
-                        "to %d items",
-                        to_allocate);
-            return -1;
-        }
-        ws->watches = ptr;
-        ws->allocated = to_allocate;
-    }
-    return 0;
+    RB_INIT (ws);
 }
 
 /**
@@ -100,17 +52,12 @@ void
 worker_sets_free (worker_sets *ws)
 {
     assert (ws != NULL);
-    assert (ws->watches != NULL);
 
-    size_t i;
-    for (i = 0; i < ws->length; i++) {
-        if (ws->watches[i] != NULL) {
-            watch_free (ws->watches[i]);
-        }
+    watch *w, *tmp;
+
+    RB_FOREACH_SAFE (w, worker_sets, ws, tmp) {
+        worker_sets_delete (ws, w);
     }
-
-    free (ws->watches);
-    memset (ws, 0, sizeof (worker_sets));
 }
 
 /**
@@ -125,26 +72,8 @@ worker_sets_delete (worker_sets *ws, watch *w)
     assert (ws != NULL);
     assert (w != NULL);
 
-    size_t i, index = ws->length;
-
-    for (i = 0; i < ws->length; i++) {
-        if (w == ws->watches[i]) {
-            index = i;
-            break;
-        }
-    }
-
-    assert (index != ws->length);
-
-    /*  remove the watch itself */
+    RB_REMOVE (worker_sets, ws, w);
     watch_free (w);
-
-    memmove(&ws->watches[index],
-            &ws->watches[index+1],
-            sizeof (watch *) * (ws->length - index - 1));
-
-    --ws->length;
-    ws->watches[ws->length] = NULL;
 }
 
 /**
@@ -152,23 +81,14 @@ worker_sets_delete (worker_sets *ws, watch *w)
  *
  * @param[in] ws A pointer to #worker_sets.
  * @param[in] w  A pointer to inserted watch.
- * @return 0 on success, -1 on error.
  **/
-int
+void
 worker_sets_insert (worker_sets *ws, watch *w)
 {
     assert (ws != NULL);
     assert (w != NULL);
 
-    if (worker_sets_extend (ws, 1) == -1) {
-        perror_msg ("Failed to extend worker sets");
-        return -1;
-    }
-
-    ws->watches[ws->length] = w;
-    ++ws->length;
-
-    return 0;
+    RB_INSERT (worker_sets, ws, w);
 }
 
 /**
@@ -183,15 +103,22 @@ worker_sets_find (worker_sets *ws, ino_t inode)
 {
     assert (ws != NULL);
 
-    size_t i;
-
-    for (i = 0; i < ws->length; i++) {
-
-        watch *w = ws->watches[i];
-        if (inode == w->inode) {
-            return w;
-        }
-    }
-
-    return NULL;
+    watch find = { .inode = inode };
+    return RB_FIND (worker_sets, ws, &find);
 }
+/**
+ * Custom comparison function that can compare kqueue watch inode values
+ * through pointers passed by RB tree functions
+ *
+ * @param[in] w1 A pointer to a first kqueue watch to compare
+ * @param[in] w2 A pointer to a second kqueue watch to compare
+ * @return An -1, 0, or +1 if the first watch is considered to be respectively
+ * less than, equal to, or greater than the second one.
+ **/
+static int
+worker_sets_cmp (watch *w1, watch *w2)
+{
+    return ((w1->inode > w2->inode) - (w1->inode < w2->inode));
+}
+
+RB_GENERATE(worker_sets, watch, link, worker_sets_cmp);

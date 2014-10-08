@@ -103,17 +103,10 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
     iw->inode = st.st_ino;
     iw->dev = st.st_dev;
 
-    if (worker_sets_init (&iw->watches) == -1) {
-        if (S_ISDIR (st.st_mode)) {
-            dl_free (deps);
-        }
-        free (iw);
-        return NULL;
-    }
+    worker_sets_init (&iw->watches);
 
     watch *parent = watch_init (iw, WATCH_USER, fd);
     if (parent == NULL) {
-        worker_sets_free (&iw->watches);
         if (S_ISDIR (st.st_mode)) {
             dl_free (deps);
         }
@@ -121,14 +114,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
         return NULL;
     }
 
-    if (worker_sets_insert (&iw->watches, parent)) {
-        if (S_ISDIR (st.st_mode)) {
-            dl_free (deps);
-        }
-        watch_free (parent);
-        free (iw);
-        return NULL;
-    }
+    worker_sets_insert (&iw->watches, parent);
 
     if (S_ISDIR (st.st_mode)) {
 
@@ -192,10 +178,7 @@ iwatch_add_subwatch (i_watch *iw, const dep_item *di)
         return NULL;
     }
 
-    if (worker_sets_insert (&iw->watches, w)) {
-        watch_free (w);
-        return NULL;
-    }
+    worker_sets_insert (&iw->watches, w);
 
 hold:
     ++w->refcount;
@@ -241,9 +224,8 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
 
     iw->flags = flags;
 
-    size_t i;
-    for (i = 0; i < iw->watches.length; i++) {
-        watch *w = iw->watches.watches[i];
+    watch *w;
+    RB_FOREACH (w, worker_sets, &iw->watches) {
         uint32_t fflags = inotify_to_kqueue (flags,
                                              w->flags & WF_ISDIR,
                                              w->flags & WF_ISSUBWATCH);
