@@ -41,10 +41,10 @@
 #include "worker.h"
 
 static void
-worker_remove_many (worker *wrk, watch *parent);
+worker_remove_many (worker *wrk, i_watch *iw);
 
 static void
-worker_update_flags (worker *wrk, watch *w, uint32_t flags);
+worker_update_flags (i_watch *iw, uint32_t flags);
 
 static void
 worker_cmd_reset (worker_cmd *cmd);
@@ -181,9 +181,7 @@ worker_create ()
         goto failure;
     }
 
-    if (worker_sets_init (&wrk->sets) == -1) {
-        goto failure;
-    }
+    SLIST_INIT (&wrk->head);
 
     EV_SET (&ev,
             wrk->io[KQUEUE_FD],
@@ -231,6 +229,7 @@ worker_free (worker *wrk)
     assert (wrk != NULL);
 
     int i;
+    i_watch *iw, *tmp;
 
     close (wrk->io[KQUEUE_FD]);
     wrk->io[KQUEUE_FD] = -1;
@@ -239,7 +238,9 @@ worker_free (worker *wrk)
     wrk->closed = 1;
 
     worker_cmd_release (&wrk->cmd);
-    worker_sets_free (&wrk->sets);
+    SLIST_FOREACH_SAFE (iw, &wrk->head, next, tmp) {
+        worker_remove_many (wrk, iw);
+    }
 
     for (i = 0; i < wrk->iovcnt; i++) {
         free (wrk->iov[i].iov_base);
@@ -252,15 +253,16 @@ worker_free (worker *wrk)
 
 /**
  * When starting watching a directory, start also watching its contents.
+ * Initialize inotify watch.
  *
  * This function creates and initializes additional watches for a directory.
  *
  * @param[in] wrk    A pointer to #worker.
  * @param[in] path   Path to watch.
  * @param[in] flags  A combination of inotify event flags.
- * @return A pointer to a created watch on success NULL otherwise
+ * @return A pointer to a created #i_watch on success NULL otherwise
  **/
-static watch *
+static i_watch *
 worker_add_watch (worker     *wrk,
                   const char *path,
                   uint32_t    flags)
@@ -291,29 +293,53 @@ worker_add_watch (worker     *wrk,
         }
     }
 
-    watch *parent = watch_init (WATCH_USER, wrk->kq, path, fd, flags);
-    if (parent == NULL) {
+    i_watch *iw = calloc (1, sizeof (i_watch));
+    if (iw == NULL) {
+        perror_msg ("Failed to allocate inotify watch");
         if (S_ISDIR (st.st_mode)) {
             dl_free (deps);
         }
         close (fd);
         return NULL;
     }
+    iw->deps = deps;
+    iw->wrk = wrk;
+    iw->wd = fd;
 
-    if (worker_sets_insert (&wrk->sets, parent)) {
+    if (worker_sets_init (&iw->watches) == -1) {
+        if (S_ISDIR (st.st_mode)) {
+            dl_free (deps);
+        }
+        close (fd);
+        free (iw);
+        return NULL;
+    }
+
+    watch *parent = watch_init (WATCH_USER, iw->wrk->kq, path, fd, flags);
+    if (parent == NULL) {
+        worker_sets_free (&iw->watches);
+        if (S_ISDIR (st.st_mode)) {
+            dl_free (deps);
+        }
+        close (fd);
+        free (iw);
+        return NULL;
+    }
+
+    if (worker_sets_insert (&iw->watches, parent)) {
         if (S_ISDIR (st.st_mode)) {
             dl_free (deps);
         }
         watch_free (parent);
+        free (iw);
         return NULL;
     }
 
     if (S_ISDIR (st.st_mode)) {
-        parent->deps = deps;
 
         dep_node *iter;
-        SLIST_FOREACH (iter, &parent->deps->head, next) {
-            watch *neww = worker_add_subwatch (wrk, parent, iter->item);
+        SLIST_FOREACH (iter, &iw->deps->head, next) {
+            watch *neww = worker_add_subwatch (iw, iter->item);
             if (neww == NULL) {
                 perror_msg ("Failed to start watching a dependency %s of %s",
                             iter->item->path,
@@ -321,47 +347,43 @@ worker_add_watch (worker     *wrk,
             }
         }
     }
-    return parent;
+    return iw;
 }
 
 /**
  * Start watching a file or a directory.
  *
- * @param[in] wrk        A pointer to #worker.
- * @param[in] parent     A pointer to the parent #watch, i.e. the watch we add
- *     dependencies for.
+ * @param[in] iw         A pointer to #i_watch.
  * @param[in] di         Dependency item with relative path to watch.
  * @return A pointer to a created watch.
  **/
 watch*
-worker_add_subwatch (worker *wrk, watch *parent, dep_item *di)
+worker_add_subwatch (i_watch *iw, dep_item *di)
 {
-    assert (wrk != NULL);
-    assert (parent != NULL);
+    assert (iw != NULL);
+    assert (iw->deps != NULL);
     assert (di != NULL);
 
-    int fd = watch_open (parent->fd, di->path, IN_DONT_FOLLOW);
+    int fd = watch_open (iw->wd, di->path, IN_DONT_FOLLOW);
     if (fd == -1) {
         perror_msg ("Failed to open file %s", di->path);
         return NULL;
     }
 
     watch *w = watch_init (WATCH_DEPENDENCY,
-                           wrk->kq,
+                           iw->wrk->kq,
                            di->path,
                            fd,
-                           parent->flags);
+                           iw->watches.watches[0]->flags);
     if (w == NULL) {
         close (fd);
         return NULL;
     }
 
-    if (worker_sets_insert (&wrk->sets, w)) {
+    if (worker_sets_insert (&iw->watches, w)) {
         watch_free (w);
         return NULL;
     }
-
-    w->parent = parent;
 
     return w;
 }
@@ -382,25 +404,33 @@ worker_add_or_modify (worker     *wrk,
     assert (path != NULL);
     assert (wrk != NULL);
 
-    worker_sets *sets = &wrk->sets;
-    assert (sets->watches != NULL);
-
     /* look up for an entry with this filename */
-    size_t i = 0;
-    for (i = 0; i < sets->length; i++) {
-        const char *evpath = sets->watches[i]->filename;
-        assert (evpath != NULL);
+    i_watch *iw;
+    SLIST_FOREACH (iw, &wrk->head, next) {
 
-        if (sets->watches[i]->type == WATCH_USER &&
-            strcmp (path, evpath) == 0) {
-            worker_update_flags (wrk, sets->watches[i], flags);
-            return sets->watches[i]->fd;
+        size_t i = 0;
+        for (i = 0; i < iw->watches.length; i++) {
+            const char *evpath = iw->watches.watches[i]->filename;
+            assert (evpath != NULL);
+
+            if (iw->watches.watches[i]->type == WATCH_USER &&
+                strcmp (path, evpath) == 0) {
+                worker_update_flags (iw, flags);
+                return iw->wd;
+            }
         }
     }
 
-    /* add a new entry if path is not found */
-    watch *w = worker_add_watch (wrk, path, flags);
-    return (w != NULL) ? w->fd : -1;
+    /* create a new entry if path is not found */
+    iw = worker_add_watch (wrk, path, flags);
+    if (iw == NULL) {
+        return -1;
+    }
+
+    /* add inotify watch to worker`s watchlist */
+    SLIST_INSERT_HEAD (&wrk->head, iw, next);
+
+    return iw->wd;
 }
 
 /**
@@ -417,13 +447,13 @@ worker_remove (worker *wrk,
     assert (wrk != NULL);
     assert (id != -1);
 
-    size_t i;
-    for (i = 0; i < wrk->sets.length; i++) {
-        if (wrk->sets.watches[i]->fd == id) {
-            worker_remove_many (wrk, wrk->sets.watches[i]);
+    i_watch *iw;
+    SLIST_FOREACH (iw, &wrk->head, next) {
 
-            enqueue_event (wrk, id, IN_IGNORED, 0, NULL);
+        if (iw->wd == id) {
+            enqueue_event (iw, IN_IGNORED, 0, NULL);
             flush_events (wrk);
+            worker_remove_many (wrk, iw);
             break;
         }
     }
@@ -433,91 +463,70 @@ worker_remove (worker *wrk,
 
 
 /**
- * Update watch flags.
+ * Update inotify watch flags.
  *
  * When called for a directory watch, update also the flags of all the
  * dependent (child) watches.
  *
- * @param[in] wrk   A pointer to #worker.
- * @param[in] w     A pointer to #watch.
+ * @param[in] iw    A pointer to #i_watch.
  * @param[in] flags A combination of the inotify watch flags.
  **/
 static void
-worker_update_flags (worker *wrk, watch *w, uint32_t flags)
+worker_update_flags (i_watch *iw, uint32_t flags)
 {
-    assert (w != NULL);
+    assert (iw != NULL);
 
-    w->flags = flags;
-    uint32_t fflags = inotify_to_kqueue (flags, w->is_really_dir, 0);
-    watch_register_event (w, wrk->kq, fflags);
-
-    /* Propagate the flag changes also on all dependent watches */
-    if (w->deps) {
-
-        /* Yes, it is quite stupid to iterate over ALL watches of a worker
-         * while we have a linked list of its dependencies.
-         * TODO improve it */
-        size_t i;
-        for (i = 0; i < wrk->sets.length; i++) {
-            watch *depw = wrk->sets.watches[i];
-            if (depw->parent == w) {
-                depw->flags = flags;
-                uint32_t fflags = inotify_to_kqueue (flags,
-                                                     depw->is_really_dir,
-                                                     1);
-                watch_register_event (depw, wrk->kq, fflags);
-            }
-        }
+    size_t i;
+    for (i = 0; i < iw->watches.length; i++) {
+        watch *w = iw->watches.watches[i];
+        w->flags = flags;
+        uint32_t fflags = inotify_to_kqueue (flags,
+                                             w->is_really_dir,
+                                             w->type != WATCH_USER);
+        watch_register_event (w, iw->wrk->kq, fflags);
     }
 }
 
 /**
- * Remove parent watch with its subwatches.
+ * Remove an inotify watch.
  *
  * @param[in] wrk     A pointer to #worker.
- * @param[in] parent  A pointer to the parent #watch.
+ * @param[in] iw      A pointer to #i_watch to remove.
  **/
 static void
-worker_remove_many (worker *wrk, watch *parent)
+worker_remove_many (worker *wrk, i_watch *iw)
 {
     assert (wrk != NULL);
-    assert (parent != NULL);
+    assert (iw != NULL);
 
-    size_t i;
-
-    if (parent->deps != NULL) {
-        dl_free (parent->deps);
+    SLIST_REMOVE (&wrk->head, iw, i_watch, next);
+    worker_sets_free (&iw->watches);
+    if (iw->deps != NULL) {
+        dl_free (iw->deps);
     }
-
-    for (i = wrk->sets.length; i > 0; i--) {
-        if (wrk->sets.watches[i-1]->parent == parent
-         || wrk->sets.watches[i-1] == parent) {
-            worker_sets_delete (&wrk->sets, i-1);
-        }
-    }
+    free (iw);
 }
 
 /**
  * Remove a watch from worker by its path.
  *
- * @param[in] wrk     A pointer to #worker.
- * @param[in] parent  A pointer to the parent #watch.
- * @param[in] item    A watch to remove. Must be child of the specified parent.
+ * @param[in] iw      A pointer to the #i_watch.
+ * @param[in] item    A dependency list item to remove watch.
  **/
 void
-worker_remove_watch (worker *wrk, watch *parent, const dep_item *item)
+worker_remove_watch (i_watch *iw, const dep_item *item)
 {
-    assert (wrk != NULL);
-    assert (parent != NULL);
+    assert (iw != NULL);
+    assert (item != NULL);
 
     size_t i;
 
-    for (i = 0; i < wrk->sets.length; i++) {
-        watch *w = wrk->sets.watches[i];
+    for (i = 0; i < iw->watches.length; i++) {
+        watch *w = iw->watches.watches[i];
 
-        if ((w->parent == parent) && (item->inode == w->inode)
+        if ((item->inode == w->inode)
           && (strcmp (item->path, w->filename) == 0)) {
-            worker_sets_delete (&wrk->sets, i);
+            worker_sets_delete (&iw->watches, i);
             break;
         }
     }
@@ -528,29 +537,23 @@ worker_remove_watch (worker *wrk, watch *parent, const dep_item *item)
  *
  * It is necessary when renames in the watched directory occur.
  *
- * @param[in] wrk    A pointer to #worker.
- * @param[in] parent A pointer to parent #watch.
+ * @param[in] iw     A pointer to #i_watch.
  * @param[in] from   A rename from. Must be child of the specified parent.
  * @param[in] to     A rename to. Must be child of the specified parent.
  **/
 void
-worker_rename_watch (worker *wrk, watch *parent, dep_item *from, dep_item *to)
+worker_rename_watch (i_watch *iw, dep_item *from, dep_item *to)
 {
-    assert (wrk != NULL);
-    assert (parent != NULL);
+    assert (iw != NULL);
     assert (from != NULL);
     assert (to != NULL);
 
-    if (parent->deps == NULL) {
-        return;
-    }
-
     size_t i;
 
-    for (i = 0; i < wrk->sets.length; i++) {
-        watch *w = wrk->sets.watches[i];
+    for (i = 0; i < iw->watches.length; i++) {
+        watch *w = iw->watches.watches[i];
 
-        if ((w->parent == parent) && (from->inode == w->inode)
+        if ((from->inode == w->inode)
           && (strcmp (from->path, w->filename) == 0)) {
             free (w->filename);
             w->filename = strdup (to->path);

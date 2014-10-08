@@ -23,4 +23,20 @@
 #ifndef __INOTIFY_WATCH_H__
 #define __INOTIFY_WATCH_H__
 
+#include "compat.h"
+
+typedef struct i_watch i_watch;
+
+#include "dep-list.h"
+#include "worker-sets.h"
+#include "worker.h"
+
+struct i_watch {
+    int wd;                    /* watch descriptor */
+    worker *wrk;               /* pointer to a parent worker structure */
+    dep_list *deps;            /* dependence list of inotify watch */
+    worker_sets watches;       /* kqueue watches of inotify watch */
+    SLIST_ENTRY(i_watch) next; /* pointer to the next inotify watch in list */
+};
+
 #endif /* __INOTIFY_WATCH_H__ */

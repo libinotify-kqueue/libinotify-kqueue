@@ -26,8 +26,6 @@
 #include <stdint.h>    /* uint32_t */
 #include <dirent.h>    /* ino_t */
 
-#include "dep-list.h"
-
 typedef enum watch_type {
     WATCH_USER,
     WATCH_DEPENDENCY,
@@ -45,11 +43,6 @@ typedef struct watch {
                                * NB: an entry file name for dependencies! */
     int fd;                   /* file descriptor of a watched entry */
     ino_t inode;              /* inode number for the watched entry */
-
-    union {
-        dep_list *deps;       /* dependencies for an user-defined watch */
-        struct watch *parent; /* parent watch for an automatic (dependency) watch */
-    };
 } watch;
 
 int    watch_open (int dirfd, const char *path, uint32_t flags);
