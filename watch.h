@@ -55,6 +55,9 @@ struct watch {
     RB_ENTRY(watch) link;     /* RB tree links */
 };
 
+uint32_t inotify_to_kqueue (uint32_t flags, watch_flags_t wf);
+uint32_t kqueue_to_inotify (uint32_t flags, watch_flags_t wf);
+
 int    watch_open (int dirfd, const char *path, uint32_t flags);
 watch *watch_init (i_watch *iw,
                    watch_type_t watch_type,

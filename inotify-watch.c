@@ -34,7 +34,6 @@
 
 #include "sys/inotify.h"
 
-#include "conversions.h"
 #include "inotify-watch.h"
 #include "utils.h"
 #include "watch-set.h"

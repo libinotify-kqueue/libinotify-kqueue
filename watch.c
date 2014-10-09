@@ -35,9 +35,75 @@
 #include <stdio.h>    /* snprintf */
 
 #include "utils.h"
-#include "conversions.h"
 #include "watch.h"
 #include "sys/inotify.h"
+
+/**
+ * Convert the inotify watch mask to the kqueue event filter flags.
+ *
+ * @param[in] flags An inotify watch mask.
+ * @param[in] wf    A kqueue watch internal flags.
+ * @return Converted kqueue event filter flags.
+ **/
+uint32_t
+inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
+{
+    uint32_t result = 0;
+
+    if (flags & IN_ATTRIB)
+        result |= NOTE_ATTRIB;
+    if (flags & IN_MODIFY && !(wf & WF_ISDIR))
+        result |= NOTE_WRITE;
+    if (!(wf & WF_ISSUBWATCH)) {
+        if (wf & WF_ISDIR)
+            result |= NOTE_WRITE;
+        if (flags & IN_ATTRIB && !(wf & WF_ISDIR))
+            result |= NOTE_LINK;
+        if (flags & IN_MOVE_SELF)
+            result |= NOTE_RENAME;
+        result |= NOTE_DELETE | NOTE_REVOKE;
+    }
+    return result;
+}
+
+/**
+ * Convert the kqueue event filter flags to the inotify watch mask.
+ *
+ * @param[in] flags A kqueue filter flags.
+ * @param[in] wf    A kqueue watch internal flags.
+ * @return Converted inotify watch mask.
+ **/
+uint32_t
+kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
+{
+    uint32_t result = 0;
+
+    if (flags & NOTE_ATTRIB)
+        result |= IN_ATTRIB;
+
+    if (flags & NOTE_LINK && !(wf & WF_ISDIR) && !(wf & WF_ISSUBWATCH))
+        result |= IN_ATTRIB;
+
+    if (flags & NOTE_WRITE && !(wf & WF_ISDIR))
+        result |= IN_MODIFY;
+
+    if (flags & NOTE_DELETE && !(wf & WF_ISSUBWATCH))
+        result |= IN_DELETE_SELF;
+
+    if (flags & NOTE_RENAME && !(wf & WF_ISSUBWATCH))
+        result |= IN_MOVE_SELF;
+
+    if (flags & NOTE_REVOKE && !(wf & WF_ISSUBWATCH))
+        result |= IN_UNMOUNT;
+
+    /* IN_ISDIR flag for subwatches is set in the enqueue_event routine */
+    if ((result & (IN_ATTRIB | IN_OPEN | IN_ACCESS | IN_CLOSE))
+        && wf & WF_ISDIR && !(wf & WF_ISSUBWATCH)) {
+        result |= IN_ISDIR;
+    }
+
+    return result;
+}
 
 /* struct kevent is declared slightly differently on the different BSDs.
  * This macros will help to avoid cast warnings on the supported platforms. */

@@ -35,8 +35,8 @@
 #include "sys/inotify.h"
 
 #include "utils.h"
-#include "conversions.h"
 #include "inotify-watch.h"
+#include "watch.h"
 #include "worker.h"
 #include "worker-thread.h"
 

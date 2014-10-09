@@ -40,7 +40,6 @@
 #include "sys/inotify.h"
 
 #include "utils.h"
-#include "conversions.h"
 #include "worker-thread.h"
 #include "worker.h"
 
