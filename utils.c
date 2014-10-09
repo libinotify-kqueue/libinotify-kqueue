@@ -274,6 +274,29 @@ is_deleted (int fd)
 }
 
 /**
+ * Set the FD_CLOEXEC flag of file descriptor fd if value is nonzero
+ * clear the flag if value is 0.
+ *
+ * @param[in] fd    A file descriptor to modify.
+ * @param[in] value A cloexec flag value to set.
+ * @return 0 on success, or -1 on error with errno set.
+ **/
+int
+set_cloexec_flag (int fd, int value)
+{
+    int flags = fcntl (fd, F_GETFD, 0);
+    if (flags < 0)
+        return flags;
+
+    if (value != 0)
+        flags |= FD_CLOEXEC;
+    else
+        flags &= ~FD_CLOEXEC;
+
+    return fcntl (fd, F_SETFD, flags);
+}
+
+/**
  * Print an error message, if allowed.
  *
  * The function uses perror, so the errno-based error description will

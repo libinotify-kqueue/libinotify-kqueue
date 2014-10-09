@@ -118,11 +118,24 @@ watch_open (int dirfd, const char *path, uint32_t flags)
     assert (path != NULL);
 
     int openflags = O_RDONLY | O_NONBLOCK;
+#ifdef O_CLOEXEC
+        openflags |= O_CLOEXEC;
+#endif
     if (flags & IN_DONT_FOLLOW) {
         openflags |= O_NOFOLLOW;
     }
 
     int fd = openat (dirfd, path, openflags);
+    if (fd == -1) {
+        return -1;
+    }
+
+#ifndef O_CLOEXEC
+    if (set_cloexec_flag (fd, 1) == -1) {
+        close (fd);
+        return -1;
+    }
+#endif
 
     return fd;
 }
