@@ -54,6 +54,20 @@ inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
         return result;
     }
 
+#ifdef NOTE_OPEN
+    if (flags & IN_OPEN)
+        result |= NOTE_OPEN;
+#endif
+#ifdef NOTE_CLOSE
+    if (flags & IN_CLOSE_NOWRITE)
+        result |= NOTE_CLOSE;
+    if (flags & IN_CLOSE_WRITE && S_ISREG (wf))
+        result |= (NOTE_CLOSE | NOTE_WRITE);
+#endif
+#ifdef NOTE_READ
+    if (flags & IN_ACCESS && S_ISREG (wf))
+        result |= NOTE_READ;
+#endif
     if (flags & IN_ATTRIB)
         result |= NOTE_ATTRIB;
     if (flags & IN_MODIFY && S_ISREG (wf))
@@ -81,6 +95,23 @@ uint32_t
 kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
 {
     uint32_t result = 0;
+
+#ifdef NOTE_OPEN
+    if (flags & NOTE_OPEN)
+        result |= IN_OPEN;
+#endif
+#ifdef NOTE_CLOSE
+    if (flags & NOTE_CLOSE) {
+        if (wf & WF_MODIFIED && S_ISREG (wf))
+            result |= IN_CLOSE_WRITE;
+        else
+            result |= IN_CLOSE_NOWRITE;
+    }
+#endif
+#ifdef NOTE_READ
+    if (flags & NOTE_READ && S_ISREG (wf))
+        result |= IN_ACCESS;
+#endif
 
     if (flags & NOTE_ATTRIB)
         result |= IN_ATTRIB;

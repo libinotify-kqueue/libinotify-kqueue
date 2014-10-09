@@ -1,0 +1,118 @@
+Index: lib/libc/sys/kqueue.2
+===================================================================
+--- lib/libc/sys/kqueue.2	(revision 272513)
++++ lib/libc/sys/kqueue.2	(working copy)
+@@ -365,6 +365,12 @@
+ Access to the file was revoked via
+ .Xr revoke 2
+ or the underlying file system was unmounted.
++.It NOTE_OPEN
++The file referenced by the descriptor was opened.
++.It NOTE_CLOSE
++The file referenced by the descriptor was closed.
++.It NOTE_READ
++A read occurred on the file referenced by the descriptor.
+ .El
+ .Pp
+ On return,
+Index: sys/kern/vfs_subr.c
+===================================================================
+--- sys/kern/vfs_subr.c	(revision 272513)
++++ sys/kern/vfs_subr.c	(working copy)
+@@ -4284,6 +4284,33 @@
+ 		VFS_KNOTE_LOCKED(a->a_dvp, NOTE_WRITE);
+ }
+ 
++void
++vop_open_post(void *ap, int rc)
++{
++	struct vop_open_args *a = ap;
++
++	if (!rc)
++		VFS_KNOTE_LOCKED(a->a_vp, NOTE_OPEN);
++}
++
++void
++vop_close_post(void *ap, int rc)
++{
++	struct vop_close_args *a = ap;
++
++	if (!rc)
++		VFS_KNOTE_LOCKED(a->a_vp, NOTE_CLOSE);
++}
++
++void
++vop_read_post(void *ap, int rc)
++{
++	struct vop_read_args *a = ap;
++
++	if (!rc)
++		VFS_KNOTE_LOCKED(a->a_vp, NOTE_READ);
++}
++
+ static struct knlist fs_knlist;
+ 
+ static void
+Index: sys/kern/vnode_if.src
+===================================================================
+--- sys/kern/vnode_if.src	(revision 272513)
++++ sys/kern/vnode_if.src	(working copy)
+@@ -121,6 +121,7 @@
+ 
+ 
+ %% open		vp	L L L
++%! open		post	vop_open_post
+ 
+ vop_open {
+ 	IN struct vnode *vp;
+@@ -132,6 +133,7 @@
+ 
+ 
+ %% close	vp	L L L
++%! close	post	vop_close_post
+ 
+ vop_close {
+ 	IN struct vnode *vp;
+@@ -186,6 +188,7 @@
+ };
+ 
+ %% read		vp	L L L
++%! read		post	vop_read_post
+ 
+ vop_read {
+ 	IN struct vnode *vp;
+Index: sys/sys/event.h
+===================================================================
+--- sys/sys/event.h	(revision 272513)
++++ sys/sys/event.h	(working copy)
+@@ -118,6 +118,9 @@
+ #define	NOTE_LINK	0x0010			/* link count changed */
+ #define	NOTE_RENAME	0x0020			/* vnode was renamed */
+ #define	NOTE_REVOKE	0x0040			/* vnode access was revoked */
++#define	NOTE_OPEN	0x0080			/* vnode was opened */
++#define	NOTE_CLOSE	0x0100			/* vnode was closed */
++#define	NOTE_READ	0x0200			/* data content was read */
+ 
+ /*
+  * data/hint flags for EVFILT_PROC and EVFILT_PROCDESC, shared with userspace
+Index: sys/sys/vnode.h
+===================================================================
+--- sys/sys/vnode.h	(revision 272513)
++++ sys/sys/vnode.h	(working copy)
+@@ -759,6 +759,7 @@
+ int	vop_panic(struct vop_generic_args *ap);
+ 
+ /* These are called from within the actual VOPS. */
++void	vop_close_post(void *a, int rc);
+ void	vop_create_post(void *a, int rc);
+ void	vop_deleteextattr_post(void *a, int rc);
+ void	vop_link_post(void *a, int rc);
+@@ -768,6 +769,8 @@
+ void	vop_lookup_pre(void *a);
+ void	vop_mkdir_post(void *a, int rc);
+ void	vop_mknod_post(void *a, int rc);
++void	vop_open_post(void *a, int rc);
++void	vop_read_post(void *a, int rc);
+ void	vop_remove_post(void *a, int rc);
+ void	vop_rename_post(void *a, int rc);
+ void	vop_rename_pre(void *a);

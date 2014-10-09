@@ -201,6 +201,60 @@ else
 fi
 
 
+AC_MSG_CHECKING(for NOTE_OPEN in sys/event.h)
+AC_COMPILE_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <sys/types.h>
+        @%:@include <sys/event.h>
+    ],
+    [
+        int a = NOTE_OPEN;
+    ])
+],
+    have_note_open=yes,
+    have_note_open=no
+)
+AC_MSG_RESULT($have_note_open)
+
+
+AC_MSG_CHECKING(for NOTE_CLOSE in sys/event.h)
+AC_COMPILE_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <sys/types.h>
+        @%:@include <sys/event.h>
+    ],
+    [
+        int a = NOTE_CLOSE;
+    ])
+],
+    have_note_close=yes,
+    have_note_close=no
+)
+AC_MSG_RESULT($have_note_close)
+
+
+AC_MSG_CHECKING(for NOTE_READ in sys/event.h)
+AC_COMPILE_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <sys/types.h>
+        @%:@include <sys/event.h>
+    ],
+    [
+        int a = NOTE_READ;
+    ])
+],
+    have_note_read=yes,
+    have_note_read=no
+)
+AC_MSG_RESULT($have_note_read)
+
+
 AC_CHECK_MEMBER([struct dirent.d_type],
 [
     AC_DEFINE([DIRENT_HAVE_D_TYPE],[1],[Define to 1 if dirent have d_type field])
