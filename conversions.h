@@ -24,8 +24,9 @@
 #define __CONVERSIONS_H__
 
 #include <stdint.h>
+#include "watch.h"
 
-uint32_t inotify_to_kqueue (uint32_t flags, int is_directory, int is_subwatch);
-uint32_t kqueue_to_inotify (uint32_t flags, int is_directory, int is_subwatch);
+uint32_t inotify_to_kqueue (uint32_t flags, watch_flags_t wf);
+uint32_t kqueue_to_inotify (uint32_t flags, watch_flags_t wf);
 
 #endif /*  __CONVERSIONS_H__ */

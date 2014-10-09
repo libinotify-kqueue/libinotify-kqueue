@@ -156,9 +156,10 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
     assert (iw != NULL);
     assert (fd != -1);
 
-    uint32_t fflags = inotify_to_kqueue (iw->flags,
-                                         S_ISDIR (st->st_mode),
-                                         watch_type == WATCH_DEPENDENCY);
+    watch_flags_t wf = watch_type != WATCH_USER ? WF_ISSUBWATCH : 0;
+    wf |= S_ISDIR (st->st_mode) ? WF_ISDIR : 0;
+
+    uint32_t fflags = inotify_to_kqueue (iw->flags, wf);
     /* Skip watches with empty kqueue filter flags */
     if (fflags == 0) {
         return NULL;
@@ -172,8 +173,7 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
 
     w->iw = iw;
     w->fd = fd;
-    w->flags = watch_type != WATCH_USER ? WF_ISSUBWATCH : 0;
-    w->flags |= S_ISDIR (st->st_mode) ? WF_ISDIR : 0;
+    w->flags = wf;
     w->refcount = 0;
     /* Inode number obtained via fstat call cannot be used here as it
      * differs from readdir`s one at mount points. */

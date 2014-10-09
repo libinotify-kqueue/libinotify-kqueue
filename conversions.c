@@ -30,23 +30,22 @@
  * Convert the inotify watch mask to the kqueue event filter flags.
  *
  * @param[in] flags        An inotify watch mask.
- * @param[in] is_directory 1 for directories, 0 for files.
- * @param[in] is_subwatch  1 for subwatches, 0 for user watches.
+ * @param[in] wf           A kqueue watch internal flags.
  * @return Converted kqueue event filter flags.
  **/  
 uint32_t
-inotify_to_kqueue (uint32_t flags, int is_directory, int is_subwatch)
+inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
 {
     uint32_t result = 0;
 
     if (flags & IN_ATTRIB)
         result |= NOTE_ATTRIB;
-    if (flags & IN_MODIFY && is_directory == 0)
+    if (flags & IN_MODIFY && !(wf & WF_ISDIR))
         result |= NOTE_WRITE;
-    if (is_subwatch == 0) {
-        if (is_directory)
+    if (!(wf & WF_ISSUBWATCH)) {
+        if (wf & WF_ISDIR)
             result |= NOTE_WRITE;
-        if (flags & IN_ATTRIB && is_directory == 0)
+        if (flags & IN_ATTRIB && !(wf & WF_ISDIR))
             result |= NOTE_LINK;
         if (flags & IN_MOVE_SELF)
             result |= NOTE_RENAME;
@@ -60,36 +59,35 @@ inotify_to_kqueue (uint32_t flags, int is_directory, int is_subwatch)
  * Convert the kqueue event filter flags to the inotify watch mask. 
  *
  * @param[in] flags        A kqueue filter flags.
- * @param[in] is_directory 1 for directories, 0 for files.
- * @param[in] is_subwatch  1 for subwatches, 0 for user watches.
+ * @param[in] wf           A kqueue watch internal flags.
  * @return Converted inotify watch mask.
  **/  
 uint32_t
-kqueue_to_inotify (uint32_t flags, int is_directory, int is_subwatch)
+kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
 {
     uint32_t result = 0;
 
     if (flags & NOTE_ATTRIB)
         result |= IN_ATTRIB;
 
-    if (flags & NOTE_LINK && is_directory == 0 && is_subwatch == 0)
+    if (flags & NOTE_LINK && !(wf & WF_ISDIR) && !(wf & WF_ISSUBWATCH))
         result |= IN_ATTRIB;
 
-    if (flags & NOTE_WRITE && is_directory == 0)
+    if (flags & NOTE_WRITE && !(wf & WF_ISDIR))
         result |= IN_MODIFY;
 
-    if (flags & NOTE_DELETE && is_subwatch == 0)
+    if (flags & NOTE_DELETE && !(wf & WF_ISSUBWATCH))
         result |= IN_DELETE_SELF;
 
-    if (flags & NOTE_RENAME && is_subwatch == 0)
+    if (flags & NOTE_RENAME && !(wf & WF_ISSUBWATCH))
         result |= IN_MOVE_SELF;
 
-    if (flags & NOTE_REVOKE && is_subwatch == 0)
+    if (flags & NOTE_REVOKE && !(wf & WF_ISSUBWATCH))
         result |= IN_UNMOUNT;
 
     /* IN_ISDIR flag for subwatches is set in the enqueue_event routine */
     if ((result & (IN_ATTRIB | IN_OPEN | IN_ACCESS | IN_CLOSE))
-        && is_directory && is_subwatch == 0) {
+        && wf & WF_ISDIR && !(wf & WF_ISSUBWATCH)) {
         result |= IN_ISDIR;
     }
 

@@ -376,19 +376,13 @@ produce_notifications (worker *wrk, struct kevent *event)
             produce_directory_diff (iw, event);
         }
 
-        enqueue_event (iw,
-                       kqueue_to_inotify (flags,
-                                          w->flags & WF_ISDIR,
-                                          w->flags & WF_ISSUBWATCH),
-                       NULL);
+        enqueue_event (iw, kqueue_to_inotify (flags, w->flags), NULL);
 
         if (flags & (NOTE_DELETE | NOTE_REVOKE)) {
             iw->is_closed = 1;
         }
     } else {
-        uint32_t i_flags = kqueue_to_inotify (flags,
-                                              w->flags & WF_ISDIR,
-                                              w->flags & WF_ISSUBWATCH);
+        uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
         dep_node *iter = NULL;
         SLIST_FOREACH (iter, &iw->deps->head, next) {
             dep_item *di = iter->item;

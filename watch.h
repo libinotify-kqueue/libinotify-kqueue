@@ -26,11 +26,13 @@
 #include "compat.h"
 
 #include <dirent.h>    /* ino_t */
+#include "compat.h"    /* RB tree macroses */
 
 #include <sys/types.h>
 #include <sys/stat.h>  /* stat */
 
 typedef struct watch watch;
+typedef uint32_t watch_flags_t;
 
 #include "inotify-watch.h"
 
@@ -45,7 +47,7 @@ typedef enum watch_type {
 
 struct watch {
     i_watch *iw;              /* A pointer to parent inotify watch */
-    uint32_t flags;           /* A watch flags. Not in inotify/kqueue format */
+    watch_flags_t flags;      /* A watch flags. Not in inotify/kqueue format */
     size_t refcount;          /* number of dependency list items corresponding
                                * to that watch */ 
     int fd;                   /* file descriptor of a watched entry */
