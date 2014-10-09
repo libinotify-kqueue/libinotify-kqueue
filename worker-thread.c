@@ -367,12 +367,11 @@ produce_notifications (worker *wrk, struct kevent *event)
 
     if (!(w->flags & WF_ISSUBWATCH)) {
         /* Treat deletes as link number changes if links still exist */
-        if (flags & NOTE_DELETE && !(w->flags & WF_ISDIR)
-          && !is_deleted (w->fd)) {
+        if (flags & NOTE_DELETE && S_ISREG (w->flags) && !is_deleted (w->fd)) {
             flags = (flags | NOTE_LINK) & ~NOTE_DELETE;
         }
 
-        if (flags & NOTE_WRITE && w->flags & WF_ISDIR) {
+        if (flags & NOTE_WRITE && S_ISDIR (w->flags)) {
             produce_directory_diff (iw, event);
         }
 

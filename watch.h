@@ -26,18 +26,18 @@
 #include "compat.h"
 
 #include <dirent.h>    /* ino_t */
-#include "compat.h"    /* RB tree macroses */
 
 #include <sys/types.h>
 #include <sys/stat.h>  /* stat */
 
 typedef struct watch watch;
-typedef uint32_t watch_flags_t;
+/* Inherit watch_flags_t from <sys/stat.h> mode_t type.
+ * It is hackish but allow to use existing stat macroses */
+typedef mode_t watch_flags_t;
 
 #include "inotify-watch.h"
 
-#define WF_ISSUBWATCH (1<<0)  /* a type of watch */
-#define WF_ISDIR      (1<<1)  /* watched item is a directory */
+#define WF_ISSUBWATCH S_IXOTH /* a type of watch */
 
 typedef enum watch_type {
     WATCH_USER,

@@ -50,14 +50,18 @@ inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
 {
     uint32_t result = 0;
 
+    if (!(S_ISREG (wf) || S_ISDIR (wf) || S_ISLNK (wf))) {
+        return result;
+    }
+
     if (flags & IN_ATTRIB)
         result |= NOTE_ATTRIB;
-    if (flags & IN_MODIFY && !(wf & WF_ISDIR))
+    if (flags & IN_MODIFY && S_ISREG (wf))
         result |= NOTE_WRITE;
     if (!(wf & WF_ISSUBWATCH)) {
-        if (wf & WF_ISDIR)
+        if (S_ISDIR (wf))
             result |= NOTE_WRITE;
-        if (flags & IN_ATTRIB && !(wf & WF_ISDIR))
+        if (flags & IN_ATTRIB && S_ISREG (wf))
             result |= NOTE_LINK;
         if (flags & IN_MOVE_SELF)
             result |= NOTE_RENAME;
@@ -81,10 +85,10 @@ kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
     if (flags & NOTE_ATTRIB)
         result |= IN_ATTRIB;
 
-    if (flags & NOTE_LINK && !(wf & WF_ISDIR) && !(wf & WF_ISSUBWATCH))
+    if (flags & NOTE_LINK && S_ISREG (wf) && !(wf & WF_ISSUBWATCH))
         result |= IN_ATTRIB;
 
-    if (flags & NOTE_WRITE && !(wf & WF_ISDIR))
+    if (flags & NOTE_WRITE && S_ISREG (wf))
         result |= IN_MODIFY;
 
     if (flags & NOTE_DELETE && !(wf & WF_ISSUBWATCH))
@@ -98,7 +102,7 @@ kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
 
     /* IN_ISDIR flag for subwatches is set in the enqueue_event routine */
     if ((result & (IN_ATTRIB | IN_OPEN | IN_ACCESS | IN_CLOSE))
-        && wf & WF_ISDIR && !(wf & WF_ISSUBWATCH)) {
+        && S_ISDIR (wf) && !(wf & WF_ISSUBWATCH)) {
         result |= IN_ISDIR;
     }
 
@@ -223,7 +227,7 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
     assert (fd != -1);
 
     watch_flags_t wf = watch_type != WATCH_USER ? WF_ISSUBWATCH : 0;
-    wf |= S_ISDIR (st->st_mode) ? WF_ISDIR : 0;
+    wf |= st->st_mode & S_IFMT;
 
     uint32_t fflags = inotify_to_kqueue (iw->flags, wf);
     /* Skip watches with empty kqueue filter flags */

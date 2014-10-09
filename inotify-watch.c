@@ -165,12 +165,12 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
 
     watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL) {
-        di->type = w->flags & WF_ISDIR ? S_IFDIR : S_IFREG;
+        di->type = w->flags & S_IFMT;
         goto hold;
     }
 
     /* Don`t open a watches with empty kqueue filter flags */
-    watch_flags_t wf = (S_ISDIR (di->type) ? WF_ISDIR : 0) | WF_ISSUBWATCH;
+    watch_flags_t wf = (di->type & S_IFMT) | WF_ISSUBWATCH;
     if (!S_ISUNK (di->type) && inotify_to_kqueue (iw->flags, wf) == 0) {
         return NULL;
     }
