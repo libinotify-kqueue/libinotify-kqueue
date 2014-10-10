@@ -25,6 +25,8 @@
 
 #include <pthread.h>
 
+#include "config.h"
+
 typedef struct {
     int count;               /* the number of threads to wait on a barrier */
     volatile int entered;    /* the number of threads entered on a barrier */
@@ -34,10 +36,8 @@ typedef struct {
     pthread_cond_t  cnd;     /* ..and a condition variable */
 } ik_barrier_impl;
 
-#define WITHOUT_BARRIERS
-
 typedef struct {
-#ifndef WITHOUT_BARRIERS    
+#ifdef HAVE_PTHREAD_BARRIER
     pthread_barrier_t impl;
 #else
     ik_barrier_impl impl;

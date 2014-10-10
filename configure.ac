@@ -44,4 +44,27 @@ AC_CHECK_HEADERS([sys/event.h],
 AM_CONDITIONAL(BUILD_LIBRARY, [test "$kqueue_support" = "yes"])
 
 
+AC_MSG_CHECKING(for pthread_barrier)
+AC_COMPILE_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <pthread.h>
+    ],
+    [
+        pthread_barrier_t barrier;
+        pthread_barrier_init(&barrier, NULL, 1);
+        pthread_barrier_wait(&barrier);
+        pthread_barrier_destroy(&barrier);
+        return 0;
+    ])
+],
+[
+    AC_DEFINE([HAVE_PTHREAD_BARRIER],[1],[Define to 1 if the system has pthread_barrier])
+    AC_MSG_RESULT(yes)
+],
+    AC_MSG_RESULT(no)
+)
+
+
 AC_OUTPUT

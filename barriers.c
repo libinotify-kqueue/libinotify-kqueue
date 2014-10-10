@@ -24,7 +24,9 @@
 #include <string.h> /* memset */
 
 #include "barriers.h"
+#include "config.h"
 
+#ifndef HAVE_PTHREAD_BARRIER
 /**
  * Initialize a barrier
  *
@@ -94,6 +96,7 @@ ik_barrier_impl_destroy (ik_barrier_impl *impl)
     impl->entered = 0;
     impl->sleeping = 0;
 }
+#endif /* HAVE_PTHREAD_BARRIER */
 
 
 /**
@@ -109,7 +112,7 @@ void
 ik_barrier_init (ik_barrier *b, int n)
 {
     assert (b != NULL);
-#ifndef WITHOUT_BARRIERS
+#ifdef HAVE_PTHREAD_BARRIER
     pthread_barrier_init (&b->impl, NULL, n);
 #else
     ik_barrier_impl_init (&b->impl, n);
@@ -129,7 +132,7 @@ void
 ik_barrier_wait (ik_barrier *b)
 {
     assert (b != NULL);;
-#ifndef WITHOUT_BARRIERS
+#ifdef HAVE_PTHREAD_BARRIER
     pthread_barrier_wait (&b->impl);
 #else
     ik_barrier_impl_wait (&b->impl);
@@ -149,7 +152,7 @@ void
 ik_barrier_destroy (ik_barrier *b)
 {
     assert (b != NULL);;
-#ifndef WITHOUT_BARRIERS
+#ifdef HAVE_PTHREAD_BARRIER
     pthread_barrier_destroy (&b->impl);
 #else
     ik_barrier_impl_destroy (&b->impl);
