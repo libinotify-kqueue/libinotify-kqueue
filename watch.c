@@ -73,8 +73,12 @@ inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
     if (flags & IN_MODIFY && S_ISREG (wf))
         result |= NOTE_WRITE;
     if (!(wf & WF_ISSUBWATCH)) {
-        if (S_ISDIR (wf))
+        if (S_ISDIR (wf)) {
             result |= NOTE_WRITE;
+#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+            result |= NOTE_EXTEND;
+#endif
+        }
         if (flags & IN_ATTRIB && S_ISREG (wf))
             result |= NOTE_LINK;
         if (flags & IN_MOVE_SELF)

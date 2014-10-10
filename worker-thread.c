@@ -163,6 +163,7 @@ process_command (worker *wrk)
  **/
 typedef struct {
     i_watch *iw;
+    uint32_t fflags;
 } handle_context;
 
 /**
@@ -204,6 +205,11 @@ handle_added (void *udata, dep_item *di)
     assert (ctx->iw != NULL);
 
     iwatch_add_subwatch (ctx->iw, di);
+#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+    if (ctx->fflags & NOTE_EXTEND) {
+        enqueue_event (ctx->iw, IN_MOVED_TO, di);
+    } else
+#endif
     enqueue_event (ctx->iw, IN_CREATE, di);
 }
 
@@ -224,6 +230,11 @@ handle_removed (void *udata, dep_item *di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
+#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+    if (ctx->fflags & NOTE_EXTEND) {
+        enqueue_event (ctx->iw, IN_MOVED_FROM, di);
+    } else
+#endif
     enqueue_event (ctx->iw, IN_DELETE, di);
     iwatch_del_subwatch (ctx->iw, di);
 }
@@ -266,6 +277,14 @@ handle_overwritten (void *udata, dep_item *from_di, dep_item *to_di)
 {
     assert (udata != NULL);
 
+    handle_context *ctx = (handle_context *) udata;
+    assert (ctx->iw != NULL);
+
+#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+    if (ctx->fflags & NOTE_EXTEND) {
+        handle_replaced (udata, from_di);
+    } else
+#endif
     handle_removed (udata, from_di);
     handle_added (udata, to_di);
 }
@@ -337,6 +356,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     handle_context ctx;
     memset (&ctx, 0, sizeof (ctx));
     ctx.iw = iw;
+    ctx.fflags = event->fflags;
 
     if (dl_calculate (was, now, &cbs, &ctx) == -1) {
         iw->deps = was;

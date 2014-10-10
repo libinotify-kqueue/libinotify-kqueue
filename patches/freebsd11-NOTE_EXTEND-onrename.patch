@@ -1,0 +1,15 @@
+Index: sys/kern/vfs_subr.c
+===================================================================
+--- sys/kern/vfs_subr.c	(revision 272513)
++++ sys/kern/vfs_subr.c	(working copy)
+@@ -4231,8 +4231,8 @@
+ 	struct vop_rename_args *a = ap;
+ 
+ 	if (!rc) {
+-		VFS_KNOTE_UNLOCKED(a->a_fdvp, NOTE_WRITE);
+-		VFS_KNOTE_UNLOCKED(a->a_tdvp, NOTE_WRITE);
++		VFS_KNOTE_UNLOCKED(a->a_fdvp, NOTE_WRITE | NOTE_EXTEND);
++		VFS_KNOTE_UNLOCKED(a->a_tdvp, NOTE_WRITE | NOTE_EXTEND);
+ 		VFS_KNOTE_UNLOCKED(a->a_fvp, NOTE_RENAME);
+ 		if (a->a_tvp)
+ 			VFS_KNOTE_UNLOCKED(a->a_tvp, NOTE_DELETE);
