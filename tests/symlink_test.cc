@@ -1,5 +1,6 @@
 /*******************************************************************************
   Copyright (c) 2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2014 Vladimir Kondratiev <wulf@cicgroup.ru>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -35,8 +36,8 @@ void symlink_test::setup ()
     system ("touch slt-wd1/foo");
     system ("mkdir slt-wd2");
     system ("mkdir slt-wd3");
-    system ("ln -s $PWD/slt-wd1/foo $PWD/slt-wd3/bar");
-    system ("ln -s $PWD/slt-wd1/foo $PWD/slt-wd3/baz");
+    system ("ln -s ../slt-wd1/foo slt-wd3/bar");
+    system ("ln -s ../slt-wd1/foo slt-wd3/baz");
 }
 
 void symlink_test::run ()
@@ -58,7 +59,7 @@ void symlink_test::run ()
         cons.output.reset ();
         cons.input.receive ();
 
-        system ("ln -s $PWD/slt-wd1/foo $PWD/slt-wd2/bar");
+        system ("ln -s ../slt-wd1/foo slt-wd2/bar");
 
         cons.output.wait ();
         received = cons.output.registered ();
@@ -109,7 +110,7 @@ void symlink_test::run ()
         cons.output.reset ();
         cons.input.receive ();
 
-        system ("unlink slt-wd2/bar");
+        system ("rm slt-wd2/bar");
 
         cons.output.wait ();
         received = cons.output.registered ();
@@ -180,7 +181,7 @@ void symlink_test::run ()
         cons.output.reset ();
         cons.input.receive ();
 
-        system ("unlink slt-wd3/bar");
+        system ("rm slt-wd3/bar");
 
         cons.output.wait ();
         received = cons.output.registered ();
@@ -204,6 +205,17 @@ void symlink_test::run ()
         wid = cons.output.added_watch_id ();
         should ("Start watch successfully on a symlink file with IN_DONT_FOLLOW",
                 wid != -1);
+
+        cons.output.reset ();
+        cons.input.receive ();
+
+        system ("touch -h slt-wd3/baz");
+
+        cons.output.wait ();
+        received = cons.output.registered ();
+        should ("Receive IN_ATTRIB after touching symlink itself",
+                contains (received, event ("", wid, IN_ATTRIB)));
+
 
         cons.output.reset ();
         cons.input.receive ();
