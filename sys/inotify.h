@@ -20,10 +20,8 @@
 
 
 /* Flags for the parameter of inotify_init1. */
-enum {
-    IN_CLOEXEC = 02000000,
-    IN_NONBLOCK = 04000
-};  
+#define IN_CLOEXEC	02000000	/* Linux x86 O_CLOEXEC */
+#define IN_NONBLOCK	00004000	/* Linux x86 O_NONBLOCK */
 
 
 /* Structure describing an inotify event. */
@@ -85,7 +83,7 @@ struct inotify_event
 INO_EXPORT int inotify_init (void) __THROW;
 
 /* Create and initialize inotify-kqueue instance. */
-/* INO_EXPORT int inotify_init1 (int flags) __THROW; */
+INO_EXPORT int inotify_init1 (int flags) __THROW;
 
 /* Add watch of object NAME to inotify-kqueue instance FD. Notify about
    events specified by MASK. */

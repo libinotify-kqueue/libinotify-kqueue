@@ -87,7 +87,7 @@ struct worker {
 };
 
 
-worker* worker_create         ();
+worker* worker_create         (int flags);
 void    worker_free           (worker *wrk);
 
 int     worker_add_or_modify  (worker *wrk, const char *path, uint32_t flags);

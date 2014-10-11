@@ -140,7 +140,46 @@ worker_cmd_release (worker_cmd *cmd)
     pthread_barrier_destroy (&cmd->sync);
 }
 
+/**
+ * Create communication pipe
+ *
+ * @param[in] filedes A pair of descriptors used in referencing the new pipe
+ * @param[in] flags   A Pipe flags in inotify(linux) or fcntl.h(BSD) format
+ * @return 0 on success, -1 otherwise
+ **/
+static int
+pipe_init (int fildes[2], int flags)
+{
+    if (socketpair (AF_UNIX, SOCK_STREAM, 0, fildes) == -1) {
+        perror_msg ("Failed to create a socket pair");
+        return -1;
+    }
 
+    if (set_cloexec_flag (fildes[KQUEUE_FD], 1) == -1) {
+        perror_msg ("Failed to set cloexec flag on socket");
+        return -1;
+    }
+
+    /* Check flags for both linux and BSD CLOEXEC values */
+    if (set_cloexec_flag (fildes[INOTIFY_FD],
+#ifdef O_CLOEXEC
+                          flags & (IN_CLOEXEC|O_CLOEXEC)) == -1) {
+#else
+                          flags & IN_CLOEXEC) == -1) {
+#endif
+        perror_msg ("Failed to set cloexec flag on socket");
+        return -1;
+    }
+
+    /* Check flags for both linux and BSD NONBLOCK values */
+    if (set_nonblock_flag (fildes[INOTIFY_FD],
+                           flags & (IN_NONBLOCK|O_NONBLOCK)) == -1) {
+        perror_msg ("Failed to set socket into nonblocking mode");
+        return -1;
+    }
+
+    return 0;
+}
 
 /**
  * Create a new worker and start its thread.
@@ -148,7 +187,7 @@ worker_cmd_release (worker_cmd *cmd)
  * @return A pointer to a new worker.
  **/
 worker*
-worker_create ()
+worker_create (int flags)
 {
     pthread_attr_t attr;
     struct kevent ev;
@@ -165,6 +204,8 @@ worker_create ()
     wrk->iovalloc = 0;
     wrk->iovcnt = 0;
     wrk->iov = NULL;
+    wrk->io[INOTIFY_FD] = -1;
+    wrk->io[KQUEUE_FD] = -1;
 
     wrk->kq = kqueue ();
     if (wrk->kq == -1) {
@@ -172,8 +213,8 @@ worker_create ()
         goto failure;
     }
 
-    if (socketpair (AF_UNIX, SOCK_STREAM, 0, (int *) wrk->io) == -1) {
-        perror_msg ("Failed to create a socket pair");
+    if (pipe_init ((int *) wrk->io, flags) == -1) {
+        perror_msg ("Failed to create a pipe");
         goto failure;
     }
 
@@ -219,6 +260,9 @@ worker_create ()
     
 failure:
     if (wrk != NULL) {
+        if (wrk->io[INOTIFY_FD] != -1) {
+            close (wrk->io[INOTIFY_FD]);
+        }
         worker_free (wrk);
     }
     return NULL;
@@ -253,8 +297,10 @@ worker_free (worker *wrk)
     int i;
     i_watch *iw, *tmp;
 
-    close (wrk->io[KQUEUE_FD]);
-    wrk->io[KQUEUE_FD] = -1;
+    if (wrk->io[KQUEUE_FD] != -1) {
+        close (wrk->io[KQUEUE_FD]);
+        wrk->io[KQUEUE_FD] = -1;
+    }
 
     close (wrk->kq);
     wrk->closed = 1;

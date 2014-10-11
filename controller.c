@@ -1,5 +1,6 @@
 /*******************************************************************************
   Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2014-2015 Vladimir Kondratiev <wulf@cicgroup.ru>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -26,6 +27,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 
 #include <sys/types.h>
@@ -53,12 +55,37 @@ static pthread_mutex_t workers_mutex = PTHREAD_MUTEX_INITIALIZER;
 INO_EXPORT int
 inotify_init (void) __THROW
 {
+    return inotify_init1 (0);
+}
+
+/**
+ * Create a new inotify instance.
+ *
+ * This function will create a new inotify instance (actually, a worker
+ * with its own thread). To destroy the instance, just close its file
+ * descriptor.
+ *
+ * @param[in] flags A combination of inotify_init1 flags
+ * @return  -1 on failure, a file descriptor on success.
+ **/
+INO_EXPORT int
+inotify_init1 (int flags) __THROW
+{
+#ifdef O_CLOEXEC
+    if (flags & ~(IN_CLOEXEC|O_CLOEXEC|IN_NONBLOCK|O_NONBLOCK)) {
+#else
+    if (flags & ~(IN_CLOEXEC|IN_NONBLOCK|O_NONBLOCK)) {
+#endif
+        errno = EINVAL;
+        return -1;
+    }
+
     pthread_mutex_lock (&workers_mutex);
 
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
         if (workers[i] == NULL) {
-            worker *wrk = worker_create ();
+            worker *wrk = worker_create (flags);
             if (wrk != NULL) {
                 workers[i] = wrk;
 
