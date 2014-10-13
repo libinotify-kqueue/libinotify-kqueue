@@ -44,9 +44,9 @@
 char*
 path_concat (const char *dir, const char *file)
 {
-    int dir_len = strlen (dir);
-    int file_len = strlen (file);
-    int alloc_sz = dir_len + file_len + 2;
+    size_t dir_len = strlen (dir);
+    size_t file_len = strlen (file);
+    size_t alloc_sz = dir_len + file_len + 2;
 
     char *path = malloc (alloc_sz);
     if (path == NULL) {
@@ -56,14 +56,14 @@ path_concat (const char *dir, const char *file)
         return NULL;
     }
 
-    strcpy (path, dir);
+    strlcpy (path, dir, alloc_sz);
 
     if (dir[dir_len - 1] != '/') {
         ++dir_len;
         path[dir_len - 1] = '/';
     }
 
-    strcpy (path + dir_len, file);
+    strlcpy (path + dir_len, file, file_len + 1);
     return path;
 }
 
@@ -85,7 +85,7 @@ create_inotify_event (int         wd,
                       int        *event_len)
 {
     struct inotify_event *event = NULL;
-    int name_len = name ? strlen (name) + 1 : 0;
+    size_t name_len = name ? strlen (name) + 1 : 0;
     *event_len = sizeof (struct inotify_event) + name_len;
     event = calloc (1, *event_len);
 
@@ -102,7 +102,7 @@ create_inotify_event (int         wd,
     event->len = name_len;
 
     if (name) {
-        strcpy (event->name, name);
+        strlcpy (event->name, name, name_len);
     }
 
     return event;
