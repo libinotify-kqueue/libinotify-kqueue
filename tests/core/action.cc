@@ -28,17 +28,17 @@ action::action (const std::string &name_)
 : name (name_)
 , interrupted (false)
 {
-    ik_barrier_init (&barrier, 2);
+    pthread_barrier_init (&barrier, NULL, 2);
 }
 
 action::~action ()
 {
-    ik_barrier_destroy (&barrier);
+    pthread_barrier_destroy (&barrier);
 }
 
 bool action::wait ()
 {
-    ik_barrier_wait (&barrier);
+    pthread_barrier_wait (&barrier);
     return !interrupted;
 }
 

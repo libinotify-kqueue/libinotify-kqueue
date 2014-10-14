@@ -30,7 +30,7 @@ extern "C" {
 }
 
 class action {
-    ik_barrier barrier; 
+    pthread_barrier_t barrier;
 
     const std::string name;
     volatile bool interrupted;

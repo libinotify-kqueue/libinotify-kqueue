@@ -27,6 +27,7 @@
 
 #include <pthread.h>
 
+#ifndef HAVE_PTHREAD_BARRIER
 typedef struct {
     int count;               /* the number of threads to wait on a barrier */
     volatile int entered;    /* the number of threads entered on a barrier */
@@ -34,18 +35,16 @@ typedef struct {
 
     pthread_mutex_t mtx;     /* barrier's internal mutex.. */
     pthread_cond_t  cnd;     /* ..and a condition variable */
-} ik_barrier_impl;
+} pthread_barrier_t;
 
-typedef struct {
-#ifdef HAVE_PTHREAD_BARRIER
-    pthread_barrier_t impl;
-#else
-    ik_barrier_impl impl;
+/* barrier attributes are not supported */
+typedef void pthread_barrierattr_t;
+
+void pthread_barrier_init    (pthread_barrier_t *impl,
+                              const pthread_barrierattr_t *attr,
+                              unsigned count);
+void pthread_barrier_wait    (pthread_barrier_t *impl);
+void pthread_barrier_destroy (pthread_barrier_t *impl);
 #endif
-} ik_barrier;
-
-void ik_barrier_init    (ik_barrier *b, int n);
-void ik_barrier_wait    (ik_barrier *b);
-void ik_barrier_destroy (ik_barrier *b);
 
 #endif /* __COMPAT_H__ */

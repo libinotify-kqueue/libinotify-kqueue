@@ -57,7 +57,7 @@ typedef struct worker_cmd {
         int rm_id;
     };
 
-    ik_barrier sync;
+    pthread_barrier_t sync;
 } worker_cmd;
 
 void worker_cmd_init    (worker_cmd *cmd);

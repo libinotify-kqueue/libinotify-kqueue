@@ -55,7 +55,7 @@ void worker_cmd_init (worker_cmd *cmd)
 {
     assert (cmd != NULL);
     memset (cmd, 0, sizeof (worker_cmd));
-    ik_barrier_init (&cmd->sync, 2);
+    pthread_barrier_init (&cmd->sync, NULL, 2);
 }
 
 /**
@@ -125,7 +125,7 @@ void
 worker_cmd_wait (worker_cmd *cmd)
 {
     assert (cmd != NULL);
-    ik_barrier_wait (&cmd->sync);
+    pthread_barrier_wait (&cmd->sync);
 }
 
 /**
@@ -139,7 +139,7 @@ void
 worker_cmd_release (worker_cmd *cmd)
 {
     assert (cmd != NULL);
-    ik_barrier_destroy (&cmd->sync);
+    pthread_barrier_destroy (&cmd->sync);
 }
 
 
