@@ -26,7 +26,7 @@
 #include "platform.hh"
 
 extern "C" {
-#include "barriers.h"
+#include "compat.h"
 }
 
 class action {

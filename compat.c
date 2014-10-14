@@ -23,7 +23,7 @@
 #include <assert.h>
 #include <string.h> /* memset */
 
-#include "barriers.h"
+#include "compat.h"
 #include "config.h"
 
 #ifndef HAVE_PTHREAD_BARRIER
@@ -48,7 +48,7 @@ ik_barrier_impl_init (ik_barrier_impl *impl, int count)
 
 /**
  * Wait on a barrier.
- * 
+ *
  * If this thread is not the last expected one, it will be blocked
  * until all the expected threads will check in on the barrier.
  * Otherwise the barrier will be marked as passed and all blocked
@@ -105,7 +105,7 @@ ik_barrier_impl_destroy (ik_barrier_impl *impl)
  * Depending on the configuration, the underlying barrier can be either
  * a pthread barrier or an own barrier implementation.
  *
- * @param[in] b     A pointer to barrier 
+ * @param[in] b     A pointer to barrier
  * @param[in] n     The number of threads to wait on the barrier.
  **/
 void
@@ -126,7 +126,7 @@ ik_barrier_init (ik_barrier *b, int n)
  * Depending on the configuration, the underlying barrier can be either
  * a pthread barrier or an own barrier implementation.
  *
- * @param[in] b     A pointer to barrier 
+ * @param[in] b     A pointer to barrier
  **/
 void
 ik_barrier_wait (ik_barrier *b)
@@ -146,7 +146,7 @@ ik_barrier_wait (ik_barrier *b)
  * Depending on the configuration, the underlying barrier can be either
  * a pthread barrier or an own barrier implementation.
  *
- * @param[in] b     A pointer to barrier 
+ * @param[in] b     A pointer to barrier
  **/
 void
 ik_barrier_destroy (ik_barrier *b)

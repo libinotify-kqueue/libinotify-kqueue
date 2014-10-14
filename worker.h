@@ -26,10 +26,10 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <pthread.h>
+#include "compat.h"
 #include "worker-thread.h"
 #include "worker-sets.h"
 #include "dep-list.h"
-#include "barriers.h"
 
 #define INOTIFY_FD 0
 #define KQUEUE_FD  1

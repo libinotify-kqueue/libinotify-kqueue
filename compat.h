@@ -20,12 +20,12 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#ifndef __BARRIERS_H__
-#define __BARRIERS_H__
-
-#include <pthread.h>
+#ifndef __COMPAT_H__
+#define __COMPAT_H__
 
 #include "config.h"
+
+#include <pthread.h>
 
 typedef struct {
     int count;               /* the number of threads to wait on a barrier */
@@ -41,11 +41,11 @@ typedef struct {
     pthread_barrier_t impl;
 #else
     ik_barrier_impl impl;
-#endif    
+#endif
 } ik_barrier;
 
 void ik_barrier_init    (ik_barrier *b, int n);
 void ik_barrier_wait    (ik_barrier *b);
 void ik_barrier_destroy (ik_barrier *b);
 
-#endif /* __BARRIERS_H__ */
+#endif /* __COMPAT_H__ */
