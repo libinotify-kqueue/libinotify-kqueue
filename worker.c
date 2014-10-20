@@ -20,6 +20,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <pthread.h>
+#include <signal.h> 
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h> /* open() */
@@ -152,6 +154,8 @@ worker_create ()
 {
     pthread_attr_t attr;
     struct kevent ev;
+    sigset_t set, oset;
+    int result;
 
     worker* wrk = calloc (1, sizeof (worker));
 
@@ -197,7 +201,16 @@ worker_create ()
     /* create a run a worker thread */
     pthread_attr_init (&attr);
     pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
-    if (pthread_create (&wrk->thread, &attr, worker_thread, wrk) != 0) {
+
+    sigemptyset (&set);
+    sigaddset (&set, SIGPIPE);
+    pthread_sigmask (SIG_BLOCK, &set, &oset);
+
+    result = pthread_create (&wrk->thread, &attr, worker_thread, wrk);
+    
+    pthread_sigmask (SIG_SETMASK, &oset, NULL);
+
+    if (result != 0) {
         perror_msg ("Failed to start a new worker thread");
         goto failure;
     }
