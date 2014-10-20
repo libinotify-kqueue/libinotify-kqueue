@@ -68,4 +68,34 @@ AC_COMPILE_IFELSE(
 )
 
 
+AC_ARG_ENABLE([unsafe_fchdir],
+    AS_HELP_STRING([--enable-unsafe-fchdir], [allow unsafe use of fchdir to track of watched directory path changes on its renaming]),
+[
+    AC_DEFINE([ENABLE_UNSAFE_FCHDIR],[1],[Allow to use of fchdir to track of watched directory path changes])
+    enable_unsafe_fchdir=yes
+],
+    enable_unsafe_fchdir=no
+)
+
+atfuncs_support=yes
+AC_CHECK_FUNCS(openat fdopendir,,atfuncs_support=no)
+if test "$atfuncs_support" = "yes"; then
+    AC_DEFINE([HAVE_ATFUNCS],[1],[Define to 1 if relative pathname functions detected])
+fi
+
+AC_MSG_CHECKING(for F_GETPATH in fcntl.h)
+AC_COMPILE_IFELSE(
+    [AC_LANG_PROGRAM([@%:@include <fcntl.h>], [int a = F_GETPATH;])],
+    f_getpath_support=yes,
+    f_getpath_support=no
+)
+AC_MSG_RESULT($f_getpath_support)
+
+if test "$atfuncs_support" = "no" -a \
+        "$f_getpath_support" = "no" -a \
+        "$enable_unsafe_fchdir" = "no"; then
+    AC_MSG_WARN([Neither POSIX.1-2008 relative pathname functions nor F_GETPATH fcntl have been found. Watched directory renamings are untracked. You can specify --enable-unsafe-fchdir to avoid this])
+fi
+
+
 AC_OUTPUT
