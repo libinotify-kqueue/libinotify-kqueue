@@ -55,15 +55,18 @@ typedef struct watch {
     };
 } watch;
 
+
 int watch_init (watch         *w,
                 watch_type_t   watch_type,
                 struct kevent *kv,
+                int            kq,
                 const char    *path,
                 const char    *entry_name,
                 uint32_t       flags);
 
-int  watch_reopen (watch *w);
+int  watch_reopen (watch *w, int kq);
 void watch_free   (watch *w);
 
+int  watch_register_event (watch *w, int kq, uint32_t fflags);
 
 #endif /* __WATCH_H__ */

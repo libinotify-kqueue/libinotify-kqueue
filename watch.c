@@ -27,6 +27,7 @@
 #include <assert.h>
 
 #include <sys/types.h>
+#include <sys/event.h> /* kevent */
 #include <sys/stat.h> /* stat */
 #include <stdio.h>    /* snprintf */
 
@@ -76,11 +77,39 @@ _file_information (int fd, int *is_dir, ino_t *inode)
     )
 
 /**
+ * Register vnode kqueue watch in kernel kqueue(2) subsystem
+ *
+ * @param[in] w      A pointer to a watch
+ * @param[in] kq     A kqueue descriptor
+ * @param[in] fflags A filter flags in kqueue format
+ * @return 1 on success, -1 on error and 0 if no events have been registered
+ **/
+int
+watch_register_event (watch *w, int kq, uint32_t fflags)
+{
+    assert (w != NULL);
+    assert (kq != -1);
+
+    struct kevent ev;
+
+    EV_SET (&ev,
+            w->fd,
+            EVFILT_VNODE,
+            EV_ADD | EV_ENABLE | EV_CLEAR,
+            fflags,
+            0,
+            NULL);
+
+    return kevent (kq, &ev, 1, NULL, 0, NULL);
+}
+
+/**
  * Initialize a watch.
  *
  * @param[in,out] w          A pointer to a watch.
  * @param[in]     watch_type The type of the watch.
  * @param[in,out] kv         A pointer to the associated kqueue event.
+ * @param[in]     kq         A kqueue descriptor.
  * @param[in]     path       A full path to a file.
  * @param[in]     entry_name A name of a watched file (for dependency watches).
  * @param[in]     flags      A combination of the inotify watch flags.
@@ -90,6 +119,7 @@ int
 watch_init (watch         *w,
             watch_type_t   watch_type,
             struct kevent *kv,
+            int            kq,
             const char    *path,
             const char    *entry_name,
             uint32_t       flags)
@@ -131,17 +161,25 @@ watch_init (watch         *w,
             0,
             NULL);
 
+    uint32_t fflags = inotify_to_kqueue (flags, w->is_really_dir, is_subwatch);
+    if (watch_register_event (w, kq, fflags) == -1) {
+        close (w->fd);
+        w->fd = -1;
+        return -1;
+    }
+
     return 0;
 }
 
 /**
  * Reopen a watch.
  *
- * @param[in] w A pointer to a watch.
+ * @param[in] w  A pointer to a watch.
+ * @param[in] kq A kqueue descriptor.
  * @return 0 on success, -1 on failure.
  **/
 int
-watch_reopen (watch *w)
+watch_reopen (watch *w, int kq)
 {
     assert (w != NULL);
     assert (w->parent != NULL);
@@ -157,9 +195,18 @@ watch_reopen (watch *w)
     }
 
     w->fd = open (filename, O_RDONLY);
+    free (filename);
     if (w->fd == -1) {
         perror_msg ("Failed to reopen a file %s", filename);
-        free (filename);
+        return -1;
+    }
+
+    uint32_t fflags = inotify_to_kqueue (w->flags,
+                                         w->is_really_dir,
+                                         w->type == WATCH_DEPENDENCY);
+    if (watch_register_event (w, kq, fflags) == -1) {
+        close (w->fd);
+        w->fd = -1;
         return -1;
     }
 
@@ -171,7 +218,6 @@ watch_reopen (watch *w)
     w->is_really_dir = is_dir;
     w->is_directory  = (w->type == WATCH_USER ? is_dir : 0);
 
-    free (filename);
     return 0;
 }
 

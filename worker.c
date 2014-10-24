@@ -153,6 +153,8 @@ worker*
 worker_create ()
 {
     pthread_attr_t attr;
+    struct kevent ev;
+
     worker* wrk = calloc (1, sizeof (worker));
 
     if (wrk == NULL) {
@@ -174,6 +176,20 @@ worker_create ()
     if (worker_sets_init (&wrk->sets, wrk->io[KQUEUE_FD]) == -1) {
         goto failure;
     }
+
+    EV_SET (&ev,
+            wrk->io[KQUEUE_FD],
+            EVFILT_READ,
+            EV_ADD | EV_ENABLE | EV_CLEAR,
+            NOTE_LOWAT,
+            1,
+            0);
+
+    if (kevent (wrk->kq, &ev, 1, NULL, 0, NULL) == -1) {
+        perror_msg ("Failed to register kqueue event on pipe");
+        goto failure;
+    }
+
     pthread_mutex_init (&wrk->mutex, NULL);
 
     worker_cmd_init (&wrk->cmd);
@@ -300,6 +316,7 @@ worker_start_watching (worker      *wrk,
     if (watch_init (wrk->sets.watches[i],
                     type,
                     &wrk->sets.events[i],
+                    wrk->kq,
                     path,
                     entry_name,
                     flags)
@@ -413,6 +430,7 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags)
 
     w->flags = flags;
     w->event->fflags = inotify_to_kqueue (flags, w->is_really_dir, 0);
+    watch_register_event (w, wrk->kq, w->event->fflags);
 
     /* Propagate the flag changes also on all dependent watches */
     if (w->deps) {
@@ -426,6 +444,7 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags)
             if (depw->parent == w) {
                 depw->flags = flags;
                 depw->event->fflags = inotify_to_kqueue (flags, depw->is_really_dir, 1);
+                watch_register_event (depw, wrk->kq, depw->event->fflags);
             }
         }
     }

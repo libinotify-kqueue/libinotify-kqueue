@@ -318,7 +318,7 @@ handle_overwritten (void *udata, const char *path, ino_t inode)
         watch *wi = ctx->wrk->sets.watches[i];
         if (wi && (strcmp (wi->filename, path) == 0)
             && wi->parent == ctx->w) {
-            if (watch_reopen (wi) == -1) {
+            if (watch_reopen (wi, ctx->wrk->kq) == -1) {
                 /* I dont know, what to do */
                 /* Not a very beautiful way to remove a single dependency */
                 dep_list *dl = dl_create (wi->filename, wi->inode);
@@ -611,12 +611,7 @@ worker_thread (void *arg)
     for (;;) {
         struct kevent received;
 
-        int ret = kevent (wrk->kq,
-                          wrk->sets.events,
-                          wrk->sets.length,
-                          &received,
-                          1,
-                          NULL);
+        int ret = kevent (wrk->kq, NULL, 0, &received, 1, NULL);
         if (ret == -1) {
             perror_msg ("kevent failed");
             continue;
