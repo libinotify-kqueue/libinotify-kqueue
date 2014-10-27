@@ -533,21 +533,24 @@ produce_notifications (worker *wrk, struct kevent *event)
 
     watch *w = wrk->sets.watches[UDATA_TO_INDEX (event->udata)];
 
-    if (w->type == WATCH_USER) {
-        uint32_t flags = event->fflags;
+    uint32_t flags = event->fflags;
 
-        if (w->is_directory
-            && (flags & (NOTE_WRITE | NOTE_EXTEND))
-            && (w->flags & (IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO))) {
+    if (w->type == WATCH_USER) {
+        /* Treat deletes as link number changes if links still exist */
+        if (flags & NOTE_DELETE && !w->is_really_dir && !is_deleted (w->fd)) {
+            flags = (flags | NOTE_LINK) & ~NOTE_DELETE;
+        }
+
+        if (flags & NOTE_WRITE && w->is_directory) {
             produce_directory_diff (wrk, w, event);
-            flags &= ~(NOTE_WRITE | NOTE_EXTEND);
+            flags &= ~(NOTE_WRITE | NOTE_EXTEND | NOTE_LINK);
         }
 
         if (flags) {
             struct inotify_event *ie = NULL;
             int ev_len;
             ie = create_inotify_event (w->fd,
-                                       kqueue_to_inotify (flags, w->is_directory),
+                                       kqueue_to_inotify (flags, w->is_really_dir, 0),
                                        0,
                                        NULL,
                                        &ev_len);
@@ -571,14 +574,14 @@ produce_notifications (worker *wrk, struct kevent *event)
         }
     } else {
         /* for dependency events, ignore some notifications */
-        if (event->fflags & (NOTE_ATTRIB | NOTE_LINK | NOTE_WRITE | NOTE_EXTEND)) {
+        if (flags & (NOTE_ATTRIB | NOTE_LINK | NOTE_WRITE)) {
             struct inotify_event *ie = NULL;
             watch *p = w->parent;
             assert (p != NULL);
             int ev_len;
             ie = create_inotify_event
                 (p->fd,
-                 kqueue_to_inotify (event->fflags, w->is_really_dir),
+                 kqueue_to_inotify (flags, w->is_really_dir, 1),
                  0,
                  w->filename,
                  &ev_len);

@@ -25,7 +25,7 @@
 
 #include <stdint.h>
 
-uint32_t inotify_to_kqueue (uint32_t flags, int is_directory);
-uint32_t kqueue_to_inotify (uint32_t flags, int is_directory);
+uint32_t inotify_to_kqueue (uint32_t flags, int is_directory, int is_subwatch);
+uint32_t kqueue_to_inotify (uint32_t flags, int is_directory, int is_subwatch);
 
 #endif /*  __CONVERSIONS_H__ */

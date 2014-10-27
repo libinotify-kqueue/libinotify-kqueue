@@ -413,11 +413,10 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags)
     assert (w->event != NULL);
 
     w->flags = flags;
-    w->event->fflags = inotify_to_kqueue (flags, w->is_directory);
+    w->event->fflags = inotify_to_kqueue (flags, w->is_really_dir, 0);
 
     /* Propagate the flag changes also on all dependent watches */
     if (w->deps) {
-        uint32_t ino_flags = inotify_to_kqueue (flags, 0);
 
         /* Yes, it is quite stupid to iterate over ALL watches of a worker
          * while we have a linked list of its dependencies.
@@ -427,7 +426,7 @@ worker_update_flags (worker *wrk, watch *w, uint32_t flags)
             watch *depw = wrk->sets.watches[i];
             if (depw->parent == w) {
                 depw->flags = flags;
-                depw->event->fflags = ino_flags;
+                depw->event->fflags = inotify_to_kqueue (flags, depw->is_really_dir, 1);
             }
         }
     }

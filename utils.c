@@ -29,6 +29,9 @@
 #include <assert.h>
 #include <stdarg.h> /* va_list */
 
+#include <sys/types.h>
+#include <sys/stat.h>  /* fstat */
+
 #include "sys/inotify.h"
 #include "utils.h"
 
@@ -167,6 +170,25 @@ is_opened (int fd)
 {
     int ret = (fcntl (fd, F_GETFL) != -1);
     return ret;
+}
+
+/**
+ * Check if the file referenced by specified descriptor is deleted.
+ *
+ * @param[in] fd A file descriptor to check.
+ * @return 1 if deleted or error occured, 0 if hardlinks to file still exist.
+ **/
+int
+is_deleted (int fd)
+{
+    struct stat st;
+
+    if (fstat (fd, &st) == -1) {
+        perror_msg ("fstat %d failed", fd);
+        return 1;
+    }
+
+    return (st.st_nlink == 0);
 }
 
 /**

@@ -66,6 +66,73 @@ void bugs_test::run ()
     should ("receive IN_DELETE for bugst-workdir/2",
             contains (received, event ("2", wid, IN_DELETE)));
 
+
+    /* Test for extraneous IN_ATTRIB event on subdirectory creation and deletion */
+    cons.output.reset ();
+    cons.input.receive (2);
+
+    system ("mkdir bugst-workdir/1");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_CREATE for bugst-workdir/1",
+            contains (received, event ("1", wid, IN_CREATE)));
+    should ("Not receive IN_ATTRIB for bugst-workdir on subdirectory creation",
+            !contains (received, event ("", wid, IN_ATTRIB)));
+
+    cons.output.reset ();
+    cons.input.receive (2);
+
+    system ("rmdir bugst-workdir/1");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_DELETE for bugst-workdir/1",
+            contains (received, event ("1", wid, IN_DELETE)));
+    should ("Not receive IN_ATTRIB for bugst-workdir on subdirectory deletion",
+            !contains (received, event ("", wid, IN_ATTRIB)));
+
+
+    /* Test for not issuing IN_DELETE_SELF on hardlink deletes */
+    system ("touch bugst-workdir/1");
+    system ("ln bugst-workdir/1 bugst-workdir/2");
+
+    cons.input.setup ("bugst-workdir/1", IN_ATTRIB | IN_DELETE_SELF);
+    cons.output.wait ();
+    wid = cons.output.added_watch_id ();
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("rm bugst-workdir/2");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_ATTRIB for bugst-workdir/1 on hardlink delete",
+            contains (received, event ("", wid, IN_ATTRIB)));
+    should ("Not receive IN_DELETE_SELF for bugst-workdir/1 on hardlink delete",
+            !contains (received, event ("", wid, IN_DELETE_SELF)));
+
+
+    /* Test subwatch adding when no IN_(CREATE|DELETE|MOVE) flags specified */
+    cons.input.setup ("bugst-workdir", IN_ATTRIB | IN_MODIFY);
+    cons.output.wait ();
+    wid = cons.output.added_watch_id ();
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("touch bugst-workdir/2");
+    system ("touch bugst-workdir/2");
+    system ("echo test > bugst-workdir/2");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_ATTRIB for bugst-workdir/2 on touch",
+            contains (received, event ("2", wid, IN_ATTRIB)));
+    should ("receive IN_MODIFY for bugst-workdir/2 on echo",
+            contains (received, event ("2", wid, IN_MODIFY)));
+
     cons.input.interrupt ();
 }
 

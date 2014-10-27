@@ -123,11 +123,13 @@ watch_init (watch         *w,
     w->is_really_dir = is_dir;
     w->is_directory = (watch_type == WATCH_USER ? is_dir : 0);
 
+    int is_subwatch = watch_type != WATCH_USER;
+
     EV_SET (kv,
             w->fd,
             EVFILT_VNODE,
             EV_ADD | EV_ENABLE | EV_ONESHOT,
-            inotify_to_kqueue (flags, w->is_directory),
+            inotify_to_kqueue (flags, w->is_really_dir, is_subwatch),
             0,
             INDEX_TO_UDATA (index));
 
