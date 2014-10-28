@@ -117,7 +117,7 @@ watch_open (int dirfd, const char *path, uint32_t flags)
 {
     assert (path != NULL);
 
-    int openflags = O_RDONLY;
+    int openflags = O_RDONLY | O_NONBLOCK;
     if (flags & IN_DONT_FOLLOW) {
         openflags |= O_NOFOLLOW;
     }

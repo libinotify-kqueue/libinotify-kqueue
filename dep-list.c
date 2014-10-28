@@ -270,7 +270,7 @@ dl_free (dep_list *dl)
 static int
 reopendir (int oldd)
 {
-    int openflags = O_RDONLY;
+    int openflags = O_RDONLY | O_NONBLOCK;
     int fd = openat (oldd, ".", openflags);
     if (fd == -1) {
         perror_msg ("Failed to reopen parent filedes on dep_list reopen");
