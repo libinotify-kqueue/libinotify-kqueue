@@ -301,7 +301,7 @@ worker_add_watch (worker     *wrk,
     assert (wrk != NULL);
     assert (path != NULL);
 
-    int fd = watch_open (AT_FDCWD, path);
+    int fd = watch_open (AT_FDCWD, path, flags);
     if (fd == -1) {
         perror_msg ("Failed to open watch %s", path);
         return NULL;
@@ -365,7 +365,7 @@ worker_add_subwatch (worker *wrk, watch *parent, dep_item *di)
     assert (parent != NULL);
     assert (di != NULL);
 
-    int fd = watch_open (parent->fd, di->path);
+    int fd = watch_open (parent->fd, di->path, IN_DONT_FOLLOW);
     if (fd == -1) {
         perror_msg ("Failed to open file %s", di->path);
         return NULL;

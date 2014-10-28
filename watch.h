@@ -52,7 +52,7 @@ typedef struct watch {
     };
 } watch;
 
-int    watch_open (int dirfd, const char *path);
+int    watch_open (int dirfd, const char *path, uint32_t flags);
 watch *watch_init (watch_type_t   watch_type,
                    int            kq,
                    const char    *path,
