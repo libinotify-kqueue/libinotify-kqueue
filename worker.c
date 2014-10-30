@@ -41,7 +41,7 @@
 #include "worker.h"
 
 static void
-worker_remove_many (worker *wrk, i_watch *iw);
+worker_remove_many (i_watch *iw);
 
 static void
 worker_update_flags (i_watch *iw, uint32_t flags);
@@ -219,6 +219,22 @@ failure:
 }
 
 /**
+ * Remove an inotify watch from worker.
+ *
+ * @param[in] wrk A pointer to #worker.
+ * @param[in] iw A pointer to #i_watch to remove.
+ **/
+static void
+worker_remove_iwatch (worker *wrk, i_watch *iw)
+{
+    assert (wrk != NULL);
+    assert (iw != NULL);
+
+    SLIST_REMOVE (&wrk->head, iw, i_watch, next);
+    worker_remove_many (iw);
+}
+
+/**
  * Free a worker and all the associated memory.
  *
  * @param[in] wrk A pointer to #worker.
@@ -239,7 +255,7 @@ worker_free (worker *wrk)
 
     worker_cmd_release (&wrk->cmd);
     SLIST_FOREACH_SAFE (iw, &wrk->head, next, tmp) {
-        worker_remove_many (wrk, iw);
+        worker_remove_iwatch (wrk, iw);
     }
 
     for (i = 0; i < wrk->iovcnt; i++) {
@@ -453,7 +469,7 @@ worker_remove (worker *wrk,
         if (iw->wd == id) {
             enqueue_event (iw, IN_IGNORED, 0, NULL);
             flush_events (wrk);
-            worker_remove_many (wrk, iw);
+            worker_remove_iwatch (wrk, iw);
             break;
         }
     }
@@ -490,16 +506,13 @@ worker_update_flags (i_watch *iw, uint32_t flags)
 /**
  * Remove an inotify watch.
  *
- * @param[in] wrk     A pointer to #worker.
  * @param[in] iw      A pointer to #i_watch to remove.
  **/
 static void
-worker_remove_many (worker *wrk, i_watch *iw)
+worker_remove_many (i_watch *iw)
 {
-    assert (wrk != NULL);
     assert (iw != NULL);
 
-    SLIST_REMOVE (&wrk->head, iw, i_watch, next);
     worker_sets_free (&iw->watches);
     if (iw->deps != NULL) {
         dl_free (iw->deps);
