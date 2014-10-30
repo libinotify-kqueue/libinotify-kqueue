@@ -14,6 +14,7 @@ libinotify_la_SOURCES = \
     compat.c \
     conversions.c \
     dep-list.c \
+    inotify-watch.c \
     watch.c \
     worker-sets.c \
     worker-thread.c \
