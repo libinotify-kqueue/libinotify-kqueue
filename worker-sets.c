@@ -31,6 +31,7 @@
 
 #include "sys/inotify.h"
 
+#include "dep-list.h"
 #include "utils.h"
 #include "worker-sets.h"
 
@@ -157,4 +158,30 @@ worker_sets_insert (worker_sets *ws, watch *w)
     ++ws->length;
 
     return 0;
+}
+
+/**
+ * Find kqueue watch corresponding for dependency item
+ *
+ * @param[in] ws A pointer to #worker_sets.
+ * @param[in] di Dependency item with relative path to watch.
+ * @return A pointer to kqueue watch if found NULL otherwise
+ **/
+watch *
+worker_sets_find (worker_sets *ws, const dep_item *di)
+{
+    assert (ws != NULL);
+    assert (di != NULL);
+
+    size_t i;
+
+    for (i = 0; i < ws->length; i++) {
+
+        watch *w = ws->watches[i];
+        if (di->inode == w->inode && strcmp (di->path, w->filename) == 0) {
+            return w;
+        }
+    }
+
+    return NULL;
 }

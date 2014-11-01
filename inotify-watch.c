@@ -260,17 +260,11 @@ iwatch_rename_subwatch (i_watch *iw, dep_item *from, dep_item *to)
     assert (from != NULL);
     assert (to != NULL);
 
-    size_t i;
+    watch *w = worker_sets_find (&iw->watches, from);
 
-    for (i = 0; i < iw->watches.length; i++) {
-        watch *w = iw->watches.watches[i];
-
-        if ((from->inode == w->inode)
-          && (strcmp (from->path, w->filename) == 0)) {
-            free (w->filename);
-            w->filename = strdup (to->path);
-            break;
-        }
+    if (w != NULL) {
+        free (w->filename);
+        w->filename = strdup (to->path);
     }
 }
 
@@ -288,10 +282,8 @@ iwatch_rename_subwatch (i_watch *iw, dep_item *from, dep_item *to)
 int
 iwatch_subwatch_is_dir (i_watch *iw, const dep_item *di)
 {
-    int i;
-    for (i = 0; i < iw->watches.length; i++) {
-        const watch *w = iw->watches.watches[i];
-        if (w != NULL && strcmp (di->path, w->filename) == 0 && w->is_really_dir)
+    watch *w = worker_sets_find (&iw->watches, di);
+    if (w != NULL && w->is_really_dir) {
             return 1;
     }
     return 0;
