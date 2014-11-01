@@ -160,16 +160,12 @@ handle_added (void *udata, dep_item *di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
-    int addMask = 0;
     watch *neww = iwatch_add_subwatch (ctx->iw, di);
-        if (neww == NULL) {
-            perror_msg ("Failed to start watching on a new dependency %s", di->path);
-        } else {
-            if (neww->is_really_dir) {
-                addMask = IN_ISDIR;
-            }
-        }
+    if (neww == NULL) {
+        perror_msg ("Failed to start watching on a new dependency %s", di->path);
+    }
 
+    int addMask = iwatch_subwatch_is_dir (ctx->iw, di) ? IN_ISDIR : 0;
     enqueue_event (ctx->iw, IN_CREATE | addMask, 0, di->path);
 }
 
