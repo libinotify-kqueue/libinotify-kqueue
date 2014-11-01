@@ -42,7 +42,8 @@ struct i_watch {
     SLIST_ENTRY(i_watch) next; /* pointer to the next inotify watch in list */
 };
 
-i_watch *iwatch_init (worker *wrk, const char *path, uint32_t flags);
+int      iwatch_open (const char *path, uint32_t flags);
+i_watch *iwatch_init (worker *wrk, const char *path, int fd, uint32_t flags);
 void     iwatch_free (i_watch *iw);
 
 void     iwatch_update_flags    (i_watch *iw, uint32_t flags);

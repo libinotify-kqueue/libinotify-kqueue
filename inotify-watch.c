@@ -40,33 +40,48 @@
 #include "worker-sets.h"
 
 /**
+ * Preform minimal initialization required for opening watch descriptor
+ *
+ * @param[in] path  Path to watch.
+ * @param[in] flags A combination of inotify event flags.
+ * @return A inotify watch descriptor on success, -1 otherwise.
+ **/
+int
+iwatch_open (const char *path, uint32_t flags)
+{
+    int fd = watch_open (AT_FDCWD, path, flags);
+    if (fd == -1) {
+        perror_msg ("Failed to open inotify watch %s", path);
+    }
+
+    return fd;
+}
+
+/**
+>>>>>>> Factor out open of inotify watch descriptor to a separate function
  * Initialize inotify watch.
  *
  * This function creates and initializes additional watches for a directory.
  *
  * @param[in] wrk    A pointer to #worker.
  * @param[in] path   Path to watch.
+ * @param[in] fd     A file descriptor of a watched entry.
  * @param[in] flags  A combination of inotify event flags.
  * @return A pointer to a created #i_watch on success NULL otherwise
  **/
 i_watch *
 iwatch_init (worker     *wrk,
              const char *path,
+             int         fd,
              uint32_t    flags)
 {
     assert (wrk != NULL);
     assert (path != NULL);
-
-    int fd = watch_open (AT_FDCWD, path, flags);
-    if (fd == -1) {
-        perror_msg ("Failed to open watch %s", path);
-        return NULL;
-    }
+    assert (fd != -1);
 
     struct stat st;
     if (fstat (fd, &st) == -1) {
         perror_msg ("fstat failed on %d", fd);
-        close (fd);
         return NULL;
     }
 
@@ -75,7 +90,6 @@ iwatch_init (worker     *wrk,
         deps = dl_listing (fd);
         if (deps == NULL) {
             perror_msg ("Directory listing of %s failed", path);
-            close (fd);
             return NULL;
         }
     }
@@ -86,7 +100,6 @@ iwatch_init (worker     *wrk,
         if (S_ISDIR (st.st_mode)) {
             dl_free (deps);
         }
-        close (fd);
         return NULL;
     }
     iw->deps = deps;
@@ -98,7 +111,6 @@ iwatch_init (worker     *wrk,
         if (S_ISDIR (st.st_mode)) {
             dl_free (deps);
         }
-        close (fd);
         free (iw);
         return NULL;
     }
@@ -109,7 +121,6 @@ iwatch_init (worker     *wrk,
         if (S_ISDIR (st.st_mode)) {
             dl_free (deps);
         }
-        close (fd);
         free (iw);
         return NULL;
     }

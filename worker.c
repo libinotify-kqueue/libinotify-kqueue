@@ -277,6 +277,12 @@ worker_add_or_modify (worker     *wrk,
     assert (path != NULL);
     assert (wrk != NULL);
 
+    /* Open inotify watch descriptor */
+    int fd = iwatch_open (path, flags);
+    if (fd == -1) {
+        return -1;
+    }
+
     /* look up for an entry with this filename */
     i_watch *iw;
     SLIST_FOREACH (iw, &wrk->head, next) {
@@ -288,6 +294,7 @@ worker_add_or_modify (worker     *wrk,
 
             if (!(iw->watches.watches[i]->flags & WF_ISSUBWATCH) &&
                 strcmp (path, evpath) == 0) {
+                close (fd);
                 iwatch_update_flags (iw, flags);
                 return iw->wd;
             }
@@ -295,8 +302,9 @@ worker_add_or_modify (worker     *wrk,
     }
 
     /* create a new entry if path is not found */
-    iw = iwatch_init (wrk, path, flags);
+    iw = iwatch_init (wrk, path, fd, flags);
     if (iw == NULL) {
+        close (fd);
         return -1;
     }
 
