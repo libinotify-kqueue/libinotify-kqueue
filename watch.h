@@ -28,6 +28,9 @@
 #include <stdint.h>    /* uint32_t */
 #include <dirent.h>    /* ino_t */
 
+#include <sys/types.h>
+#include <sys/stat.h>  /* stat */
+
 typedef struct watch watch;
 
 #include "inotify-watch.h"
@@ -47,12 +50,15 @@ struct watch {
     size_t refcount;          /* number of dependency list items corresponding
                                * to that watch */ 
     int fd;                   /* file descriptor of a watched entry */
-    ino_t inode;              /* inode number for the watched entry */
+    ino_t inode;              /* inode number taken from readdir call */
     RB_ENTRY(watch) link;     /* RB tree links */
 };
 
 int    watch_open (int dirfd, const char *path, uint32_t flags);
-watch *watch_init (i_watch *iw, watch_type_t watch_type, int fd);
+watch *watch_init (i_watch *iw,
+                   watch_type_t watch_type,
+                   int fd,
+                   struct stat *st);
 void   watch_free (watch *w);
 
 int    watch_register_event (watch *w, uint32_t fflags);

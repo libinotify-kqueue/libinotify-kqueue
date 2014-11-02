@@ -111,7 +111,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
         }
     }
 
-    watch *parent = watch_init (iw, WATCH_USER, fd);
+    watch *parent = watch_init (iw, WATCH_USER, fd, &st);
     if (parent == NULL) {
         iwatch_free (iw);
         return NULL;
@@ -158,7 +158,7 @@ iwatch_free (i_watch *iw)
  * @return A pointer to a created watch.
  **/
 watch*
-iwatch_add_subwatch (i_watch *iw, const dep_item *di)
+iwatch_add_subwatch (i_watch *iw, dep_item *di)
 {
     assert (iw != NULL);
     assert (iw->deps != NULL);
@@ -179,7 +179,31 @@ iwatch_add_subwatch (i_watch *iw, const dep_item *di)
         return NULL;
     }
 
-    w = watch_init (iw, WATCH_DEPENDENCY, fd);
+    struct stat st;
+    if (fstat (fd, &st) == -1) {
+        perror_msg ("Failed to stat subwatch %s", di->path);
+        close (fd);
+        return NULL;
+    }
+
+    /* Correct inode number if opened file is not a listed one */
+    if (di->inode != st.st_ino) {
+        if (iw->dev != st.st_dev) {
+            /* It`s a mountpoint. Keep underlying directory inode number */
+            st.st_ino = di->inode;
+        } else {
+            /* Race detected. Use new inode number and try to find watch again */
+            perror_msg ("%s has been replaced after directory listing", di->path);
+            di->inode = st.st_ino;
+            w = watch_set_find (&iw->watches, di->inode);
+            if (w != NULL) {
+                close (fd);
+                goto hold;
+            }
+        }
+    }
+
+    w = watch_init (iw, WATCH_DEPENDENCY, fd, &st);
     if (w == NULL) {
         close (fd);
         return NULL;
