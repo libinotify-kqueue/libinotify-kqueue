@@ -484,7 +484,7 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
 
     dep_list *was = NULL, *now = NULL;
     int failed = 0;
-    was = dl_shallow_copy (w->deps);
+    was = w->deps;
     now = dl_listing (w->filename, &failed);
 
     if (now == NULL && failed && errno != ENOENT) {
@@ -492,12 +492,10 @@ produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
          * point */
         perror_msg ("Failed to create a listing for directory %s",
                     w->filename);
-        dl_shallow_free (was);
         printf("Bye!\n");
         return;
     }
 
-    dl_shallow_free (w->deps);
     w->deps = now;
 
     bulk_events be;
@@ -560,17 +558,10 @@ produce_notifications (worker *wrk, struct kevent *event)
             } else {
                 perror_msg ("Failed to create a new inotify event");
             }
+        }
 
-            if ((flags & NOTE_DELETE) && w->flags & IN_DELETE_SELF) {
-                /* TODO: really look on IN_DETELE_SELF? */
-                ie = create_inotify_event (w->fd, IN_IGNORED, 0, NULL, &ev_len);
-                if (ie != NULL) {
-                    safe_write (wrk->io[KQUEUE_FD], ie, ev_len);
-                    free (ie);
-                } else {
-                    perror_msg ("Failed to create a new IN_IGNORED event on remove");
-                }
-            }
+        if (flags & NOTE_DELETE) {
+            worker_remove (wrk, w->fd);
         }
     } else {
         /* for dependency events, ignore some notifications */
