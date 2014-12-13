@@ -23,11 +23,38 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 
+#include "config.h"
+
 #include <sys/stat.h> /* S_ISDIR */
 #include <sys/uio.h>  /* iovec */
 
+#include <errno.h>  /* errno */
 #include <stdint.h> /* uint32_t */
+#include <stdio.h>  /* fprintf */
+#include <string.h> /* strerror */
 #include <pthread.h>
+
+/**
+ * Print an error message, if allowed.
+ *
+ * Print a file name, line number and errno-based error description as well.
+ * The library should be built with --enable-perrors configure option.
+ *
+ * @param[in] msg A message format to print.
+ * @param[in] ... A set of parameters to include in the message, according
+ *      to the format string.
+ **/
+#ifdef ENABLE_PERRORS
+#define perror_msg(msg, ...)                                            \
+do {                                                                    \
+    int saved_errno_ = errno;                                           \
+    fprintf (stderr, "%s.%d: " msg ": %d (%s)\n", __FILE__, __LINE__,   \
+             ##__VA_ARGS__, errno, strerror (errno));                   \
+    errno = saved_errno_;                                               \
+} while (0)
+#else
+#define perror_msg(msg, ...)
+#endif
 
 struct inotify_event* create_inotify_event (int         wd,
                                             uint32_t    mask,
@@ -42,7 +69,5 @@ ssize_t safe_writev (int fd, const struct iovec iov[], int iovcnt);
 int is_opened (int fd);
 int is_deleted (int fd);
 int set_cloexec_flag (int fd, int value);
-
-void perror_msg (const char *msg, ...);
 
 #endif /* __UTILS_H__ */

@@ -34,7 +34,6 @@
 #include <fcntl.h> /* fcntl */
 #include <stdio.h>
 #include <assert.h>
-#include <stdarg.h> /* va_list */
 
 #include <sys/types.h>
 #include <sys/stat.h>  /* fstat */
@@ -42,8 +41,6 @@
 
 #include "sys/inotify.h"
 #include "utils.h"
-
-#include "config.h"
 
 /**
  * Create a new inotify event.
@@ -296,33 +293,4 @@ set_cloexec_flag (int fd, int value)
         flags &= ~FD_CLOEXEC;
 
     return fcntl (fd, F_SETFD, flags);
-}
-
-/**
- * Print an error message, if allowed.
- *
- * The function uses perror, so the errno-based error description will
- * be printed too.
- * The library should be built with --enable-perrors configure option.
- *
- * @param[in] msg A message format to print.
- * @param[in] ... A set of parameters to include in the message, according
- *      to the format string.
- **/
-void
-perror_msg (const char *msg, ...)
-{
-#ifdef ENABLE_PERRORS
-    const int msgsz = 2048; /* should be enough */
-    char buf[msgsz];
-    va_list vl;
-
-    va_start (vl, msg);
-    vsnprintf (buf, msgsz, msg, vl);
-    va_end (vl);
-
-    perror (buf);
-#else
-    (void) msg;
-#endif
 }
