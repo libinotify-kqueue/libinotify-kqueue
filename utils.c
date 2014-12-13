@@ -266,7 +266,9 @@ is_deleted (int fd)
     struct stat st;
 
     if (fstat (fd, &st) == -1) {
-        perror_msg ("fstat %d failed", fd);
+        if (errno != ENOENT) {
+            perror_msg ("fstat %d failed", fd);
+        }
         return 1;
     }
 
