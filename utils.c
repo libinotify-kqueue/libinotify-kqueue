@@ -113,6 +113,7 @@ create_inotify_event (int         wd,
 
 
 #define SAFE_GENERIC_OP(fcn, fd, data, size)    \
+    size_t total = 0;                           \
     if (fd == -1) {                             \
         return -1;                              \
     }                                           \
@@ -125,10 +126,11 @@ create_inotify_event (int         wd,
                 return -1;                      \
             }                                   \
         }                                       \
+        total += retval;                        \
         size -= retval;                         \
         data = (char *)data + retval;           \
     }                                           \
-    return 0;
+    return (ssize_t) total;
 
 /**
  * EINTR-ready version of read().
@@ -136,9 +138,9 @@ create_inotify_event (int         wd,
  * @param[in]  fd   A file descriptor to read from.
  * @param[out] data A receiving buffer.
  * @param[in]  size The number of bytes to read.
- * @return 0 on success, -1 on failure. 
-**/
-int
+ * @return Number of bytes which were read on success, -1 on failure.
+ **/
+ssize_t
 safe_read (int fd, void *data, size_t size)
 {
     SAFE_GENERIC_OP (read, fd, data, size);
@@ -150,9 +152,9 @@ safe_read (int fd, void *data, size_t size)
  * @param[in] fd   A file descriptor to write to.
  * @param[in] data A buffer to wtite.
  * @param[in] size The number of bytes to write.
- * @return 0 on success, -1 on failure.
+ * @return Number of bytes which were written on success, -1 on failure.
  **/
-int
+ssize_t
 safe_write (int fd, const void *data, size_t size)
 {
     SAFE_GENERIC_OP (write, fd, data, size);
