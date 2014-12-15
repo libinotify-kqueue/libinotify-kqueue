@@ -1,6 +1,13 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
+  Copyright 2008, 2013, 2014
+      The Board of Trustees of the Leland Stanford Junior University
+  Copyright (c) 2004, 2005, 2006
+      by Internet Systems Consortium, Inc. ("ISC")
+  Copyright (c) 1991, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
+      2002, 2003 by The Internet Software Consortium and Rich Salz
+
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -31,6 +38,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>  /* fstat */
+#include <sys/uio.h>   /* writev */
 
 #include "sys/inotify.h"
 #include "utils.h"
@@ -160,6 +168,111 @@ safe_write (int fd, const void *data, size_t size)
     SAFE_GENERIC_OP (write, fd, data, size);
 }
 
+/**
+ * EINTR-ready version of writev().
+ * The canonical version of this routine is maintained in the rra-c-util,
+ * which can be found at <http://www.eyrie.org/~eagle/software/rra-c-util/>.
+ *
+ * @param[in] fd     A file descriptor to write to.
+ * @param[in] iov    An array of iovec buffers to wtite.
+ * @param[in] iovcnt A number of iovec buffers to write.
+ * @return Number of bytes which were written on success, -1 on failure.
+ **/
+ssize_t
+safe_writev (int fd, const struct iovec iov[], int iovcnt)
+{
+    ssize_t total, status = 0;
+    size_t left, offset;
+    int iovleft, i, count;
+    struct iovec *tmpiov;
+
+    /*
+     * Bounds-check the iovcnt argument.  This is just for our safety.  The
+     * system will probably impose a lower limit on iovcnt, causing the later
+     * writev to fail with an error we'll return.
+     */
+    if (iovcnt == 0)
+        return 0;
+    if (iovcnt < 0 || (size_t) iovcnt > SIZE_MAX / sizeof(struct iovec)) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    /* Get a count of the total number of bytes in the iov array. */
+    for (total = 0, i = 0; i < iovcnt; i++)
+        total += iov[i].iov_len;
+    if (total == 0)
+        return 0;
+
+    /*
+     * First, try just writing it all out.  Most of the time this will succeed
+     * and save us lots of work.  Abort the write if we try ten times with no
+     * forward progress.
+     */
+    count = 0;
+    do {
+        if (++count > 10)
+            break;
+        status = writev(fd, iov, iovcnt);
+        if (status > 0)
+            count = 0;
+    } while (status < 0 && errno == EINTR);
+    if (status < 0)
+        return -1;
+    if (status == total)
+        return total;
+
+    /*
+     * If we fell through to here, the first write partially succeeded.
+     * Figure out how far through the iov array we got, and then duplicate the
+     * rest of it so that we can modify it to reflect how much we manage to
+     * write on successive tries.
+     */
+    offset = status;
+    left = total - offset;
+    for (i = 0; offset >= (size_t) iov[i].iov_len; i++)
+        offset -= iov[i].iov_len;
+    iovleft = iovcnt - i;
+    assert(iovleft > 0);
+    tmpiov = calloc(iovleft, sizeof(struct iovec));
+    if (tmpiov == NULL)
+        return -1;
+    memcpy(tmpiov, iov + i, iovleft * sizeof(struct iovec));
+
+    /*
+     * status now contains the offset into the first iovec struct in tmpiov.
+     * Go into the write loop, trying to write out everything remaining at
+     * each point.  At the top of the loop, status will contain a count of
+     * bytes written out at the beginning of the set of iovec structs.
+     */
+    i = 0;
+    do {
+        if (++count > 10)
+            break;
+
+        /* Skip any leading data that has been written out. */
+        for (; offset >= (size_t) tmpiov[i].iov_len && iovleft > 0; i++) {
+            offset -= tmpiov[i].iov_len;
+            iovleft--;
+        }
+        tmpiov[i].iov_base = (char *) tmpiov[i].iov_base + offset;
+        tmpiov[i].iov_len -= offset;
+
+        /* Write out what's left and return success if it's all written. */
+        status = writev(fd, tmpiov + i, iovleft);
+        if (status <= 0)
+            offset = 0;
+        else {
+            offset = status;
+            left -= offset;
+            count = 0;
+        }
+    } while (left > 0 && (status >= 0 || errno == EINTR));
+
+    /* We're either done or got an error; if we're done, left is now 0. */
+    free(tmpiov);
+    return (left == 0) ? total : -1;
+}
 
 /**
  * Check if the specified file descriptor is still opened.
