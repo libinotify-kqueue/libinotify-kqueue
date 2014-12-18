@@ -50,7 +50,7 @@ inotify_to_kqueue (uint32_t flags, int is_directory, int is_subwatch)
             result |= NOTE_LINK;
         if (flags & IN_MOVE_SELF)
             result |= NOTE_RENAME;
-        result |= NOTE_DELETE;
+        result |= NOTE_DELETE | NOTE_REVOKE;
     }
     return result;
 }
@@ -83,6 +83,9 @@ kqueue_to_inotify (uint32_t flags, int is_directory, int is_subwatch)
 
     if (flags & NOTE_RENAME && is_subwatch == 0)
         result |= IN_MOVE_SELF;
+
+    if (flags & NOTE_REVOKE && is_subwatch == 0)
+        result |= IN_UNMOUNT;
 
     if ((result & (IN_ATTRIB | IN_OPEN | IN_CLOSE_WRITE | IN_CLOSE_NOWRITE))
         && is_directory) {

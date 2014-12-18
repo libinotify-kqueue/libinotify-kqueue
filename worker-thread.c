@@ -358,7 +358,7 @@ produce_notifications (worker *wrk, struct kevent *event)
                                           w->flags & WF_ISSUBWATCH),
                        NULL);
 
-        if (flags & NOTE_DELETE) {
+        if (flags & (NOTE_DELETE | NOTE_REVOKE)) {
             iw->is_closed = 1;
         }
     } else {
