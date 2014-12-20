@@ -21,12 +21,8 @@ libinotify_la_SOURCES = \
     worker.c \
     controller.c
 
-libinotify_la_CFLAGS = -I. -DNDEBUG
-if FREEBSD
-libinotify_la_LDFLAGS = -pthread
-else
-libinotify_la_LDFLAGS = -lpthread
-endif
+libinotify_la_CFLAGS = -I. -DNDEBUG @PTHREAD_CFLAGS@
+libinotify_la_LDFLAGS = @PTHREAD_LIBS@
 endif
 
 ############################################################
@@ -63,20 +59,16 @@ check_libinotify_SOURCES = \
     tests/bugs_test.cc \
     tests/tests.cc
 
+check_libinotify_CXXFLAGS = @PTHREAD_CFLAGS@
+check_libinotify_LDFLAGS = @PTHREAD_LIBS@
+
 if LINUX
-check_libinotify_CXXFLAGS = -std=c++0x
+check_libinotify_CXXFLAGS += -std=c++0x
 check_libinotify_SOURCES += compat.c
 endif
 
 if BUILD_LIBRARY
 check_libinotify_LDADD = libinotify.la
 endif
-
-if FREEBSD
-check_libinotify_LDFLAGS = -pthread
-else
-check_libinotify_LDFLAGS = -lpthread
-endif
-
 
 noinst_programs = check_libinotify

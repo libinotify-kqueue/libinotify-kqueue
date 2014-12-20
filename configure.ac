@@ -26,6 +26,9 @@ AC_ARG_ENABLE([perrors],
 )
 
 
+AX_PTHREAD([], AC_MSG_ERROR(No pthread library found in your system!))
+
+
 kqueue_support=no
 AC_CHECK_HEADERS([sys/event.h],
 [
