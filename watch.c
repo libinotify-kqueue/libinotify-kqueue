@@ -180,11 +180,12 @@ watch_reopen (watch *w, int kq)
     }
 
     w->fd = open (filename, O_RDONLY);
-    free (filename);
     if (w->fd == -1) {
         perror_msg ("Failed to reopen a file %s", filename);
+        free (filename);
         return -1;
     }
+    free (filename);
 
     uint32_t fflags = inotify_to_kqueue (w->flags,
                                          w->is_really_dir,
