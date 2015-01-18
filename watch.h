@@ -23,7 +23,6 @@
 #ifndef __WATCH_H__
 #define __WATCH_H__
 
-#include <sys/event.h> /* kevent */
 #include <stdint.h>    /* uint32_t */
 #include <dirent.h>    /* ino_t */
 
@@ -47,24 +46,23 @@ typedef struct watch {
     int fd;                   /* file descriptor of a watched entry */
     ino_t inode;              /* inode number for the watched entry */
 
-    struct kevent *event;     /* a pointer to the associated kevent */
-
     union {
         dep_list *deps;       /* dependencies for an user-defined watch */
         struct watch *parent; /* parent watch for an automatic (dependency) watch */
     };
 } watch;
 
+
 int watch_init (watch         *w,
                 watch_type_t   watch_type,
-                struct kevent *kv,
+                int            kq,
                 const char    *path,
                 const char    *entry_name,
-                uint32_t       flags,
-                int            index);
+                uint32_t       flags);
 
-int  watch_reopen (watch *w);
+int  watch_reopen (watch *w, int kq);
 void watch_free   (watch *w);
 
+int  watch_register_event (watch *w, int kq, uint32_t fflags);
 
 #endif /* __WATCH_H__ */
