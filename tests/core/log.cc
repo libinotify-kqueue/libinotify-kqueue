@@ -43,7 +43,8 @@ unsigned long current_thread ()
 {
 #ifdef __linux__
     return static_cast<uintptr_t>(pthread_self ());
-#elif defined (__NetBSD__) || defined (__OpenBSD__) || defined(__APPLE__)
+#elif defined (__NetBSD__) || defined (__OpenBSD__) || \
+      defined(__APPLE__) || defined(__DragonFly__)
     return reinterpret_cast<unsigned long>(pthread_self ());
 #elif defined (__FreeBSD__)
     return reinterpret_cast<uintptr_t>(pthread_self ());

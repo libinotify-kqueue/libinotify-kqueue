@@ -29,7 +29,8 @@
 #ifdef __linux__
 #  include <sys/inotify.h>
 #  include <stdint.h> // uint32_t, requires -std=c++0x
-#elif defined (__NetBSD__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__APPLE__)
+#elif defined (__NetBSD__) || defined(__FreeBSD__) || defined(__OpenBSD__) || \
+      defined(__APPLE__) || defined(__DragonFly__)
 #  include "sys/inotify.h"
 #  include <stdint.h>
 #else
