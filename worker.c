@@ -208,6 +208,7 @@ worker_create ()
 
     result = pthread_create (&wrk->thread, &attr, worker_thread, wrk);
     
+    pthread_attr_destroy (&attr);
     pthread_sigmask (SIG_SETMASK, &oset, NULL);
 
     if (result != 0) {
