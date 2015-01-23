@@ -72,7 +72,7 @@ worker_cmd_add (worker_cmd *cmd, const char *filename, uint32_t mask)
     worker_cmd_reset (cmd);
 
     cmd->type = WCMD_ADD;
-    cmd->add.filename = strdup (filename);
+    cmd->add.filename = filename;
     cmd->add.mask = mask;
 }
 
@@ -103,9 +103,6 @@ worker_cmd_reset (worker_cmd *cmd)
 {
     assert (cmd != NULL);
 
-    if (cmd->type == WCMD_ADD) {
-        free (cmd->add.filename);
-    }
     cmd->type = 0;
     cmd->retval = 0;
     cmd->add.filename = NULL;

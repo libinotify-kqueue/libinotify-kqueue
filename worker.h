@@ -56,7 +56,7 @@ typedef struct worker_cmd {
 
     union {
         struct {
-            char *filename;
+            const char *filename;
             uint32_t mask;
         } add;
 
