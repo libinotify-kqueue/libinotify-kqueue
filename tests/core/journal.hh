@@ -54,6 +54,7 @@ public:
     };
 
     journal ();
+    ~journal ();
     channel& allocate_channel (const std::string &name);
     void summarize () const;
 

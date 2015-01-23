@@ -78,6 +78,11 @@ journal::journal ()
     pthread_mutex_init (&channels_mutex, NULL);
 }
 
+journal::~journal ()
+{
+    pthread_mutex_destroy (&channels_mutex);
+}
+
 journal::channel& journal::allocate_channel (const std::string &name)
 {
     pthread_mutex_lock (&channels_mutex);
