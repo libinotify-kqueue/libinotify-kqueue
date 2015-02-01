@@ -79,24 +79,13 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
         return NULL;
     }
 
-    dep_list *deps = NULL;
-    if (S_ISDIR (st.st_mode)) {
-        deps = dl_listing (fd);
-        if (deps == NULL) {
-            perror_msg ("Directory listing of %d failed", fd);
-            return NULL;
-        }
-    }
-
     i_watch *iw = calloc (1, sizeof (i_watch));
     if (iw == NULL) {
         perror_msg ("Failed to allocate inotify watch");
-        if (S_ISDIR (st.st_mode)) {
-            dl_free (deps);
-        }
         return NULL;
     }
-    iw->deps = deps;
+
+    iw->deps = NULL;
     iw->wrk = wrk;
     iw->wd = fd;
     iw->flags = flags;
@@ -105,12 +94,18 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
 
     watch_set_init (&iw->watches);
 
+    if (S_ISDIR (st.st_mode)) {
+        iw->deps = dl_listing (fd);
+        if (iw->deps == NULL) {
+            perror_msg ("Directory listing of %d failed", fd);
+            iwatch_free (iw);
+            return NULL;
+        }
+    }
+
     watch *parent = watch_init (iw, WATCH_USER, fd);
     if (parent == NULL) {
-        if (S_ISDIR (st.st_mode)) {
-            dl_free (deps);
-        }
-        free (iw);
+        iwatch_free (iw);
         return NULL;
     }
 
