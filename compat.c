@@ -23,20 +23,25 @@
 #include <assert.h>
 #include <string.h> /* memset */
 
-#include "barriers.h"
+#include "compat.h"
+#include "config.h"
 
+#ifndef HAVE_PTHREAD_BARRIER
 /**
  * Initialize a barrier
  *
  * @param[in] impl   A pointer to barrier
+ * @param[in] attr   A barrier attributes (not implemented)
  * @param[in] count  The number of threads to wait on the barrier
  **/
-static void
-ik_barrier_impl_init (ik_barrier_impl *impl, int count)
+void
+pthread_barrier_init (pthread_barrier_t *impl,
+                      const pthread_barrierattr_t *attr,
+                      unsigned count)
 {
     assert (impl != NULL);
 
-    memset (impl, 0, sizeof (ik_barrier_impl));
+    memset (impl, 0, sizeof (pthread_barrier_t));
     impl->count = count;
 
     pthread_mutex_init (&impl->mtx, NULL);
@@ -46,7 +51,7 @@ ik_barrier_impl_init (ik_barrier_impl *impl, int count)
 
 /**
  * Wait on a barrier.
- * 
+ *
  * If this thread is not the last expected one, it will be blocked
  * until all the expected threads will check in on the barrier.
  * Otherwise the barrier will be marked as passed and all blocked
@@ -57,8 +62,8 @@ ik_barrier_impl_init (ik_barrier_impl *impl, int count)
  *
  * @param[in] impl  A pointer to barrier
  **/
-static void
-ik_barrier_impl_wait (ik_barrier_impl *impl)
+void
+pthread_barrier_wait (pthread_barrier_t *impl)
 {
     while (impl->entered == 0 && impl->sleeping != 0);
 
@@ -82,8 +87,8 @@ ik_barrier_impl_wait (ik_barrier_impl *impl)
  *
  * @param[in] impl  A pointer to barrier
  **/
-static void
-ik_barrier_impl_destroy (ik_barrier_impl *impl)
+void
+pthread_barrier_destroy (pthread_barrier_t *impl)
 {
     assert (impl != NULL);
 
@@ -94,64 +99,4 @@ ik_barrier_impl_destroy (ik_barrier_impl *impl)
     impl->entered = 0;
     impl->sleeping = 0;
 }
-
-
-/**
- * Initialize a barrier.
- *
- * Depending on the configuration, the underlying barrier can be either
- * a pthread barrier or an own barrier implementation.
- *
- * @param[in] b     A pointer to barrier 
- * @param[in] n     The number of threads to wait on the barrier.
- **/
-void
-ik_barrier_init (ik_barrier *b, int n)
-{
-    assert (b != NULL);
-#ifndef WITHOUT_BARRIERS
-    pthread_barrier_init (&b->impl, NULL, n);
-#else
-    ik_barrier_impl_init (&b->impl, n);
-#endif
-}
-
-
-/**
- * Wait on a barrier.
- *
- * Depending on the configuration, the underlying barrier can be either
- * a pthread barrier or an own barrier implementation.
- *
- * @param[in] b     A pointer to barrier 
- **/
-void
-ik_barrier_wait (ik_barrier *b)
-{
-    assert (b != NULL);;
-#ifndef WITHOUT_BARRIERS
-    pthread_barrier_wait (&b->impl);
-#else
-    ik_barrier_impl_wait (&b->impl);
-#endif
-}
-
-
-/**
- * Destroy a barrier.
- *
- * Depending on the configuration, the underlying barrier can be either
- * a pthread barrier or an own barrier implementation.
- *
- * @param[in] b     A pointer to barrier 
- **/
-void
-ik_barrier_destroy (ik_barrier *b)
-{
-    assert (b != NULL);;
-#ifndef WITHOUT_BARRIERS
-    pthread_barrier_destroy (&b->impl);
-#else
-    ik_barrier_impl_destroy (&b->impl);
-#endif
-}
+#endif /* HAVE_PTHREAD_BARRIER */

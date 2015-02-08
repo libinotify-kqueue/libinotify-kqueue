@@ -26,11 +26,11 @@
 #include "platform.hh"
 
 extern "C" {
-#include "barriers.h"
+#include "compat.h"
 }
 
 class action {
-    ik_barrier barrier; 
+    pthread_barrier_t barrier;
 
     const std::string name;
     volatile bool interrupted;

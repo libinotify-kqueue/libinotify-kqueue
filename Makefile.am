@@ -11,7 +11,7 @@ nobase_include_HEADERS = sys/inotify.h
 
 libinotify_la_SOURCES = \
     utils.c \
-    barriers.c \
+    compat.c \
     conversions.c \
     dep-list.c \
     watch.c \
@@ -63,7 +63,7 @@ check_libinotify_SOURCES = \
 
 if LINUX
 check_libinotify_CXXFLAGS = -std=c++0x
-check_libinotify_SOURCES += barriers.c
+check_libinotify_SOURCES += compat.c
 endif
 
 if BUILD_LIBRARY

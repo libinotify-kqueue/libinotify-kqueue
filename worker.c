@@ -55,7 +55,7 @@ void worker_cmd_init (worker_cmd *cmd)
 {
     assert (cmd != NULL);
     memset (cmd, 0, sizeof (worker_cmd));
-    ik_barrier_init (&cmd->sync, 2);
+    pthread_barrier_init (&cmd->sync, NULL, 2);
 }
 
 /**
@@ -125,7 +125,7 @@ void
 worker_cmd_wait (worker_cmd *cmd)
 {
     assert (cmd != NULL);
-    ik_barrier_wait (&cmd->sync);
+    pthread_barrier_wait (&cmd->sync);
 }
 
 /**
@@ -139,7 +139,7 @@ void
 worker_cmd_release (worker_cmd *cmd)
 {
     assert (cmd != NULL);
-    ik_barrier_destroy (&cmd->sync);
+    pthread_barrier_destroy (&cmd->sync);
 }
 
 
@@ -161,6 +161,10 @@ worker_create ()
         perror_msg ("Failed to create a new worker");
         goto failure;
     }
+
+    wrk->iovalloc = 0;
+    wrk->iovcnt = 0;
+    wrk->iov = NULL;
 
     wrk->kq = kqueue ();
     if (wrk->kq == -1) {
@@ -222,6 +226,8 @@ worker_free (worker *wrk)
 {
     assert (wrk != NULL);
 
+    int i;
+
     close (wrk->io[KQUEUE_FD]);
     wrk->io[KQUEUE_FD] = -1;
 
@@ -230,6 +236,11 @@ worker_free (worker *wrk)
 
     worker_cmd_release (&wrk->cmd);
     worker_sets_free (&wrk->sets);
+
+    for (i = 0; i < wrk->iovcnt; i++) {
+        free (wrk->iov[i].iov_base);
+    }
+    free (wrk->iov);
     pthread_mutex_destroy (&wrk->mutex);
 
     free (wrk);
@@ -383,21 +394,13 @@ worker_remove (worker *wrk,
     size_t i;
     for (i = 0; i < wrk->sets.length; i++) {
         if (wrk->sets.watches[i]->fd == id) {
-            int ie_len = 0;
-            struct inotify_event *ie;
-            ie = create_inotify_event (id, IN_IGNORED, 0, "", &ie_len);
-
             worker_remove_many (wrk,
                                 wrk->sets.watches[i],
                                 wrk->sets.watches[i]->deps,
                                 1);
 
-            if (ie != NULL) {
-                safe_write (wrk->io[KQUEUE_FD], ie, ie_len);
-                free (ie);
-            } else {
-                perror_msg ("Failed to create an IN_IGNORED event on stopping a watch");
-            }
+            enqueue_event (wrk, id, IN_IGNORED, 0, NULL);
+            flush_events (wrk);
             break;
         }
     }
@@ -460,61 +463,48 @@ worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remov
     assert (wrk != NULL);
     assert (parent != NULL);
 
-    dep_list *to_remove = dl_shallow_copy (items);
-    
-    size_t i, j;
+    const dep_list *iter = items;
+    size_t i;
 
-    for (i = 0, j = 0; i < wrk->sets.length; i++) {
-        dep_list *iter = to_remove;
-        dep_list *prev = NULL;
-        watch *w = wrk->sets.watches[i];
+    while (iter != NULL) {
 
-        if (remove_self && w == parent) {
-            /* Remove the parent watch itself. The watch will be freed later,
-             * now just remove it from the array */
-            continue;
-        }
-
-        if (w->parent == parent) {
-            while (iter != NULL && strcmp (iter->path, w->filename) != 0) {
-                prev = iter;
-                iter = iter->next;
-            }
-
-            if (iter != NULL) {
-                /* At first, remove this entry from a list of files to remove */
-                if (prev) {
-                    prev->next = iter->next;
-                } else {
-                    to_remove = iter->next;
-                }
-
-                free (iter);
-
-                /* Then, remove the watch itself */
-                watch_free (w);
-                continue;
-            }
-        }
-
-        /* If the control reached here, keep this item */
-        if (i != j) {
-            wrk->sets.watches[j] = w;
-        }
-        ++j;
+        worker_remove_watch (wrk, parent, iter->path);
+        iter = iter->next;
     }
 
     if (remove_self) {
-        watch_free (parent);
+        for (i = 0; i < wrk->sets.length; i++) {
+            if (wrk->sets.watches[i] == parent) {
+                worker_sets_delete (&wrk->sets, i);
+                break;
+            }
+        }
     }
+}
 
-    wrk->sets.length -= (i - j);
+/**
+ * Remove a watch from worker by its path.
+ *
+ * @param[in] wrk     A pointer to #worker.
+ * @param[in] parent  A pointer to the parent #watch.
+ * @param[in] item    A watch to remove. Must be child of the specified parent.
+ **/
+void
+worker_remove_watch (worker *wrk, watch *parent, const char *path)
+{
+    assert (wrk != NULL);
+    assert (parent != NULL);
 
-    for (i = wrk->sets.length; i < wrk->sets.allocated; i++) {
-        wrk->sets.watches[i] = NULL;
+    size_t i;
+
+    for (i = 0; i < wrk->sets.length; i++) {
+        watch *w = wrk->sets.watches[i];
+
+        if ((w->parent == parent) && (strcmp (path, w->filename) == 0)) {
+            worker_sets_delete (&wrk->sets, i);
+            break;
+        }
     }
-
-    dl_shallow_free (to_remove);
 }
 
 /**

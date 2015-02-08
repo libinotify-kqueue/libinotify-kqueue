@@ -23,6 +23,14 @@
 #ifndef __WORKER_THREAD_H__
 #define __WORKER_THREAD_H__
 
+#include "worker.h"
+
 void* worker_thread (void *arg);
+int   enqueue_event (worker     *wrk,
+                     int         wd,
+                     uint32_t    mask,
+                     uint32_t    cookie,
+                     const char *name);
+void  flush_events  (worker *wrk);
 
 #endif /* __WORKER_THREAD_H__ */
