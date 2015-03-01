@@ -264,21 +264,21 @@ worker_add_dependencies (worker        *wrk,
     assert (parent != NULL);
     assert (parent->type == WATCH_USER);
 
-    parent->deps = dl_listing (parent->filename, NULL);
+    parent->deps = dl_listing (parent->filename);
 
-    {   dep_list *iter = parent->deps;
-        while (iter != NULL) {
-            char *path = path_concat (parent->filename, iter->path);
+    {   dep_node *iter;
+        SLIST_FOREACH (iter, &parent->deps->head, next) {
+            char *path = path_concat (parent->filename, iter->item->path);
             if (path != NULL) {
                 watch *neww = worker_start_watching (wrk,
                                                      path,
-                                                     iter->path,
+                                                     iter->item->path,
                                                      parent->flags,
                                                      WATCH_DEPENDENCY);
                 if (neww == NULL) {
                     perror_msg ("Failed to start watching a dependency %s of %s",
                                 path,
-                                iter->path);
+                                iter->item->path);
                 } else {
                     neww->parent = parent;
                 }
@@ -286,7 +286,6 @@ worker_add_dependencies (worker        *wrk,
             } else {
                 perror_msg ("Failed to allocate a path while adding a dependency");
             }
-            iter = iter->next;
         }
     }
     return 0;
@@ -463,13 +462,14 @@ worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remov
     assert (wrk != NULL);
     assert (parent != NULL);
 
-    const dep_list *iter = items;
+    dep_node *iter;
     size_t i;
 
-    while (iter != NULL) {
+    if (items != NULL) {
+        SLIST_FOREACH (iter, &items->head, next) {
 
-        worker_remove_watch (wrk, parent, iter->path);
-        iter = iter->next;
+            worker_remove_watch (wrk, parent, iter->item);
+        }
     }
 
     if (remove_self) {
@@ -490,7 +490,7 @@ worker_remove_many (worker *wrk, watch *parent, const dep_list *items, int remov
  * @param[in] item    A watch to remove. Must be child of the specified parent.
  **/
 void
-worker_remove_watch (worker *wrk, watch *parent, const char *path)
+worker_remove_watch (worker *wrk, watch *parent, const dep_item *item)
 {
     assert (wrk != NULL);
     assert (parent != NULL);
@@ -500,7 +500,7 @@ worker_remove_watch (worker *wrk, watch *parent, const char *path)
     for (i = 0; i < wrk->sets.length; i++) {
         watch *w = wrk->sets.watches[i];
 
-        if ((w->parent == parent) && (strcmp (path, w->filename) == 0)) {
+        if ((w->parent == parent) && (strcmp (item->path, w->filename) == 0)) {
             worker_sets_delete (&wrk->sets, i);
             break;
         }
@@ -529,33 +529,25 @@ worker_update_paths (worker *wrk, watch *parent)
     size_t i;
 
     for (i = 0; i < wrk->sets.length; i++) {
-        dep_list *iter = to_update;
-        dep_list *prev = NULL;
+        dep_node *iter;
+        dep_node *prev = NULL;
         watch *w = wrk->sets.watches[i];
 
-        if (to_update == NULL) {
-            break;
-        }
-
         if (w->parent == parent) {
-            while (iter != NULL && iter->inode != w->inode) {
+            SLIST_FOREACH (iter, &to_update->head, next) {
+                if (iter->item->inode == w->inode) {
+                    break;
+                }
                 prev = iter;
-                iter = iter->next;
             }
 
             if (iter != NULL) {
-                if (prev) {
-                    prev->next = iter->next;
-                } else {
-                    to_update = iter->next;
-                }
-
-                if (strcmp (iter->path, w->filename)) {
+                if (strcmp (iter->item->path, w->filename)) {
                     free (w->filename);
-                    w->filename = strdup (iter->path);
+                    w->filename = strdup (iter->item->path);
                 }
 
-                free (iter);
+                dl_remove_after (to_update, prev);
             }
         }
     }

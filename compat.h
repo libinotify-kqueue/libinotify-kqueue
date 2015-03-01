@@ -25,7 +25,26 @@
 
 #include "config.h"
 
+#ifdef BUILD_LIBRARY
+#include <sys/types.h>
+#include <sys/queue.h>
+#endif /* BUILD_LIBRARY */
 #include <pthread.h>
+
+#ifdef BUILD_LIBRARY
+#ifndef SLIST_FOREACH_SAFE
+#define SLIST_FOREACH_SAFE(var, head, field, tvar)                      \
+        for ((var) = SLIST_FIRST((head));                               \
+            (var) && ((tvar) = SLIST_NEXT((var), field), 1);            \
+            (var) = (tvar))
+#endif
+#ifndef SLIST_REMOVE_AFTER
+#define SLIST_REMOVE_AFTER(elm, field) do {                             \
+        SLIST_NEXT(elm, field) =                                        \
+            SLIST_NEXT(SLIST_NEXT(elm, field), field);                  \
+} while (0)
+#endif
+#endif /* BUILD_LIBRARY */
 
 #ifndef HAVE_PTHREAD_BARRIER
 typedef struct {
