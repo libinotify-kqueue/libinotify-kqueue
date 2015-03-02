@@ -571,13 +571,13 @@ dl_calculate (dep_list           *before,
      * to invoke handle_removed callback on this items instead of
      * handle_replacements
      */
-    need_update += dl_detect_moves (before, now, cbs, udata);
-    dl_detect_overwrites (before, now, cbs, udata);
-    if (lst != NULL) {
+    if (lst != NULL) { /* TODO: Check & verify the behavior */
+        need_update += dl_detect_moves (before, now, cbs, udata);
+        dl_detect_overwrites (before, now, cbs, udata);
         need_update += dl_detect_replacements (before, lst, cbs, udata);
         dl_shallow_free (lst);
     }
- 
+
     if (need_update) {
         cb_invoke (cbs, names_updated, udata);
     }
