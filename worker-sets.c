@@ -83,8 +83,6 @@ worker_sets_extend (worker_sets *ws,
             return -1;
         }
         ws->watches = ptr;
-        ws->watches[0] = NULL;
-
         ws->allocated = to_allocate;
     }
     return 0;
