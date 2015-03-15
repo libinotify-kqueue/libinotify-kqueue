@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 
 #include "sys/inotify.h"
 
@@ -247,96 +248,142 @@ worker_free (worker *wrk)
 }
 
 /**
- * When starting watching a directory, start also watching its contents.
- *
- * This function creates and initializes additional watches for a directory.
- *
- * @param[in] wrk    A pointer to #worker.
- * @param[in] parent A pointer to the parent #watch, i.e. the watch we add
- *     dependencies for.
- * @return 0 on success, -1 otherwise.
- **/
-static int
-worker_add_dependencies (worker        *wrk,
-                         watch         *parent)
-{
-    assert (wrk != NULL);
-    assert (parent != NULL);
-    assert (parent->type == WATCH_USER);
-
-    parent->deps = dl_listing (parent->filename);
-
-    {   dep_node *iter;
-        SLIST_FOREACH (iter, &parent->deps->head, next) {
-            char *path = path_concat (parent->filename, iter->item->path);
-            if (path != NULL) {
-                watch *neww = worker_start_watching (wrk,
-                                                     path,
-                                                     iter->item->path,
-                                                     parent->flags,
-                                                     WATCH_DEPENDENCY);
-                if (neww == NULL) {
-                    perror_msg ("Failed to start watching a dependency %s of %s",
-                                path,
-                                iter->item->path);
-                } else {
-                    neww->parent = parent;
-                }
-                free (path);
-            } else {
-                perror_msg ("Failed to allocate a path while adding a dependency");
-            }
-        }
-    }
-    return 0;
-}
-
-/**
  * Start watching a file or a directory.
  *
  * @param[in] wrk        A pointer to #worker.
- * @param[in] path       Path to watch.
- * @param[in] entry_name Entry name. Used for dependencies.
+ * @param[in] path       A file name of a watched file.
+ * @param[in] fd         A file descriptor of a watched entry.
  * @param[in] flags      A combination of inotify event flags.
  * @param[in] type       The type of a watch.
  * @return A pointer to a created watch.
  **/
-watch*
+static watch*
 worker_start_watching (worker      *wrk,
                        const char  *path,
-                       const char  *entry_name,
+                       int          fd,
                        uint32_t     flags,
                        watch_type_t type)
 {
     assert (wrk != NULL);
     assert (path != NULL);
 
-    int i;
-
     if (worker_sets_extend (&wrk->sets, 1) == -1) {
         perror_msg ("Failed to extend worker sets");
         return NULL;
     }
 
-    i = wrk->sets.length;
-    wrk->sets.watches[i] = calloc (1, sizeof (struct watch));
-    if (watch_init (wrk->sets.watches[i],
-                    type,
-                    wrk->kq,
-                    path,
-                    entry_name,
-                    flags)
-        == -1) {
-        watch_free (wrk->sets.watches[i]);
-        wrk->sets.watches[i] = NULL;
+    watch *w = watch_init (type, wrk->kq, path, fd, flags);
+    if (w == NULL) {
         return NULL;
     }
+    wrk->sets.watches[wrk->sets.length] = w;
+
     ++wrk->sets.length;
 
-    if (type == WATCH_USER && wrk->sets.watches[i]->is_directory) {
-        worker_add_dependencies (wrk, wrk->sets.watches[i]);
+    return w;
+}
+
+/**
+ * When starting watching a directory, start also watching its contents.
+ *
+ * This function creates and initializes additional watches for a directory.
+ *
+ * @param[in] wrk    A pointer to #worker.
+ * @param[in] path   Path to watch.
+ * @param[in] flags  A combination of inotify event flags.
+ * @return A pointer to a created watch on success NULL otherwise
+ **/
+static watch *
+worker_add_watch (worker     *wrk,
+                  const char *path,
+                  uint32_t    flags)
+{
+    assert (wrk != NULL);
+    assert (path != NULL);
+
+    int fd = watch_open (AT_FDCWD, path);
+    if (fd == -1) {
+        perror_msg ("Failed to open watch %s", path);
+        return NULL;
     }
-    return wrk->sets.watches[i];
+
+    struct stat st;
+    if (fstat (fd, &st) == -1) {
+        perror_msg ("Failed to fstat watch %s on init", path);
+        close (fd);
+        return NULL;
+    }
+
+    dep_list *deps = NULL;
+    if (S_ISDIR (st.st_mode)) {
+        deps = dl_listing (fd);
+        if (deps == NULL) {
+            perror_msg ("Directory listing of %s failed", path);
+            close (fd);
+            return NULL;
+        }
+    }
+
+    watch *parent = worker_start_watching (wrk, path, fd, flags, WATCH_USER);
+    if (parent == NULL) {
+        if (S_ISDIR (st.st_mode)) {
+            dl_free (deps);
+        }
+        close (fd);
+        return NULL;
+    }
+
+    if (S_ISDIR (st.st_mode)) {
+        parent->deps = deps;
+
+        dep_node *iter;
+        SLIST_FOREACH (iter, &parent->deps->head, next) {
+            watch *neww = worker_add_subwatch (wrk, parent, iter->item);
+            if (neww == NULL) {
+                perror_msg ("Failed to start watching a dependency %s of %s",
+                            iter->item->path,
+                            parent->filename);
+            }
+        }
+    }
+    return parent;
+}
+
+/**
+ * Start watching a file or a directory.
+ *
+ * @param[in] wrk        A pointer to #worker.
+ * @param[in] parent     A pointer to the parent #watch, i.e. the watch we add
+ *     dependencies for.
+ * @param[in] di         Dependency item with relative path to watch.
+ * @return A pointer to a created watch.
+ **/
+watch*
+worker_add_subwatch (worker *wrk, watch *parent, dep_item *di)
+{
+    assert (wrk != NULL);
+    assert (parent != NULL);
+    assert (di != NULL);
+
+    int fd = watch_open (parent->fd, di->path);
+    if (fd == -1) {
+        perror_msg ("Failed to open file %s", di->path);
+        return NULL;
+    }
+
+    watch *w = worker_start_watching (wrk,
+                                      di->path,
+                                      fd,
+                                      parent->flags,
+                                      WATCH_DEPENDENCY);
+    if (w == NULL) {
+        close (fd);
+        return NULL;
+    }
+
+    w->parent = parent;
+
+    return w;
 }
 
 /**
@@ -372,7 +419,7 @@ worker_add_or_modify (worker     *wrk,
     }
 
     /* add a new entry if path is not found */
-    watch *w = worker_start_watching (wrk, path, NULL, flags, WATCH_USER);
+    watch *w = worker_add_watch (wrk, path, flags);
     return (w != NULL) ? w->fd : -1;
 }
 

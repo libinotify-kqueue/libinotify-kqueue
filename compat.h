@@ -28,6 +28,14 @@
 #ifdef BUILD_LIBRARY
 #include <sys/types.h>
 #include <sys/queue.h>
+#ifdef __APPLE__
+#include </System/Library/Frameworks/Kernel.framework/Versions/Current/Headers/libkern/tree.h>
+#else
+#include <sys/tree.h>  /* RB tree macroses */
+#endif
+
+#include <dirent.h>
+#include <fcntl.h>
 #endif /* BUILD_LIBRARY */
 #include <pthread.h>
 
@@ -65,5 +73,18 @@ void pthread_barrier_init    (pthread_barrier_t *impl,
 void pthread_barrier_wait    (pthread_barrier_t *impl);
 void pthread_barrier_destroy (pthread_barrier_t *impl);
 #endif
+
+#ifdef BUILD_LIBRARY
+#ifndef AT_FDCWD
+#define AT_FDCWD		-100
+#endif
+
+#ifndef HAVE_OPENAT
+int openat (int fd, const char *path, int flags, ...);
+#endif
+#ifndef HAVE_FDOPENDIR
+DIR *fdopendir (int fd);
+#endif
+#endif /* BUILD_LIBRARY */
 
 #endif /* __COMPAT_H__ */

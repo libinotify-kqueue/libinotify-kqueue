@@ -28,8 +28,6 @@
 #include <stdint.h> /* uint32_t */
 #include <pthread.h>
 
-char* path_concat (const char *dir, const char *file);
-
 struct inotify_event* create_inotify_event (int         wd,
                                             uint32_t    mask,
                                             uint32_t    cookie,

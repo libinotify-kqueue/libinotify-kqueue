@@ -283,6 +283,26 @@ void notifications_dir_test::run ()
 
 
     cons.output.reset ();
+    cons.input.receive ();
+
+    system ("mv ntfsdt-working-2/bar ntfsdt-working-2/foo");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive events from a files in directory after directory has been moved",
+            contains (received, event ("bar", wid, IN_MOVED_FROM))
+            && contains (received, event ("foo", wid, IN_MOVED_TO)));
+
+    /* resetup watch again to not be dependent on success of previous test */
+    cons.input.setup ("ntfsdt-working-2",
+                      IN_ATTRIB | IN_MODIFY
+                      | IN_CREATE | IN_DELETE
+                      | IN_MOVED_FROM | IN_MOVED_TO
+                      | IN_MOVE_SELF | IN_DELETE_SELF);
+    cons.output.wait ();
+    wid = cons.output.added_watch_id ();
+
+    cons.output.reset ();
     cons.input.receive (4);
 
     system ("rm -rf ntfsdt-working-2");
@@ -291,8 +311,8 @@ void notifications_dir_test::run ()
     received = cons.output.registered ();
     should ("receive IN_DELETE for a file \'one\' in a directory on removing a directory",
             contains (received, event ("one", wid, IN_DELETE)));
-    should ("receive IN_DELETE for a file \'bar\' in a directory on removing a directory",
-            contains (received, event ("bar", wid, IN_DELETE)));
+    should ("receive IN_DELETE for a file \'foo\' in a directory on removing a directory",
+            contains (received, event ("foo", wid, IN_DELETE)));
     should ("receive IN_DELETE_SELF on removing a directory",
             contains (received, event ("", wid, IN_DELETE_SELF)));
     should ("receive IN_IGNORED on removing a directory",

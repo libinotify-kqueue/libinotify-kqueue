@@ -26,11 +26,15 @@
 #include <stdio.h>   /* printf */
 #include <dirent.h>  /* opendir, readdir, closedir */
 #include <string.h>  /* strcmp */
+#include <fcntl.h>   /* open */
+#include <unistd.h>  /* close */
 #include <assert.h>
+#include <errno.h>
 
 #include "compat.h"
 #include "utils.h"
 #include "dep-list.h"
+#include "config.h"
 
 /**
  * Print a list to stdout.
@@ -258,15 +262,36 @@ dl_free (dep_list *dl)
 }
 
 /**
+ * Open directory one more time by realtive path "."
+ *
+ * @param[in] fd A file descriptor to inherit
+ * @return A new file descriptor on success, or -1 if an error occured.
+ **/
+static int
+reopendir (int oldd)
+{
+    int openflags = O_RDONLY;
+    int fd = openat (oldd, ".", openflags);
+    if (fd == -1) {
+        perror_msg ("Failed to reopen parent filedes on dep_list reopen");
+        return -1;
+    }
+
+    return fd;
+}
+
+/**
  * Create a directory listing and return it as a list.
  *
- * @param[in] path A path to a directory.
+ * @param[in] fd A file descriptor of a directory.
  * @return A pointer to a list. May return NULL, check errno in this case.
  **/
 dep_list*
-dl_listing (const char *path)
+dl_listing (int fd)
 {
-    assert (path != NULL);
+    assert (fd != -1);
+
+    DIR *dir = NULL;
 
     dep_list *head = dl_create ();
     if (head == NULL) {
@@ -274,12 +299,36 @@ dl_listing (const char *path)
         return NULL;
     }
 
-    DIR *dir = opendir (path);
+#ifdef HAVE_FDOPENDIR
+    /*
+     * Make a fresh copy of fd so it wont be destroyed on closedir.
+     * I found out that openat(fd, ".", ...) works more reliable then
+     * dup/rewind pair so use former.
+     */
+    int newfd = reopendir (fd);
+    if (newfd == -1 && errno == ENOENT) {
+        /* Why do I skip ENOENT? Because the directory could be deleted at this
+         * point */
+        return head;
+    }
+#else
+    /* closedir wont close newfd when compat fdopendir used */
+    int newfd = fd;
+#endif
+    if (newfd == -1) {
+        perror_msg ("Failed to reopen directory for listing");
+        goto error;
+    }
+
+    dir = fdopendir (newfd);
     if (dir == NULL && errno != ENOENT) {
         /* Why do I skip ENOENT? Because the directory could be deleted at this
          * point */
-         perror_msg ("Failed to open directory %s during listing", path);
-         goto error;
+#ifdef HAVE_FDOPENDIR
+        close (newfd);
+#endif
+        perror_msg ("Failed to opendir for listing");
+        goto error;
     }
 
     if (dir != NULL) {
