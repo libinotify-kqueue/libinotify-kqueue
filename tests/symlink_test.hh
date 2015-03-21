@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -20,28 +20,19 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#ifndef __UTILS_H__
-#define __UTILS_H__
+#ifndef __SYMLINK_TEST__HH__
+#define __SYMLINK_TEST__HH__
 
-#include <sys/uio.h>  /* iovec */
+#include "core/core.hh"
 
-#include <stdint.h> /* uint32_t */
-#include <pthread.h>
+class symlink_test: public test {
+protected:
+    virtual void setup ();
+    virtual void run ();
+    virtual void cleanup ();
 
-struct inotify_event* create_inotify_event (int         wd,
-                                            uint32_t    mask,
-                                            uint32_t    cookie,
-                                            const char *name,
-                                            size_t     *event_len);
+public:
+    symlink_test (journal &j);
+};
 
-ssize_t safe_read   (int fd, void *data, size_t size);
-ssize_t safe_write  (int fd, const void *data, size_t size);
-ssize_t safe_writev (int fd, const struct iovec iov[], int iovcnt);
-
-int is_opened (int fd);
-int is_deleted (int fd);
-int set_cloexec_flag (int fd, int value);
-
-void perror_msg (const char *msg, ...);
-
-#endif /* __UTILS_H__ */
+#endif // __SYMLINK_TEST_HH__

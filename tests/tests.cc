@@ -29,6 +29,7 @@
 #include "update_flags_test.hh"
 #include "update_flags_dir_test.hh"
 #include "open_close_test.hh"
+#include "symlink_test.hh"
 #include "bugs_test.hh"
 
 #define CONCURRENT
@@ -44,6 +45,7 @@ int main (int argc, char *argv[]) {
         new update_flags_test (j),
         new update_flags_dir_test (j),
         new open_close_test (j),
+        new symlink_test (j),
         new fail_test (j),
         new bugs_test (j),
     };

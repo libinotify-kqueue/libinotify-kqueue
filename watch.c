@@ -109,16 +109,33 @@ watch_register_event (watch *w, int kq, uint32_t fflags)
  *
  * @param[in] dirfd A filedes of parent directory or AT_FDCWD.
  * @param[in] path  A pointer to filename
+ * @param[in] flags A watch flags in inotify format
  * @return A file descriptor of opened kqueue watch
  **/
 int
-watch_open (int dirfd, const char *path)
+watch_open (int dirfd, const char *path, uint32_t flags)
 {
     assert (path != NULL);
 
-    int openflags = O_RDONLY;
+    int openflags = O_EVTONLY | O_NONBLOCK;
+#ifdef O_CLOEXEC
+        openflags |= O_CLOEXEC;
+#endif
+    if (flags & IN_DONT_FOLLOW) {
+        openflags |= O_SYMLINK;
+    }
 
     int fd = openat (dirfd, path, openflags);
+    if (fd == -1) {
+        return -1;
+    }
+
+#ifndef O_CLOEXEC
+    if (set_cloexec_flag (fd, 1) == -1) {
+        close (fd);
+        return -1;
+    }
+#endif
 
     return fd;
 }

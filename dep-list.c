@@ -270,12 +270,23 @@ dl_free (dep_list *dl)
 static int
 reopendir (int oldd)
 {
-    int openflags = O_RDONLY;
+    int openflags = O_RDONLY | O_NONBLOCK;
+#ifdef O_CLOEXEC
+        openflags |= O_CLOEXEC;
+#endif
+
     int fd = openat (oldd, ".", openflags);
     if (fd == -1) {
         perror_msg ("Failed to reopen parent filedes on dep_list reopen");
         return -1;
     }
+
+#ifndef O_CLOEXEC
+    if (set_cloexec_flag (fd, 1) == -1) {
+        close (fd);
+        return -1;
+    }
+#endif
 
     return fd;
 }
@@ -283,7 +294,6 @@ reopendir (int oldd)
 /**
  * Create a directory listing and return it as a list.
  *
- * @param[in] fd A file descriptor of a directory.
  * @return A pointer to a list. May return NULL, check errno in this case.
  **/
 dep_list*

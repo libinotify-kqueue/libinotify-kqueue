@@ -1,0 +1,105 @@
+Index: lib/libc/sys/open.2
+===================================================================
+--- lib/libc/sys/open.2	(revision 272513)
++++ lib/libc/sys/open.2	(working copy)
+@@ -115,6 +115,7 @@
+ O_FSYNC		synchronous writes
+ O_SYNC		synchronous writes
+ O_NOFOLLOW	do not follow symlinks
++O_SYMLINK	allow open of symlinks
+ O_NOCTTY	don't assign controlling terminal
+ O_TTY_INIT	restore default terminal attributes
+ O_DIRECTORY	error if file is not a directory
+@@ -179,6 +180,14 @@
+ .Fn open
+ will fail.
+ .Pp
++If
++.Dv O_SYMLINK
++is used in the mask and the target file passed to
++.Fn open
++is a symbolic link then the
++.Fn open
++will be for the symbolic link itself, not what it links to.
++.Pp
+ When opening a file, a lock with
+ .Xr flock 2
+ semantics can be obtained by setting
+Index: sys/kern/vfs_vnops.c
+===================================================================
+--- sys/kern/vfs_vnops.c	(revision 272513)
++++ sys/kern/vfs_vnops.c	(working copy)
+@@ -243,8 +243,8 @@
+ 		}
+ 	} else {
+ 		ndp->ni_cnd.cn_nameiop = LOOKUP;
+-		ndp->ni_cnd.cn_flags = ISOPEN |
+-		    ((fmode & O_NOFOLLOW) ? NOFOLLOW : FOLLOW) | LOCKLEAF;
++		ndp->ni_cnd.cn_flags = ISOPEN | LOCKLEAF |
++		    ((fmode & (O_NOFOLLOW | O_SYMLINK)) ? NOFOLLOW : FOLLOW);
+ 		if (!(fmode & FWRITE))
+ 			ndp->ni_cnd.cn_flags |= LOCKSHARED;
+ 		if (!(vn_open_flags & VN_OPEN_NOAUDIT))
+@@ -281,7 +281,7 @@
+ 	struct flock lf;
+ 	int error, have_flock, lock_flags, type;
+ 
+-	if (vp->v_type == VLNK)
++	if (vp->v_type == VLNK && fmode & O_NOFOLLOW)
+ 		return (EMLINK);
+ 	if (vp->v_type == VSOCK)
+ 		return (EOPNOTSUPP);
+@@ -291,6 +291,8 @@
+ 	if (fmode & (FWRITE | O_TRUNC)) {
+ 		if (vp->v_type == VDIR)
+ 			return (EISDIR);
++		if (vp->v_type == VLNK)
++			return (EMLINK);
+ 		accmode |= VWRITE;
+ 	}
+ 	if (fmode & FREAD)
+@@ -753,6 +755,8 @@
+ 	    uio->uio_td, td));
+ 	KASSERT(flags & FOF_OFFSET, ("No FOF_OFFSET"));
+ 	vp = fp->f_vnode;
++	if (vp->v_type == VLNK)
++		return (EOPNOTSUPP);
+ 	ioflag = 0;
+ 	if (fp->f_flag & FNONBLOCK)
+ 		ioflag |= IO_NDELAY;
+@@ -839,6 +843,8 @@
+ 	    uio->uio_td, td));
+ 	KASSERT(flags & FOF_OFFSET, ("No FOF_OFFSET"));
+ 	vp = fp->f_vnode;
++	if (vp->v_type == VLNK)
++		return (EOPNOTSUPP);
+ 	if (vp->v_type == VREG)
+ 		bwillwrite();
+ 	ioflag = IO_UNIT;
+@@ -1290,6 +1296,10 @@
+ 		error = EISDIR;
+ 		goto out;
+ 	}
++	if (vp->v_type == VLNK) {
++		error = EINVAL;
++		goto out;
++	}
+ #ifdef MAC
+ 	error = mac_vnode_check_write(active_cred, fp->f_cred, vp);
+ 	if (error)
+Index: sys/sys/fcntl.h
+===================================================================
+--- sys/sys/fcntl.h	(revision 272513)
++++ sys/sys/fcntl.h	(working copy)
+@@ -129,6 +129,11 @@
+ #define	O_CLOEXEC	0x00100000
+ #endif
+ 
++#if __BSD_VISIBLE
++/* allow open of a symlink */
++#define	O_SYMLINK	0x00200000
++#endif
++
+ /*
+  * XXX missing O_DSYNC, O_RSYNC.
+  */
