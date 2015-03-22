@@ -22,7 +22,7 @@ libinotify_la_SOURCES = \
     controller.c
 
 libinotify_la_CFLAGS = -I. -DNDEBUG @PTHREAD_CFLAGS@
-libinotify_la_LDFLAGS = @PTHREAD_LIBS@
+libinotify_la_LDFLAGS = @PTHREAD_LIBS@ -export-symbols libinotify.sym
 endif
 
 ############################################################
@@ -64,8 +64,9 @@ check_libinotify_LDFLAGS = @PTHREAD_LIBS@
 
 if LINUX
 check_libinotify_CXXFLAGS += -std=c++0x
-check_libinotify_SOURCES += compat.c
 endif
+
+check_libinotify_SOURCES += compat.c
 
 if BUILD_LIBRARY
 check_libinotify_LDADD = libinotify.la
