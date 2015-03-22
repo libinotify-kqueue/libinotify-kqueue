@@ -21,6 +21,10 @@ libinotify_la_SOURCES = \
     worker.c \
     controller.c
 
+if !HAVE_PTHREAD_BARRIER
+libinotify_la_SOURCES += compat/pthread_barrier.c
+endif
+
 libinotify_la_CFLAGS = -I. -DNDEBUG @PTHREAD_CFLAGS@
 libinotify_la_LDFLAGS = @PTHREAD_LIBS@ -export-symbols libinotify.sym
 endif
@@ -66,7 +70,9 @@ if LINUX
 check_libinotify_CXXFLAGS += -std=c++0x
 endif
 
-check_libinotify_SOURCES += compat/compat.c
+if !HAVE_PTHREAD_BARRIER
+check_libinotify_SOURCES += compat/pthread_barrier.c
+endif
 
 if BUILD_LIBRARY
 check_libinotify_LDADD = libinotify.la

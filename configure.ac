@@ -65,11 +65,12 @@ AC_COMPILE_IFELSE(
 ],
 [
     AC_DEFINE([HAVE_PTHREAD_BARRIER],[1],[Define to 1 if the system has pthread_barrier])
-    AC_MSG_RESULT(yes)
+    have_pthread_barrier=yes
 ],
-    AC_MSG_RESULT(no)
+    have_pthread_barrier=no
 )
-
+AC_MSG_RESULT($have_pthread_barrier)
+AM_CONDITIONAL(HAVE_PTHREAD_BARRIER, [test "$have_pthread_barrier" = "yes"])
 
 AC_ARG_ENABLE([unsafe_fchdir],
     AS_HELP_STRING([--enable-unsafe-fchdir], [allow unsafe use of fchdir to track of watched directory path changes on its renaming]),
