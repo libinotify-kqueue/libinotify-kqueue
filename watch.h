@@ -25,7 +25,6 @@
 
 #include "compat.h"
 
-#include <stdint.h>    /* uint32_t */
 #include <dirent.h>    /* ino_t */
 
 #include <sys/types.h>

@@ -39,6 +39,12 @@
 #include "compat/tree.h"
 #endif
 
+#ifdef HAVE_STDINT_H
+#include <stdint.h>
+#else
+#include <inttypes.h>
+#endif
+
 #include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -46,6 +52,10 @@
 
 #ifndef DTTOIF
 #define DTTOIF(dirtype) ((dirtype) << 12)
+#endif
+
+#ifndef SIZE_MAX
+#define SIZE_MAX SIZE_T_MAX
 #endif
 
 #ifndef HAVE_PTHREAD_BARRIER

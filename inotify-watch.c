@@ -28,7 +28,6 @@
 #include <assert.h>    /* assert */
 #include <errno.h>     /* errno */
 #include <fcntl.h>     /* AT_FDCWD */
-#include <stdint.h>    /* uint32_t */
 #include <stdlib.h>    /* calloc, free */
 #include <string.h>    /* strcmp */
 #include <unistd.h>    /* close */

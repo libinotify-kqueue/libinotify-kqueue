@@ -24,12 +24,12 @@
 #define __UTILS_H__
 
 #include "config.h"
+#include "compat.h"
 
 #include <sys/stat.h> /* S_ISDIR */
 #include <sys/uio.h>  /* iovec */
 
 #include <errno.h>  /* errno */
-#include <stdint.h> /* uint32_t */
 #include <stdio.h>  /* fprintf */
 #include <string.h> /* strerror */
 #include <pthread.h>

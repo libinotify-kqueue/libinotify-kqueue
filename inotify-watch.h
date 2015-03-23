@@ -25,8 +25,6 @@
 
 #include "compat.h"
 
-#include <stdint.h>
-
 typedef struct i_watch i_watch;
 
 #include "dep-list.h"

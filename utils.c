@@ -27,6 +27,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include "compat.h"
+
 #include <unistd.h> /* read, write */
 #include <errno.h>  /* EINTR */
 #include <stdlib.h> /* malloc */
