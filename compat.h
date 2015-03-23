@@ -44,13 +44,6 @@
 #include <fcntl.h>
 #include <pthread.h>
 
-#ifndef O_SYMLINK
-#define O_SYMLINK O_NOFOLLOW
-#endif
-#ifndef O_EVTONLY
-#define O_EVTONLY O_RDONLY
-#endif
-
 #ifndef DTTOIF
 #define DTTOIF(dirtype) ((dirtype) << 12)
 #endif
