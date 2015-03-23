@@ -20,6 +20,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include "compat.h"
+
 #include <errno.h>  /* errno */
 #include <fcntl.h>  /* open */
 #include <unistd.h> /* close */
@@ -33,7 +35,6 @@
 #include <stdio.h>    /* snprintf */
 
 #include "utils.h"
-#include "compat.h"
 #include "conversions.h"
 #include "watch.h"
 #include "sys/inotify.h"

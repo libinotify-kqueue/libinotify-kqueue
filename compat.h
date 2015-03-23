@@ -25,22 +25,25 @@
 
 #include "config.h"
 
-#ifdef BUILD_LIBRARY
 #include <sys/types.h>
+
+#ifdef HAVE_SYS_QUEUE_H
 #include <sys/queue.h>
-#ifdef __APPLE__
-#include </System/Library/Frameworks/Kernel.framework/Versions/Current/Headers/libkern/tree.h>
 #else
+#include "compat/queue.h"
+#endif
+
+#ifdef HAVE_SYS_TREE_H
 #include <sys/tree.h>  /* RB tree macroses */
+#else
+#include "compat/tree.h"
 #endif
 
 #include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>
-#endif /* BUILD_LIBRARY */
 #include <pthread.h>
 
-#ifdef BUILD_LIBRARY
 #ifndef O_SYMLINK
 #define O_SYMLINK O_NOFOLLOW
 #endif
@@ -51,26 +54,6 @@
 #ifndef DTTOIF
 #define DTTOIF(dirtype) ((dirtype) << 12)
 #endif
-
-#ifndef SLIST_FOREACH_SAFE
-#define SLIST_FOREACH_SAFE(var, head, field, tvar)                      \
-        for ((var) = SLIST_FIRST((head));                               \
-            (var) && ((tvar) = SLIST_NEXT((var), field), 1);            \
-            (var) = (tvar))
-#endif
-#ifndef SLIST_REMOVE_AFTER
-#define SLIST_REMOVE_AFTER(elm, field) do {                             \
-        SLIST_NEXT(elm, field) =                                        \
-            SLIST_NEXT(SLIST_NEXT(elm, field), field);                  \
-} while (0)
-#endif
-#ifndef RB_FOREACH_SAFE
-#define RB_FOREACH_SAFE(x, name, head, y)                               \
-        for ((x) = RB_MIN(name, head);                                  \
-            ((x) != NULL) && ((y) = name##_RB_NEXT(x), (x) != NULL);    \
-             (x) = (y))
-#endif
-#endif /* BUILD_LIBRARY */
 
 #ifndef HAVE_PTHREAD_BARRIER
 typedef struct {
@@ -92,7 +75,6 @@ void pthread_barrier_wait    (pthread_barrier_t *impl);
 void pthread_barrier_destroy (pthread_barrier_t *impl);
 #endif
 
-#ifdef BUILD_LIBRARY
 #ifndef AT_FDCWD
 #define AT_FDCWD		-100
 #endif
@@ -113,6 +95,5 @@ DIR *fdopendir (int fd);
 #ifndef HAVE_FSTATAT
 int fstatat (int fd, const char *path, struct stat *buf, int flag);
 #endif
-#endif /* BUILD_LIBRARY */
 
 #endif /* __COMPAT_H__ */

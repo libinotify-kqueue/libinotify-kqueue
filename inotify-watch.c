@@ -20,6 +20,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include "compat.h"
+
 #include <sys/types.h>
 #include <sys/stat.h>  /* fstat */
 
@@ -33,7 +35,6 @@
 
 #include "sys/inotify.h"
 
-#include "compat.h"
 #include "conversions.h"
 #include "inotify-watch.h"
 #include "utils.h"

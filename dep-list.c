@@ -20,6 +20,9 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include "config.h"
+#include "compat.h"
+
 #include <errno.h>   /* errno */
 #include <stddef.h>  /* offsetof */
 #include <stdlib.h>  /* calloc */
@@ -31,10 +34,8 @@
 #include <assert.h>
 #include <errno.h>
 
-#include "compat.h"
 #include "utils.h"
 #include "dep-list.h"
-#include "config.h"
 
 /**
  * Print a list to stdout.

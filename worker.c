@@ -20,6 +20,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include "compat.h"
+
 #include <pthread.h>
 #include <signal.h> 
 #include <stdlib.h>
