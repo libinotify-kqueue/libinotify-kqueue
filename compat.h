@@ -100,6 +100,10 @@ void pthread_barrier_destroy (pthread_barrier_t *impl);
 #define AT_SYMLINK_NOFOLLOW	0x200 /* Do not follow symbolic links */
 #endif
 
+#ifndef HAVE_ATFUNCS
+char *fd_getpath_cached (int fd);
+char *fd_concat (int fd, const char *file);
+#endif
 #ifndef HAVE_OPENAT
 int openat (int fd, const char *path, int flags, ...);
 #endif

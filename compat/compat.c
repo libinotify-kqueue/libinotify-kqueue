@@ -29,14 +29,12 @@
 #include <errno.h>  /* errno */
 #include <fcntl.h>  /* fcntl */
 #include <limits.h> /* PATH_MAX */
-#include <stdarg.h> /* va_start */
 #include <stdlib.h> /* malloc */
 #include <string.h> /* memset */
 
 #include "compat.h"
 #include "config.h"
 
-#ifndef HAVE_ATFUNCS
 typedef struct dirpath_t {
     ino_t inode;              /* inode number */
     dev_t dev;                /* device number */
@@ -200,7 +198,7 @@ dir_insert (const char* path, ino_t inode, dev_t dev)
  * @param[in] fd A file descriptor of opened directory
  * @return a pointer to the pathname on success, NULL otherwise
  **/
-static char *
+char *
 fd_getpath_cached (int fd)
 {
     assert (fd != -1);
@@ -287,7 +285,7 @@ path_concat (const char *dir, const char *file)
  * @param[in] file File name.
  * @return A concatenated path. Should be freed with free().
  **/
-static char*
+char*
 fd_concat (int fd, const char *file)
 {
     char *path = NULL;
@@ -315,75 +313,3 @@ fd_concat (int fd, const char *file)
 
     return path;
 }
-#endif /* !HAVE_ATFUNCS */
-
-#ifndef HAVE_OPENAT
-int
-openat (int fd, const char *path, int flags, ...)
-{
-    char *fullpath;
-    int newfd, save_errno;
-    mode_t mode;
-    va_list ap;
-
-    if (flags & O_CREAT) {
-        va_start(ap, flags);
-        mode = va_arg(ap, int);
-        va_end(ap);
-    } else {
-        mode = 0;
-    }
-
-    fullpath = fd_concat (fd, path);
-    if (fullpath == NULL) {
-        return -1;
-    }
-
-    newfd = open (fullpath, flags, mode);
-
-    save_errno = errno;
-    free (fullpath);
-    errno = save_errno;
-
-    return newfd;
-}
-#endif /* HAVE_OPENAT */
-
-#ifndef HAVE_FDOPENDIR
-DIR *
-fdopendir (int fd)
-{
-    char *dirpath = fd_getpath_cached (fd);
-    if (dirpath == NULL) {
-        return NULL;
-    }
-
-    return opendir (dirpath);
-}
-#endif /* HAVE_FDOPENDIR */
-
-#ifndef HAVE_FSTATAT
-int
-fstatat (int fd, const char *path, struct stat *buf, int flag)
-{
-    char *fullpath;
-    int retval, save_errno;
-
-    fullpath = fd_concat (fd, path);
-    if (fullpath == NULL) {
-        return -1;
-    }
-
-    if (flag & AT_SYMLINK_NOFOLLOW) {
-        retval = lstat (fullpath, buf);
-    } else {
-        retval = stat (fullpath, buf);
-    }
-
-    save_errno = errno;
-    free (fullpath);
-    errno = save_errno;
-
-    return retval;
-}
-#endif /* HAVE_FSTATAT */

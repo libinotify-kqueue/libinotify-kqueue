@@ -86,6 +86,10 @@ AC_CHECK_FUNCS(openat fdopendir fstatat,,atfuncs_support=no)
 if test "$atfuncs_support" = "yes"; then
     AC_DEFINE([HAVE_ATFUNCS],[1],[Define to 1 if relative pathname functions detected])
 fi
+AM_CONDITIONAL(HAVE_ATFUNCS, [test "$atfuncs_support" = "yes"])
+AM_CONDITIONAL(HAVE_OPENAT, [test "$ac_cv_func_openat" = "yes"])
+AM_CONDITIONAL(HAVE_FDOPENDIR, [test "$ac_cv_func_fdopendir" = "yes"])
+AM_CONDITIONAL(HAVE_FSTATAT, [test "$ac_cv_func_fstatat" = "yes"])
 
 AC_MSG_CHECKING(for F_GETPATH in fcntl.h)
 AC_COMPILE_IFELSE(

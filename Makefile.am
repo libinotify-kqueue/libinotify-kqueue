@@ -11,7 +11,6 @@ nobase_include_HEADERS = sys/inotify.h
 
 libinotify_la_SOURCES = \
     utils.c \
-    compat/compat.c \
     conversions.c \
     dep-list.c \
     inotify-watch.c \
@@ -23,6 +22,22 @@ libinotify_la_SOURCES = \
 
 if !HAVE_PTHREAD_BARRIER
 libinotify_la_SOURCES += compat/pthread_barrier.c
+endif
+
+if !HAVE_ATFUNCS
+libinotify_la_SOURCES += compat/compat.c
+endif
+
+if !HAVE_OPENAT
+libinotify_la_SOURCES += compat/openat.c
+endif
+
+if !HAVE_FDOPENDIR
+libinotify_la_SOURCES += compat/fdopendir.c
+endif
+
+if !HAVE_FSTATAT
+libinotify_la_SOURCES += compat/fstatat.c
 endif
 
 libinotify_la_CFLAGS = -I. -DNDEBUG @PTHREAD_CFLAGS@
