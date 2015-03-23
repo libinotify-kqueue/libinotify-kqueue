@@ -25,7 +25,7 @@ libinotify_la_SOURCES += compat/pthread_barrier.c
 endif
 
 if !HAVE_ATFUNCS
-libinotify_la_SOURCES += compat/compat.c
+libinotify_la_SOURCES += compat/atfuncs.c
 endif
 
 if !HAVE_OPENAT
