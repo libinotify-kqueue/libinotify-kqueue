@@ -295,13 +295,18 @@ fd_concat (int fd, const char *file)
 
         if (stat (file, &st) != -1
           && S_ISDIR (st.st_mode)
-          && (path = realpath (file, NULL)) != NULL) {
+          && (path = malloc (PATH_MAX + 1)) != NULL
+          && realpath (file, path) == path) {
 
             pthread_mutex_lock (&dirs_mtx);
             dir_insert (path, st.st_ino, st.st_dev);
             pthread_mutex_unlock (&dirs_mtx);
         } else {
-            path = strdup (file);
+            if (path == NULL) {
+                path = strdup (file);
+            } else {
+                strlcpy (path, file, PATH_MAX + 1);
+            }
         }
     } else {
 
