@@ -69,5 +69,6 @@ ssize_t safe_writev (int fd, const struct iovec iov[], int iovcnt);
 int is_opened (int fd);
 int is_deleted (int fd);
 int set_cloexec_flag (int fd, int value);
+int dup_cloexec (int oldd);
 
 #endif /* __UTILS_H__ */

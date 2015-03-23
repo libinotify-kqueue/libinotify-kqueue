@@ -294,3 +294,26 @@ set_cloexec_flag (int fd, int value)
 
     return fcntl (fd, F_SETFD, flags);
 }
+
+/**
+ * Perform dup(2) and set the FD_CLOEXEC flag on the new file descriptor
+ *
+ * @param[in] oldd A file descriptor to duplicate.
+ * @return A new file descriptor on success, or -1 if an error occurs.
+ *      The external variable errno indicates the cause of the error.
+ **/
+int
+dup_cloexec (int oldd)
+{
+#ifdef F_DUPFD_CLOEXEC
+    int newd = fcntl (oldd, F_DUPFD_CLOEXEC, 0);
+#else
+    int newd = fcntl (oldd, F_DUPFD, 0);
+
+    if ((newd != -1) && (set_cloexec_flag (newd, 1) == -1)) {
+        close (newd);
+        newd = -1;
+    }
+#endif
+    return newd;
+}

@@ -28,10 +28,17 @@
 DIR *
 fdopendir (int fd)
 {
+    DIR *dir;
     char *dirpath = fd_getpath_cached (fd);
     if (dirpath == NULL) {
         return NULL;
     }
 
-    return opendir (dirpath);
+    dir = opendir (dirpath);
+    /* close fd just now as it will not be closed on closedir */
+    if (dir != NULL) {
+        close (fd);
+    }
+
+    return dir;
 }

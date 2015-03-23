@@ -325,8 +325,7 @@ dl_listing (int fd)
         return head;
     }
 #else
-    /* closedir wont close newfd when compat fdopendir used */
-    int newfd = fd;
+    int newfd = dup_cloexec (fd);
 #endif
     if (newfd == -1) {
         perror_msg ("Failed to reopen directory for listing");
@@ -334,17 +333,15 @@ dl_listing (int fd)
     }
 
     dir = fdopendir (newfd);
-    if (dir == NULL && errno != ENOENT) {
-        /* Why do I skip ENOENT? Because the directory could be deleted at this
-         * point */
-#ifdef HAVE_FDOPENDIR
+    if (dir == NULL) {
         close (newfd);
-#endif
-        perror_msg ("Failed to opendir for listing");
-        goto error;
-    }
-
-    if (dir != NULL) {
+        if (errno != ENOENT) {
+            /* Why do I skip ENOENT? Because the directory could be deleted at
+             * this point */
+            perror_msg ("Failed to opendir for listing");
+            goto error;
+        }
+    } else {
         struct dirent *ent;
         dep_item *item;
         dep_node *node;
