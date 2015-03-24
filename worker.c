@@ -251,37 +251,6 @@ worker_free (worker *wrk)
 }
 
 /**
- * Start watching a file or a directory.
- *
- * @param[in] wrk        A pointer to #worker.
- * @param[in] path       A file name of a watched file.
- * @param[in] fd         A file descriptor of a watched entry.
- * @param[in] flags      A combination of inotify event flags.
- * @param[in] type       The type of a watch.
- * @return A pointer to a created watch.
- **/
-static watch*
-worker_start_watching (worker      *wrk,
-                       const char  *path,
-                       int          fd,
-                       uint32_t     flags,
-                       watch_type_t type)
-{
-    assert (wrk != NULL);
-    assert (path != NULL);
-
-    watch *w = watch_init (type, wrk->kq, path, fd, flags);
-    if (w != NULL) {
-        if (worker_sets_insert (&wrk->sets, w)) {
-            watch_free (w);
-            w = NULL;
-        }
-    }
-
-    return w;
-}
-
-/**
  * When starting watching a directory, start also watching its contents.
  *
  * This function creates and initializes additional watches for a directory.
@@ -322,12 +291,20 @@ worker_add_watch (worker     *wrk,
         }
     }
 
-    watch *parent = worker_start_watching (wrk, path, fd, flags, WATCH_USER);
+    watch *parent = watch_init (WATCH_USER, wrk->kq, path, fd, flags);
     if (parent == NULL) {
         if (S_ISDIR (st.st_mode)) {
             dl_free (deps);
         }
         close (fd);
+        return NULL;
+    }
+
+    if (worker_sets_insert (&wrk->sets, parent)) {
+        if (S_ISDIR (st.st_mode)) {
+            dl_free (deps);
+        }
+        watch_free (parent);
         return NULL;
     }
 
@@ -369,13 +346,18 @@ worker_add_subwatch (worker *wrk, watch *parent, dep_item *di)
         return NULL;
     }
 
-    watch *w = worker_start_watching (wrk,
-                                      di->path,
-                                      fd,
-                                      parent->flags,
-                                      WATCH_DEPENDENCY);
+    watch *w = watch_init (WATCH_DEPENDENCY,
+                           wrk->kq,
+                           di->path,
+                           fd,
+                           parent->flags);
     if (w == NULL) {
         close (fd);
+        return NULL;
+    }
+
+    if (worker_sets_insert (&wrk->sets, w)) {
+        watch_free (w);
         return NULL;
     }
 
