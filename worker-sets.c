@@ -37,6 +37,8 @@
 
 #define WS_RESERVED 10
 
+static int worker_sets_extend (worker_sets *ws, int count);
+
 /**
  * Initialize the worker sets.
  *
@@ -65,7 +67,7 @@ worker_sets_init (worker_sets *ws)
  * @param[in] count The number of items to grow.
  * @return 0 on success, -1 on error.
  **/
-int
+static int
 worker_sets_extend (worker_sets *ws,
                     int          count)
 {
@@ -131,4 +133,28 @@ worker_sets_delete (worker_sets *ws, size_t index)
 
     --ws->length;
     ws->watches[ws->length] = NULL;
+}
+
+/**
+ * Insert watch into worker sets.
+ *
+ * @param[in] ws A pointer to #worker_sets.
+ * @param[in] w  A pointer to inserted watch.
+ * @return 0 on success, -1 on error.
+ **/
+int
+worker_sets_insert (worker_sets *ws, watch *w)
+{
+    assert (ws != NULL);
+    assert (w != NULL);
+
+    if (worker_sets_extend (ws, 1) == -1) {
+        perror_msg ("Failed to extend worker sets");
+        return -1;
+    }
+
+    ws->watches[ws->length] = w;
+    ++ws->length;
+
+    return 0;
 }

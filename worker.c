@@ -270,18 +270,13 @@ worker_start_watching (worker      *wrk,
     assert (wrk != NULL);
     assert (path != NULL);
 
-    if (worker_sets_extend (&wrk->sets, 1) == -1) {
-        perror_msg ("Failed to extend worker sets");
-        return NULL;
-    }
-
     watch *w = watch_init (type, wrk->kq, path, fd, flags);
-    if (w == NULL) {
-        return NULL;
+    if (w != NULL) {
+        if (worker_sets_insert (&wrk->sets, w)) {
+            watch_free (w);
+            w = NULL;
+        }
     }
-    wrk->sets.watches[wrk->sets.length] = w;
-
-    ++wrk->sets.length;
 
     return w;
 }
