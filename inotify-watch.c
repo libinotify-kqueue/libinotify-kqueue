@@ -24,6 +24,7 @@
 #include <sys/stat.h>  /* fstat */
 
 #include <assert.h>    /* assert */
+#include <errno.h>     /* errno */
 #include <fcntl.h>     /* AT_FDCWD */
 #include <stdint.h>    /* uint32_t */
 #include <stdlib.h>    /* calloc, free */
@@ -49,6 +50,12 @@
 int
 iwatch_open (const char *path, uint32_t flags)
 {
+    if (flags == 0) {
+        errno = EINVAL;
+        perror_msg ("Failed to open watch %s. Bad event mask %x", path, flags);
+        return -1;
+    }
+
     int fd = watch_open (AT_FDCWD, path, flags);
     if (fd == -1) {
         perror_msg ("Failed to open inotify watch %s", path);

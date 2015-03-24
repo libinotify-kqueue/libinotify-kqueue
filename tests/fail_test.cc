@@ -52,6 +52,13 @@ void fail_test::run ()
     wid = cons.output.added_watch_id ();
     should ("do not start watching a file if IN_ONLYDIR flag is set", wid == -1);
 
+    cons.output.reset ();
+    cons.input.setup ("fail-working", 0);
+    cons.output.wait ();
+
+    wid = cons.output.added_watch_id ();
+    should ("do not start watching a file if no event flags are set", wid == -1);
+
     cons.input.interrupt ();
 }
 
