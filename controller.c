@@ -133,6 +133,7 @@ inotify_add_watch (int         fd,
 
             worker_cmd_wait (&wrk->cmd);
             int retval = wrk->cmd.retval;
+            int error = wrk->cmd.error;
 
             pthread_mutex_unlock (&wrk->mutex);
 
@@ -143,6 +144,9 @@ inotify_add_watch (int         fd,
             }
 
             pthread_mutex_unlock (&workers_mutex);
+            if (retval == -1) {
+                errno = error;
+            }
             return retval;
         }
     }
@@ -193,6 +197,7 @@ inotify_rm_watch (int fd,
 
             worker_cmd_wait (&wrk->cmd);
             int retval = wrk->cmd.retval;
+            int error = wrk->cmd.error;
 
             pthread_mutex_unlock (&wrk->mutex);
 
@@ -203,6 +208,9 @@ inotify_rm_watch (int fd,
             }
 
             pthread_mutex_unlock (&workers_mutex);
+            if (retval == -1) {
+                errno = error;
+            }
             return retval;
         }
     }

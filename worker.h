@@ -52,6 +52,7 @@ typedef enum {
 typedef struct worker_cmd {
     worker_cmd_type_t type;
     int retval;
+    int error;
 
     union {
         struct {

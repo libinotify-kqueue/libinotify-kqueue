@@ -22,6 +22,7 @@
 
 #include <stddef.h> /* NULL */
 #include <assert.h>
+#include <errno.h>  /* errno */
 #include <stdlib.h> /* calloc, realloc */
 #include <string.h> /* memset */
 #include <stdio.h>
@@ -140,8 +141,10 @@ process_command (worker *wrk)
         wrk->cmd.retval = worker_add_or_modify (wrk,
                                                 wrk->cmd.add.filename,
                                                 wrk->cmd.add.mask);
+        wrk->cmd.error = errno;
     } else if (wrk->cmd.type == WCMD_REMOVE) {
         wrk->cmd.retval = worker_remove (wrk, wrk->cmd.rm_id);
+        wrk->cmd.error = errno;
     } else {
         perror_msg ("Worker processing a command without a command - "
                     "something went wrong.");
