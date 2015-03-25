@@ -27,8 +27,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>  /* ino_t */
 
+#include "watch-set.h"
 #include "watch.h"
-#include "worker-sets.h"
 
 /**
  * Initialize the worker sets.

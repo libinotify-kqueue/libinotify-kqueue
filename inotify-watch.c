@@ -36,8 +36,8 @@
 #include "conversions.h"
 #include "inotify-watch.h"
 #include "utils.h"
+#include "watch-set.h"
 #include "watch.h"
-#include "worker-sets.h"
 
 /**
  * Preform minimal initialization required for opening watch descriptor

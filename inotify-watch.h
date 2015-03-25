@@ -30,8 +30,8 @@
 typedef struct i_watch i_watch;
 
 #include "dep-list.h"
+#include "watch-set.h"
 #include "watch.h"
-#include "worker-sets.h"
 #include "worker.h"
 
 struct i_watch {
