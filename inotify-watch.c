@@ -103,7 +103,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
     iw->inode = st.st_ino;
     iw->dev = st.st_dev;
 
-    worker_sets_init (&iw->watches);
+    watch_set_init (&iw->watches);
 
     watch *parent = watch_init (iw, WATCH_USER, fd);
     if (parent == NULL) {
@@ -114,7 +114,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
         return NULL;
     }
 
-    worker_sets_insert (&iw->watches, parent);
+    watch_set_insert (&iw->watches, parent);
 
     if (S_ISDIR (st.st_mode)) {
 
@@ -140,7 +140,7 @@ iwatch_free (i_watch *iw)
 {
     assert (iw != NULL);
 
-    worker_sets_free (&iw->watches);
+    watch_set_free (&iw->watches);
     if (iw->deps != NULL) {
         dl_free (iw->deps);
     }
@@ -161,7 +161,7 @@ iwatch_add_subwatch (i_watch *iw, const dep_item *di)
     assert (iw->deps != NULL);
     assert (di != NULL);
 
-    watch *w = worker_sets_find (&iw->watches, di->inode);
+    watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL) {
         goto hold;
     }
@@ -178,7 +178,7 @@ iwatch_add_subwatch (i_watch *iw, const dep_item *di)
         return NULL;
     }
 
-    worker_sets_insert (&iw->watches, w);
+    watch_set_insert (&iw->watches, w);
 
 hold:
     ++w->refcount;
@@ -197,13 +197,13 @@ iwatch_del_subwatch (i_watch *iw, const dep_item *di)
     assert (iw != NULL);
     assert (di != NULL);
 
-    watch *w = worker_sets_find (&iw->watches, di->inode);
+    watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL) {
         assert (w->refcount > 0);
         --w->refcount;
 
         if (w->refcount == 0) {
-            worker_sets_delete (&iw->watches, w);
+            watch_set_delete (&iw->watches, w);
         }
     }
 }
@@ -225,7 +225,7 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
     iw->flags = flags;
 
     watch *w;
-    RB_FOREACH (w, worker_sets, &iw->watches) {
+    RB_FOREACH (w, watch_set, &iw->watches) {
         uint32_t fflags = inotify_to_kqueue (flags,
                                              w->flags & WF_ISDIR,
                                              w->flags & WF_ISSUBWATCH);
@@ -247,7 +247,7 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
 int
 iwatch_subwatch_is_dir (i_watch *iw, const dep_item *di)
 {
-    watch *w = worker_sets_find (&iw->watches, di->inode);
+    watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL && w->flags & WF_ISDIR) {
             return 1;
     }

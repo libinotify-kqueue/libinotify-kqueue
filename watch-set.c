@@ -31,12 +31,12 @@
 #include "watch.h"
 
 /**
- * Initialize the worker sets.
+ * Initialize the watch set.
  *
- * @param[in] ws A pointer to the worker sets.
+ * @param[in] ws A pointer to the watch set.
  **/
 void
-worker_sets_init (worker_sets *ws)
+watch_set_init (watch_set *ws)
 {
     assert (ws != NULL);
 
@@ -44,67 +44,67 @@ worker_sets_init (worker_sets *ws)
 }
 
 /**
- * Free the memory allocated for the worker sets.
+ * Free the memory allocated for the watch set.
  *
- * @param[in] ws A pointer the the worker sets.
+ * @param[in] ws A pointer the the watch set.
  **/
 void
-worker_sets_free (worker_sets *ws)
+watch_set_free (watch_set *ws)
 {
     assert (ws != NULL);
 
     watch *w, *tmp;
 
-    RB_FOREACH_SAFE (w, worker_sets, ws, tmp) {
-        worker_sets_delete (ws, w);
+    RB_FOREACH_SAFE (w, watch_set, ws, tmp) {
+        watch_set_delete (ws, w);
     }
 }
 
 /**
- * Remove a watch from worker sets.
+ * Remove a watch from watch set.
  *
- * @param[in] ws A pointer to the worker sets.
+ * @param[in] ws A pointer to the watch set.
  * @param[in] w  A pointer to watch to remove.
  **/
 void
-worker_sets_delete (worker_sets *ws, watch *w)
+watch_set_delete (watch_set *ws, watch *w)
 {
     assert (ws != NULL);
     assert (w != NULL);
 
-    RB_REMOVE (worker_sets, ws, w);
+    RB_REMOVE (watch_set, ws, w);
     watch_free (w);
 }
 
 /**
- * Insert watch into worker sets.
+ * Insert watch into watch set.
  *
- * @param[in] ws A pointer to #worker_sets.
+ * @param[in] ws A pointer to #watch_set.
  * @param[in] w  A pointer to inserted watch.
  **/
 void
-worker_sets_insert (worker_sets *ws, watch *w)
+watch_set_insert (watch_set *ws, watch *w)
 {
     assert (ws != NULL);
     assert (w != NULL);
 
-    RB_INSERT (worker_sets, ws, w);
+    RB_INSERT (watch_set, ws, w);
 }
 
 /**
  * Find kqueue watch corresponding for dependency item
  *
- * @param[in] ws    A pointer to #worker_sets.
+ * @param[in] ws    A pointer to #watch_set.
  * @param[in] inode A inode number of watch
  * @return A pointer to kqueue watch if found NULL otherwise
  **/
 watch *
-worker_sets_find (worker_sets *ws, ino_t inode)
+watch_set_find (watch_set *ws, ino_t inode)
 {
     assert (ws != NULL);
 
     watch find = { .inode = inode };
-    return RB_FIND (worker_sets, ws, &find);
+    return RB_FIND (watch_set, ws, &find);
 }
 /**
  * Custom comparison function that can compare kqueue watch inode values
@@ -116,9 +116,9 @@ worker_sets_find (worker_sets *ws, ino_t inode)
  * less than, equal to, or greater than the second one.
  **/
 static int
-worker_sets_cmp (watch *w1, watch *w2)
+watch_set_cmp (watch *w1, watch *w2)
 {
     return ((w1->inode > w2->inode) - (w1->inode < w2->inode));
 }
 
-RB_GENERATE(worker_sets, watch, link, worker_sets_cmp);
+RB_GENERATE(watch_set, watch, link, watch_set_cmp);

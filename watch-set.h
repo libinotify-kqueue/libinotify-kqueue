@@ -20,25 +20,25 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#ifndef __WORKER_SETS_H__
-#define __WORKER_SETS_H__
+#ifndef __WATCH_SET_H__
+#define __WATCH_SET_H__
 
 #include "compat.h"
 
 #include <sys/types.h> /* size_t */
 #include <sys/stat.h>  /* ino_t */
 
-typedef RB_HEAD(worker_sets, watch) worker_sets;
+typedef RB_HEAD(watch_set, watch) watch_set;
 
 #include "watch.h"
 
-void worker_sets_init   (worker_sets *ws);
-void worker_sets_free   (worker_sets *ws);
-void worker_sets_delete (worker_sets *ws, watch *w);
-void worker_sets_insert (worker_sets *ws, watch *w);
-watch *worker_sets_find (worker_sets *ws, ino_t inode);
+void   watch_set_init   (watch_set *ws);
+void   watch_set_free   (watch_set *ws);
+void   watch_set_delete (watch_set *ws, watch *w);
+void   watch_set_insert (watch_set *ws, watch *w);
+watch *watch_set_find   (watch_set *ws, ino_t inode);
 
-RB_PROTOTYPE(worker_sets, watch, link, watch_cmp);
+RB_PROTOTYPE(watch_set, watch, link, watch_cmp);
 
 
-#endif /* __WORKER_SETS_H__ */
+#endif /* __WATCH_SET_H__ */

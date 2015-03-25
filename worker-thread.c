@@ -323,7 +323,7 @@ produce_notifications (worker *wrk, struct kevent *event)
     assert (w->fd == event->ident);
 
     i_watch *iw = w->iw;
-    assert (worker_sets_find (&iw->watches, w->inode) == w);
+    assert (watch_set_find (&iw->watches, w->inode) == w);
 
     uint32_t flags = event->fflags;
 
