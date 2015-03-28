@@ -68,15 +68,6 @@ _file_information (int fd, int *is_dir, ino_t *inode)
     }
 }
 
-
-
-#define DEPS_EXCLUDED_FLAGS \
-    ( IN_MOVED_FROM \
-    | IN_MOVED_TO \
-    | IN_MOVE_SELF \
-    | IN_DELETE_SELF \
-    )
-
 /**
  * Register vnode kqueue watch in kernel kqueue(2) subsystem
  *
@@ -167,13 +158,7 @@ watch_init (watch_type_t   watch_type,
     }
 
     w->fd = fd;
-
-    if (watch_type == WATCH_DEPENDENCY) {
-        flags &= ~DEPS_EXCLUDED_FLAGS;
-    }
-
     w->type = watch_type;
-    w->flags = flags;
     w->filename = strdup (path);
 
     int is_dir = 0;
@@ -202,9 +187,6 @@ watch_free (watch *w)
     assert (w != NULL);
     if (w->fd != -1) {
         close (w->fd);
-    }
-    if (w->type == WATCH_USER && w->is_directory && w->deps) {
-        dl_free (w->deps);
     }
     free (w->filename);
     free (w);

@@ -32,8 +32,9 @@ typedef struct worker worker;
 
 #include "compat.h"
 #include "worker-thread.h"
-#include "worker-sets.h"
 #include "dep-list.h"
+#include "inotify-watch.h"
+#include "watch.h"
 
 #define INOTIFY_FD 0
 #define KQUEUE_FD  1
@@ -77,7 +78,7 @@ struct worker {
     int iovcnt;            /* number of events enqueued */
     int iovalloc;          /* number of iovs allocated */
     pthread_t thread;      /* worker thread */
-    worker_sets sets;      /* filenames, etc */
+    SLIST_HEAD(, i_watch) head; /* linked list of inotify watches */
     volatile int closed;   /* closed flag */
 
     pthread_mutex_t mutex; /* worker mutex */
@@ -88,13 +89,7 @@ struct worker {
 worker* worker_create         ();
 void    worker_free           (worker *wrk);
 
-watch*  worker_add_subwatch   (worker *wrk, watch *parent, dep_item *di);
-
 int     worker_add_or_modify  (worker *wrk, const char *path, uint32_t flags);
 int     worker_remove         (worker *wrk, int id);
-
-void    worker_update_paths   (worker *wrk, watch *parent);
-void    worker_remove_many    (worker *wrk, watch *parent, const dep_list* items, int remove_self);
-void    worker_remove_watch   (worker *wrk, watch *parent, const dep_item* item);
 
 #endif /* __WORKER_H__ */

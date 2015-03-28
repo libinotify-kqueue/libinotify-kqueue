@@ -33,6 +33,7 @@
 
 #include "utils.h"
 #include "conversions.h"
+#include "inotify-watch.h"
 #include "worker.h"
 #include "worker-sets.h"
 #include "worker-thread.h"
@@ -43,20 +44,20 @@ static void handle_moved (void *udata, dep_item *from_di, dep_item *to_di);
 /**
  * Create a new inotify event and place it to event queue.
  *
- * @param[in] wrk    A pointer to #worker. 
- * @param[in] wd     An associated watch's id.
+ * @param[in] iw     A pointer to #i_watch.
  * @param[in] mask   An inotify watch mask.
  * @param[in] cookie Event cookie.
  * @param[in] name   File name (may be NULL).
  * @return 0 on success, -1 otherwise.
  **/
 int
-enqueue_event (worker     *wrk,
-               int         wd,
+enqueue_event (i_watch    *iw,
                uint32_t    mask,
                uint32_t    cookie,
                const char *name)
 {
+    assert (iw != NULL);
+    worker *wrk = iw->wrk;
     assert (wrk != NULL);
 
     if (wrk->iovcnt >= wrk->iovalloc) {
@@ -70,7 +71,7 @@ enqueue_event (worker     *wrk,
         wrk->iovalloc = to_allocate;
     }
 
-    wrk->iov[wrk->iovcnt].iov_base = create_inotify_event (wd, mask,
+    wrk->iov[wrk->iovcnt].iov_base = create_inotify_event (iw->wd, mask,
         cookie, name, &wrk->iov[wrk->iovcnt].iov_len);
 
     if (wrk->iov[wrk->iovcnt].iov_base != NULL) {
@@ -101,29 +102,6 @@ flush_events (worker *wrk)
     }
 
     wrk->iovcnt = 0;
-}
-
-/**
- * Check if a file under given path is/was a directory. Use worker's
- * cached data (watches) to query file type (this function is called
- * when something happens in a watched directory, so we SHOULD have
- * a watch for its contents
- *
- * @param[in] wrk A worker instance for which a change has been triggered.
- * @param[in] di  A dependency list item
- *
- * @return 1 if dir (cached), 0 otherwise.
- **/
-static int
-check_is_dir_cached (worker *wrk, const dep_item *di)
-{
-    int i;
-    for (i = 0; i < wrk->sets.length; i++) {
-        const watch *w = wrk->sets.watches[i];
-        if (w != NULL && strcmp (di->path, w->filename) == 0 && w->is_really_dir)
-            return 1;
-    }
-    return 0;
 }
 
 /**
@@ -162,8 +140,7 @@ process_command (worker *wrk)
  * the callbacks.
  **/
 typedef struct {
-    worker *wrk;
-    watch *w;
+    i_watch *iw;
 } handle_context;
 
 /**
@@ -181,11 +158,10 @@ handle_added (void *udata, dep_item *di)
     assert (udata != NULL);
 
     handle_context *ctx = (handle_context *) udata;
-    assert (ctx->wrk != NULL);
-    assert (ctx->w != NULL);
+    assert (ctx->iw != NULL);
 
     int addMask = 0;
-    watch *neww = worker_add_subwatch (ctx->wrk, ctx->w, di);
+    watch *neww = iwatch_add_subwatch (ctx->iw, di);
         if (neww == NULL) {
             perror_msg ("Failed to start watching on a new dependency %s", di->path);
         } else {
@@ -194,7 +170,7 @@ handle_added (void *udata, dep_item *di)
             }
         }
 
-    enqueue_event (ctx->wrk, ctx->w->fd, IN_CREATE | addMask, 0, di->path);
+    enqueue_event (ctx->iw, IN_CREATE | addMask, 0, di->path);
 }
 
 /**
@@ -212,11 +188,11 @@ handle_removed (void *udata, dep_item *di)
     assert (udata != NULL);
 
     handle_context *ctx = (handle_context *) udata;
-    assert (ctx->wrk != NULL);
-    assert (ctx->w != NULL);
+    assert (ctx->iw != NULL);
 
-    int addMask = check_is_dir_cached (ctx->wrk, di) ? IN_ISDIR : 0;
-    enqueue_event (ctx->wrk, ctx->w->fd, IN_DELETE | addMask, 0, di->path);
+    int addMask = iwatch_subwatch_is_dir (ctx->iw, di) ? IN_ISDIR : 0;
+    enqueue_event (ctx->iw, IN_DELETE | addMask, 0, di->path);
+    iwatch_del_subwatch (ctx->iw, di);
 }
 
 /**
@@ -236,10 +212,9 @@ handle_replaced (void *udata, dep_item *di)
     assert (udata != NULL);
 
     handle_context *ctx = (handle_context *) udata;
-    assert (ctx->wrk != NULL);
-    assert (ctx->w != NULL);
+    assert (ctx->iw != NULL);
 
-    worker_remove_watch (ctx->wrk, ctx->w, di);
+    iwatch_del_subwatch (ctx->iw, di);
 }
 
 /**
@@ -258,13 +233,8 @@ handle_overwritten (void *udata, dep_item *from_di, dep_item *to_di)
 {
     assert (udata != NULL);
 
-    handle_context *ctx = (handle_context *) udata;
-    assert (ctx->wrk != NULL);
-    assert (ctx->w != NULL);
-
     handle_removed (udata, from_di);
     handle_added (udata, to_di);
-    worker_remove_watch (ctx->wrk, ctx->w, from_di);
 }
 
 /**
@@ -283,54 +253,14 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
     assert (udata != NULL);
 
     handle_context *ctx = (handle_context *) udata;
-    assert (ctx->wrk != NULL);
-    assert (ctx->w != NULL);
+    assert (ctx->iw != NULL);
 
-    int addMask = check_is_dir_cached (ctx->wrk, from_di) ? IN_ISDIR : 0;
+    int addMask = iwatch_subwatch_is_dir (ctx->iw, from_di) ? IN_ISDIR : 0;
     uint32_t cookie = from_di->inode & 0x00000000FFFFFFFF;
 
-    enqueue_event (ctx->wrk, ctx->w->fd, IN_MOVED_FROM | addMask, cookie, from_di->path);
-    enqueue_event (ctx->wrk, ctx->w->fd, IN_MOVED_TO | addMask, cookie, to_di->path);
-}
-
-/**
- * Remove the appropriate watches if the files were removed from the directory.
- * 
- * This function is used as a callback and is invoked from the dep-list
- * routines.
- *
- * @param[in] udata  A pointer to user data (#handle_context).
- * @param[in] list   A list of the removed files. 
- **/
-static void
-handle_many_removed (void *udata, const dep_list *list)
-{
-    assert (udata != NULL);
-    handle_context *ctx = (handle_context *) udata;
-
-    if (list) {
-        worker_remove_many (ctx->wrk, ctx->w, list, 0);
-    }
-}
-
-/**
- * Update file names for the renamed files.
- *
- * This function is used as a callback and is invoked from the dep-list
- * routines.
- *
- * @param[in] udata  A pointer to user data (#handle_context).
- **/
-static void
-handle_names_updated (void *udata)
-{
-    assert (udata != NULL);
-
-    handle_context *ctx = (handle_context *) udata;
-    assert (ctx->wrk != NULL);
-    assert (ctx->w != NULL);
-
-    worker_update_paths (ctx->wrk, ctx->w);
+    enqueue_event (ctx->iw, IN_MOVED_FROM | addMask, cookie, from_di->path);
+    enqueue_event (ctx->iw, IN_MOVED_TO | addMask, cookie, to_di->path);
+    iwatch_rename_subwatch (ctx->iw, from_di, to_di);
 }
 
 
@@ -342,8 +272,8 @@ static const traverse_cbs cbs = {
     handle_overwritten,
     handle_moved,
     NULL, /* many_added */
-    handle_many_removed,
-    handle_names_updated,
+    NULL, /* many_removed */
+    NULL, /* names_updated */
 };
 
 /**
@@ -352,40 +282,33 @@ static const traverse_cbs cbs = {
  * This function is top-level and it operates with other specific routines
  * to notify about different sets of events in a different conditions.
  *
- * @param[in] wrk   A pointer to #worker.
- * @param[in] w     A pointer to #watch.
+ * @param[in] iw    A pointer to #i_watch.
  * @param[in] event A pointer to the received kqueue event.
  **/
 void
-produce_directory_diff (worker *wrk, watch *w, struct kevent *event)
+produce_directory_diff (i_watch *iw, struct kevent *event)
 {
-    assert (wrk != NULL);
-    assert (w != NULL);
+    assert (iw != NULL);
     assert (event != NULL);
 
-    assert (w->type == WATCH_USER);
-    assert (w->is_directory);
-
     dep_list *was = NULL, *now = NULL;
-    was = w->deps;
-    now = dl_listing (w->fd);
+    was = iw->deps;
+    now = dl_listing (iw->wd);
     if (now == NULL) {
-        perror_msg ("Failed to create a listing for directory %s",
-                    w->filename);
+        perror_msg ("Failed to create a listing for watch %d", iw->wd);
         return;
     }
 
-    w->deps = now;
+    iw->deps = now;
 
     handle_context ctx;
     memset (&ctx, 0, sizeof (ctx));
-    ctx.wrk = wrk;
-    ctx.w = w;
-    
+    ctx.iw = iw;
+
     if (dl_calculate (was, now, &cbs, &ctx) == -1) {
-        w->deps = was;
+        iw->deps = was;
         dl_free (now);
-        perror_msg ("Failed to produce directory diff for %s", w->filename);
+        perror_msg ("Failed to produce directory diff for watch %d", iw->wd);
     }
 }
 
@@ -402,14 +325,20 @@ produce_notifications (worker *wrk, struct kevent *event)
     assert (event != NULL);
 
     watch *w = NULL;
+    i_watch *iw = NULL;
     size_t i;
 
-    for (i = 0; i < wrk->sets.length; i++) {
-        if (event->ident == wrk->sets.watches[i]->fd) {
-            w = wrk->sets.watches[i];
-            break;
+    SLIST_FOREACH (iw, &wrk->head, next) {
+        for (i = 0; i < iw->watches.length; i++) {
+            if (event->ident == iw->watches.watches[i]->fd) {
+                w = iw->watches.watches[i];
+                goto found;
+            }
         }
     }
+
+found:
+    assert (iw != NULL);
     assert (w != NULL);
 
     uint32_t flags = event->fflags;
@@ -421,28 +350,24 @@ produce_notifications (worker *wrk, struct kevent *event)
         }
 
         if (flags & NOTE_WRITE && w->is_directory) {
-            produce_directory_diff (wrk, w, event);
+            produce_directory_diff (iw, event);
             flags &= ~(NOTE_WRITE | NOTE_EXTEND | NOTE_LINK);
         }
 
         if (flags) {
-            enqueue_event (wrk,
-                           w->fd,
+            enqueue_event (iw,
                            kqueue_to_inotify (flags, w->is_really_dir, 0),
                            0,
                            NULL);
         }
 
         if (flags & NOTE_DELETE) {
-            worker_remove (wrk, w->fd);
+            worker_remove (wrk, iw->wd);
         }
     } else {
         /* for dependency events, ignore some notifications */
         if (flags & (NOTE_ATTRIB | NOTE_LINK | NOTE_WRITE)) {
-            watch *p = w->parent;
-            assert (p != NULL);
-            enqueue_event (wrk,
-                           p->fd,
+            enqueue_event (iw,
                            kqueue_to_inotify (flags, w->is_really_dir, 1),
                            0,
                            w->filename);

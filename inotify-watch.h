@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2014 Vladimir Kondratiev <wulf@cicgroup.ru>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -20,17 +20,36 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#ifndef __WORKER_THREAD_H__
-#define __WORKER_THREAD_H__
+#ifndef __INOTIFY_WATCH_H__
+#define __INOTIFY_WATCH_H__
 
-#include "inotify-watch.h"
+#include "compat.h"
+
+#include <stdint.h>
+
+typedef struct i_watch i_watch;
+
+#include "dep-list.h"
+#include "worker-sets.h"
 #include "worker.h"
 
-void* worker_thread (void *arg);
-int   enqueue_event (i_watch    *iw,
-                     uint32_t    mask,
-                     uint32_t    cookie,
-                     const char *name);
-void  flush_events  (worker *wrk);
+struct i_watch {
+    int wd;                    /* watch descriptor */
+    worker *wrk;               /* pointer to a parent worker structure */
+    uint32_t flags;            /* flags in the inotify format */
+    dep_list *deps;            /* dependence list of inotify watch */
+    worker_sets watches;       /* kqueue watches of inotify watch */
+    SLIST_ENTRY(i_watch) next; /* pointer to the next inotify watch in list */
+};
 
-#endif /* __WORKER_THREAD_H__ */
+i_watch *iwatch_init (worker *wrk, const char *path, uint32_t flags);
+void     iwatch_free (i_watch *iw);
+
+void     iwatch_update_flags    (i_watch *iw, uint32_t flags);
+
+watch*   iwatch_add_subwatch    (i_watch *iw, const dep_item *di);
+void     iwatch_del_subwatch    (i_watch *iw, const dep_item *di);
+void     iwatch_rename_subwatch (i_watch *iw, dep_item *from, dep_item *to);
+int      iwatch_subwatch_is_dir (i_watch *iw, const dep_item *di);
+
+#endif /* __INOTIFY_WATCH_H__ */

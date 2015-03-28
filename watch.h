@@ -26,8 +26,6 @@
 #include <stdint.h>    /* uint32_t */
 #include <dirent.h>    /* ino_t */
 
-#include "dep-list.h"
-
 typedef enum watch_type {
     WATCH_USER,
     WATCH_DEPENDENCY,
@@ -39,17 +37,10 @@ typedef struct watch {
     int is_directory;         /* legacy. 1 if directory IF AND ONLY IF it is a
                                * USER watch. 0 otherwise. TODO: rename this field */
     int is_really_dir;        /* a flag, a directory or not. */
-
-    uint32_t flags;           /* flags in the inotify format */
     char *filename;           /* file name of a watched file
                                * NB: an entry file name for dependencies! */
     int fd;                   /* file descriptor of a watched entry */
     ino_t inode;              /* inode number for the watched entry */
-
-    union {
-        dep_list *deps;       /* dependencies for an user-defined watch */
-        struct watch *parent; /* parent watch for an automatic (dependency) watch */
-    };
 } watch;
 
 int    watch_open (int dirfd, const char *path, uint32_t flags);
