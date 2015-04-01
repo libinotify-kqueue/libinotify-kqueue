@@ -35,7 +35,6 @@
 #include "conversions.h"
 #include "inotify-watch.h"
 #include "worker.h"
-#include "worker-sets.h"
 #include "worker-thread.h"
 
 void worker_erase (worker *wrk);
@@ -160,16 +159,12 @@ handle_added (void *udata, dep_item *di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
-    int addMask = 0;
     watch *neww = iwatch_add_subwatch (ctx->iw, di);
-        if (neww == NULL) {
-            perror_msg ("Failed to start watching on a new dependency %s", di->path);
-        } else {
-            if (neww->is_really_dir) {
-                addMask = IN_ISDIR;
-            }
-        }
+    if (neww == NULL) {
+        perror_msg ("Failed to start watching on a new dependency %s", di->path);
+    }
 
+    int addMask = iwatch_subwatch_is_dir (ctx->iw, di) ? IN_ISDIR : 0;
     enqueue_event (ctx->iw, IN_CREATE | addMask, 0, di->path);
 }
 
@@ -260,7 +255,6 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
 
     enqueue_event (ctx->iw, IN_MOVED_FROM | addMask, cookie, from_di->path);
     enqueue_event (ctx->iw, IN_MOVED_TO | addMask, cookie, to_di->path);
-    iwatch_rename_subwatch (ctx->iw, from_di, to_di);
 }
 
 
@@ -324,39 +318,32 @@ produce_notifications (worker *wrk, struct kevent *event)
     assert (wrk != NULL);
     assert (event != NULL);
 
-    watch *w = NULL;
-    i_watch *iw = NULL;
-    size_t i;
-
-    SLIST_FOREACH (iw, &wrk->head, next) {
-        for (i = 0; i < iw->watches.length; i++) {
-            if (event->ident == iw->watches.watches[i]->fd) {
-                w = iw->watches.watches[i];
-                goto found;
-            }
-        }
-    }
-
-found:
-    assert (iw != NULL);
+    watch *w = (watch *)event->udata;
     assert (w != NULL);
+    assert (w->fd == event->ident);
+
+    i_watch *iw = w->iw;
+    assert (watch_set_find (&iw->watches, w->inode) == w);
 
     uint32_t flags = event->fflags;
 
-    if (w->type == WATCH_USER) {
+    if (!(w->flags & WF_ISSUBWATCH)) {
         /* Treat deletes as link number changes if links still exist */
-        if (flags & NOTE_DELETE && !w->is_really_dir && !is_deleted (w->fd)) {
+        if (flags & NOTE_DELETE && !(w->flags & WF_ISDIR)
+          && !is_deleted (w->fd)) {
             flags = (flags | NOTE_LINK) & ~NOTE_DELETE;
         }
 
-        if (flags & NOTE_WRITE && w->is_directory) {
+        if (flags & NOTE_WRITE && w->flags & WF_ISDIR) {
             produce_directory_diff (iw, event);
             flags &= ~(NOTE_WRITE | NOTE_EXTEND | NOTE_LINK);
         }
 
         if (flags) {
             enqueue_event (iw,
-                           kqueue_to_inotify (flags, w->is_really_dir, 0),
+                           kqueue_to_inotify (flags,
+                                              w->flags & WF_ISDIR,
+                                              w->flags & WF_ISSUBWATCH),
                            0,
                            NULL);
         }
@@ -367,10 +354,17 @@ found:
     } else {
         /* for dependency events, ignore some notifications */
         if (flags & (NOTE_ATTRIB | NOTE_LINK | NOTE_WRITE)) {
-            enqueue_event (iw,
-                           kqueue_to_inotify (flags, w->is_really_dir, 1),
-                           0,
-                           w->filename);
+            uint32_t i_flags = kqueue_to_inotify (flags,
+                                                  w->flags & WF_ISDIR,
+                                                  w->flags & WF_ISSUBWATCH);
+            dep_node *iter = NULL;
+            SLIST_FOREACH (iter, &iw->deps->head, next) {
+                dep_item *di = iter->item;
+
+                if (di->inode == w->inode) {
+                    enqueue_event (iw, i_flags, 0, di->path);
+                }
+            }
         }
     }
     flush_events (wrk);

@@ -30,26 +30,29 @@
 typedef struct i_watch i_watch;
 
 #include "dep-list.h"
-#include "worker-sets.h"
+#include "watch-set.h"
+#include "watch.h"
 #include "worker.h"
 
 struct i_watch {
     int wd;                    /* watch descriptor */
     worker *wrk;               /* pointer to a parent worker structure */
     uint32_t flags;            /* flags in the inotify format */
+    ino_t inode;               /* inode number of watched inode */
+    dev_t dev;                 /* device number of watched inode */
     dep_list *deps;            /* dependence list of inotify watch */
-    worker_sets watches;       /* kqueue watches of inotify watch */
+    watch_set watches;         /* kqueue watches of inotify watch */
     SLIST_ENTRY(i_watch) next; /* pointer to the next inotify watch in list */
 };
 
-i_watch *iwatch_init (worker *wrk, const char *path, uint32_t flags);
+int      iwatch_open (const char *path, uint32_t flags);
+i_watch *iwatch_init (worker *wrk, int fd, uint32_t flags);
 void     iwatch_free (i_watch *iw);
 
 void     iwatch_update_flags    (i_watch *iw, uint32_t flags);
 
 watch*   iwatch_add_subwatch    (i_watch *iw, const dep_item *di);
 void     iwatch_del_subwatch    (i_watch *iw, const dep_item *di);
-void     iwatch_rename_subwatch (i_watch *iw, dep_item *from, dep_item *to);
 int      iwatch_subwatch_is_dir (i_watch *iw, const dep_item *di);
 
 #endif /* __INOTIFY_WATCH_H__ */

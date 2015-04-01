@@ -59,6 +59,12 @@
             SLIST_NEXT(SLIST_NEXT(elm, field), field);                  \
 } while (0)
 #endif
+#ifndef RB_FOREACH_SAFE
+#define RB_FOREACH_SAFE(x, name, head, y)                               \
+        for ((x) = RB_MIN(name, head);                                  \
+            ((x) != NULL) && ((y) = name##_RB_NEXT(x), (x) != NULL);    \
+             (x) = (y))
+#endif
 #endif /* BUILD_LIBRARY */
 
 #ifndef HAVE_PTHREAD_BARRIER

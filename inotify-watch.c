@@ -36,8 +36,26 @@
 #include "conversions.h"
 #include "inotify-watch.h"
 #include "utils.h"
+#include "watch-set.h"
 #include "watch.h"
-#include "worker-sets.h"
+
+/**
+ * Preform minimal initialization required for opening watch descriptor
+ *
+ * @param[in] path  Path to watch.
+ * @param[in] flags A combination of inotify event flags.
+ * @return A inotify watch descriptor on success, -1 otherwise.
+ **/
+int
+iwatch_open (const char *path, uint32_t flags)
+{
+    int fd = watch_open (AT_FDCWD, path, flags);
+    if (fd == -1) {
+        perror_msg ("Failed to open inotify watch %s", path);
+    }
+
+    return fd;
+}
 
 /**
  * Initialize inotify watch.
@@ -45,83 +63,53 @@
  * This function creates and initializes additional watches for a directory.
  *
  * @param[in] wrk    A pointer to #worker.
- * @param[in] path   Path to watch.
+ * @param[in] fd     A file descriptor of a watched entry.
  * @param[in] flags  A combination of inotify event flags.
  * @return A pointer to a created #i_watch on success NULL otherwise
  **/
 i_watch *
-iwatch_init (worker     *wrk,
-             const char *path,
-             uint32_t    flags)
+iwatch_init (worker *wrk, int fd, uint32_t flags)
 {
     assert (wrk != NULL);
-    assert (path != NULL);
-
-    int fd = watch_open (AT_FDCWD, path, flags);
-    if (fd == -1) {
-        perror_msg ("Failed to open watch %s", path);
-        return NULL;
-    }
+    assert (fd != -1);
 
     struct stat st;
     if (fstat (fd, &st) == -1) {
         perror_msg ("fstat failed on %d", fd);
-        close (fd);
         return NULL;
-    }
-
-    dep_list *deps = NULL;
-    if (S_ISDIR (st.st_mode)) {
-        deps = dl_listing (fd);
-        if (deps == NULL) {
-            perror_msg ("Directory listing of %s failed", path);
-            close (fd);
-            return NULL;
-        }
     }
 
     i_watch *iw = calloc (1, sizeof (i_watch));
     if (iw == NULL) {
         perror_msg ("Failed to allocate inotify watch");
-        if (S_ISDIR (st.st_mode)) {
-            dl_free (deps);
-        }
-        close (fd);
         return NULL;
     }
-    iw->deps = deps;
+
+    iw->deps = NULL;
     iw->wrk = wrk;
     iw->wd = fd;
     iw->flags = flags;
+    iw->inode = st.st_ino;
+    iw->dev = st.st_dev;
 
-    if (worker_sets_init (&iw->watches) == -1) {
-        if (S_ISDIR (st.st_mode)) {
-            dl_free (deps);
+    watch_set_init (&iw->watches);
+
+    if (S_ISDIR (st.st_mode)) {
+        iw->deps = dl_listing (fd);
+        if (iw->deps == NULL) {
+            perror_msg ("Directory listing of %d failed", fd);
+            iwatch_free (iw);
+            return NULL;
         }
-        close (fd);
-        free (iw);
-        return NULL;
     }
 
-    watch *parent = watch_init (WATCH_USER, iw->wrk->kq, path, fd, iw->flags);
+    watch *parent = watch_init (iw, WATCH_USER, fd);
     if (parent == NULL) {
-        worker_sets_free (&iw->watches);
-        if (S_ISDIR (st.st_mode)) {
-            dl_free (deps);
-        }
-        close (fd);
-        free (iw);
+        iwatch_free (iw);
         return NULL;
     }
 
-    if (worker_sets_insert (&iw->watches, parent)) {
-        if (S_ISDIR (st.st_mode)) {
-            dl_free (deps);
-        }
-        watch_free (parent);
-        free (iw);
-        return NULL;
-    }
+    watch_set_insert (&iw->watches, parent);
 
     if (S_ISDIR (st.st_mode)) {
 
@@ -129,9 +117,8 @@ iwatch_init (worker     *wrk,
         SLIST_FOREACH (iter, &iw->deps->head, next) {
             watch *neww = iwatch_add_subwatch (iw, iter->item);
             if (neww == NULL) {
-                perror_msg ("Failed to start watching a dependency %s of %s",
-                            iter->item->path,
-                            parent->filename);
+                perror_msg ("Failed to start watching a dependency %s",
+                            iter->item->path);
             }
         }
     }
@@ -148,7 +135,7 @@ iwatch_free (i_watch *iw)
 {
     assert (iw != NULL);
 
-    worker_sets_free (&iw->watches);
+    watch_set_free (&iw->watches);
     if (iw->deps != NULL) {
         dl_free (iw->deps);
     }
@@ -169,27 +156,27 @@ iwatch_add_subwatch (i_watch *iw, const dep_item *di)
     assert (iw->deps != NULL);
     assert (di != NULL);
 
+    watch *w = watch_set_find (&iw->watches, di->inode);
+    if (w != NULL) {
+        goto hold;
+    }
+
     int fd = watch_open (iw->wd, di->path, IN_DONT_FOLLOW);
     if (fd == -1) {
         perror_msg ("Failed to open file %s", di->path);
         return NULL;
     }
 
-    watch *w = watch_init (WATCH_DEPENDENCY,
-                           iw->wrk->kq,
-                           di->path,
-                           fd,
-                           iw->flags);
+    w = watch_init (iw, WATCH_DEPENDENCY, fd);
     if (w == NULL) {
         close (fd);
         return NULL;
     }
 
-    if (worker_sets_insert (&iw->watches, w)) {
-        watch_free (w);
-        return NULL;
-    }
+    watch_set_insert (&iw->watches, w);
 
+hold:
+    ++w->refcount;
     return w;
 }
 
@@ -205,15 +192,13 @@ iwatch_del_subwatch (i_watch *iw, const dep_item *di)
     assert (iw != NULL);
     assert (di != NULL);
 
-    size_t i;
+    watch *w = watch_set_find (&iw->watches, di->inode);
+    if (w != NULL) {
+        assert (w->refcount > 0);
+        --w->refcount;
 
-    for (i = 0; i < iw->watches.length; i++) {
-        watch *w = iw->watches.watches[i];
-
-        if ((di->inode == w->inode)
-          && (strcmp (di->path, w->filename) == 0)) {
-            worker_sets_delete (&iw->watches, i);
-            break;
+        if (w->refcount == 0) {
+            watch_set_delete (&iw->watches, w);
         }
     }
 }
@@ -234,43 +219,12 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
 
     iw->flags = flags;
 
-    size_t i;
-    for (i = 0; i < iw->watches.length; i++) {
-        watch *w = iw->watches.watches[i];
+    watch *w;
+    RB_FOREACH (w, watch_set, &iw->watches) {
         uint32_t fflags = inotify_to_kqueue (flags,
-                                             w->is_really_dir,
-                                             w->type != WATCH_USER);
-        watch_register_event (w, iw->wrk->kq, fflags);
-    }
-}
-
-/**
- * Update path of child watch for a specified watch.
- *
- * It is necessary when renames in the watched directory occur.
- *
- * @param[in] iw     A pointer to #i_watch.
- * @param[in] from   A rename from. Must be child of the specified parent.
- * @param[in] to     A rename to. Must be child of the specified parent.
- **/
-void
-iwatch_rename_subwatch (i_watch *iw, dep_item *from, dep_item *to)
-{
-    assert (iw != NULL);
-    assert (from != NULL);
-    assert (to != NULL);
-
-    size_t i;
-
-    for (i = 0; i < iw->watches.length; i++) {
-        watch *w = iw->watches.watches[i];
-
-        if ((from->inode == w->inode)
-          && (strcmp (from->path, w->filename) == 0)) {
-            free (w->filename);
-            w->filename = strdup (to->path);
-            break;
-        }
+                                             w->flags & WF_ISDIR,
+                                             w->flags & WF_ISSUBWATCH);
+        watch_register_event (w, fflags);
     }
 }
 
@@ -288,10 +242,8 @@ iwatch_rename_subwatch (i_watch *iw, dep_item *from, dep_item *to)
 int
 iwatch_subwatch_is_dir (i_watch *iw, const dep_item *di)
 {
-    int i;
-    for (i = 0; i < iw->watches.length; i++) {
-        const watch *w = iw->watches.watches[i];
-        if (w != NULL && strcmp (di->path, w->filename) == 0 && w->is_really_dir)
+    watch *w = watch_set_find (&iw->watches, di->inode);
+    if (w != NULL && w->flags & WF_ISDIR) {
             return 1;
     }
     return 0;

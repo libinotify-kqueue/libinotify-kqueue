@@ -23,8 +23,17 @@
 #ifndef __WATCH_H__
 #define __WATCH_H__
 
+#include "compat.h"
+
 #include <stdint.h>    /* uint32_t */
 #include <dirent.h>    /* ino_t */
+
+typedef struct watch watch;
+
+#include "inotify-watch.h"
+
+#define WF_ISSUBWATCH (1<<0)  /* a type of watch */
+#define WF_ISDIR      (1<<1)  /* watched item is a directory */
 
 typedef enum watch_type {
     WATCH_USER,
@@ -32,26 +41,20 @@ typedef enum watch_type {
 } watch_type_t;
 
 
-typedef struct watch {
-    watch_type_t type;        /* a type of a watch */
-    int is_directory;         /* legacy. 1 if directory IF AND ONLY IF it is a
-                               * USER watch. 0 otherwise. TODO: rename this field */
-    int is_really_dir;        /* a flag, a directory or not. */
-    char *filename;           /* file name of a watched file
-                               * NB: an entry file name for dependencies! */
+struct watch {
+    i_watch *iw;              /* A pointer to parent inotify watch */
+    uint32_t flags;           /* A watch flags. Not in inotify/kqueue format */
+    size_t refcount;          /* number of dependency list items corresponding
+                               * to that watch */ 
     int fd;                   /* file descriptor of a watched entry */
     ino_t inode;              /* inode number for the watched entry */
-} watch;
+    RB_ENTRY(watch) link;     /* RB tree links */
+};
 
 int    watch_open (int dirfd, const char *path, uint32_t flags);
-watch *watch_init (watch_type_t   watch_type,
-                   int            kq,
-                   const char    *path,
-                   int            fd,
-                   uint32_t       flags);
-
+watch *watch_init (i_watch *iw, watch_type_t watch_type, int fd);
 void   watch_free (watch *w);
 
-int    watch_register_event (watch *w, int kq, uint32_t fflags);
+int    watch_register_event (watch *w, uint32_t fflags);
 
 #endif /* __WATCH_H__ */
