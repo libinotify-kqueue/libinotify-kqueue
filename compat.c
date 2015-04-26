@@ -437,4 +437,30 @@ fdopendir (int fd)
     return opendir (dirpath);
 }
 #endif /* HAVE_FDOPENDIR */
+
+#ifndef HAVE_FSTATAT
+int
+fstatat (int fd, const char *path, struct stat *buf, int flag)
+{
+    char *fullpath;
+    int retval, save_errno;
+
+    fullpath = fd_concat (fd, path);
+    if (fullpath == NULL) {
+        return -1;
+    }
+
+    if (flag & AT_SYMLINK_NOFOLLOW) {
+        retval = lstat (fullpath, buf);
+    } else {
+        retval = stat (fullpath, buf);
+    }
+
+    save_errno = errno;
+    free (fullpath);
+    errno = save_errno;
+
+    return retval;
+}
+#endif /* HAVE_FSTATAT */
 #endif /* BUILD_LIBRARY */

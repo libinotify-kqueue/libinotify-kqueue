@@ -37,6 +37,7 @@ typedef struct i_watch i_watch;
 struct i_watch {
     int wd;                    /* watch descriptor */
     worker *wrk;               /* pointer to a parent worker structure */
+    int is_closed;             /* inotify watch is stopped but not freed yet */
     uint32_t flags;            /* flags in the inotify format */
     ino_t inode;               /* inode number of watched inode */
     dev_t dev;                 /* device number of watched inode */
@@ -51,8 +52,7 @@ void     iwatch_free (i_watch *iw);
 
 void     iwatch_update_flags    (i_watch *iw, uint32_t flags);
 
-watch*   iwatch_add_subwatch    (i_watch *iw, const dep_item *di);
+watch*   iwatch_add_subwatch    (i_watch *iw, dep_item *di);
 void     iwatch_del_subwatch    (i_watch *iw, const dep_item *di);
-int      iwatch_subwatch_is_dir (i_watch *iw, const dep_item *di);
 
 #endif /* __INOTIFY_WATCH_H__ */

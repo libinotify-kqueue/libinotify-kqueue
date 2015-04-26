@@ -20,6 +20,7 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <errno.h>  /* errno */
 #include <fcntl.h>  /* open */
 #include <unistd.h> /* close */
 #include <string.h> /* strdup */
@@ -36,37 +37,6 @@
 #include "conversions.h"
 #include "watch.h"
 #include "sys/inotify.h"
-
-/**
- * Get some file information by its file descriptor.
- *
- * @param[in]  fd      A file descriptor.
- * @param[out] is_dir  A flag indicating directory.
- * @param[out] inode   A file's inode number.
- **/
-static void
-_file_information (int fd, int *is_dir, ino_t *inode)
-{
-    assert (fd != -1);
-    assert (is_dir != NULL);
-    assert (inode != NULL);
-
-    struct stat st;
-    memset (&st, 0, sizeof (struct stat));
-
-    if (fstat (fd, &st) == -1) {
-        perror_msg ("fstat failed on %d, assuming it is just a file", fd);
-        return;
-    }
-
-    if (is_dir != NULL) {
-        *is_dir = S_ISDIR (st.st_mode);
-    }
-
-    if (inode != NULL) {
-        *inode = st.st_ino;
-    }
-}
 
 /* struct kevent is declared slightly differently on the different BSDs.
  * This macros will help to avoid cast warnings on the supported platforms. */
@@ -123,11 +93,33 @@ watch_open (int dirfd, const char *path, uint32_t flags)
     if (flags & IN_DONT_FOLLOW) {
         openflags |= O_SYMLINK;
     }
+#ifdef O_DIRECTORY
+    if (flags & IN_ONLYDIR) {
+        openflags |= O_DIRECTORY;
+    }
+#endif
 
     int fd = openat (dirfd, path, openflags);
     if (fd == -1) {
         return -1;
     }
+
+#ifndef O_DIRECTORY
+    if (flags & IN_ONLYDIR) {
+        struct stat st;
+        if (fstat (fd, &st) == -1) {
+            perror_msg ("Failed to fstat on watch open %s", path);
+            close (fd);
+            return -1;
+        }
+
+        if (!S_ISDIR (st.st_mode)) {
+            errno = ENOTDIR;
+            close (fd);
+            return -1;
+        }
+    }
+#endif
 
 #ifndef O_CLOEXEC
     if (set_cloexec_flag (fd, 1) == -1) {
@@ -145,13 +137,22 @@ watch_open (int dirfd, const char *path, uint32_t flags)
  * @param[in] iw;        A backreference to parent #i_watch.
  * @param[in] watch_type The type of the watch.
  * @param[in] fd         A file descriptor of a watched entry.
+ * @param[in] st         A stat structure of watch.
  * @return A pointer to a watch on success, NULL on failure.
  **/
 watch *
-watch_init (i_watch *iw, watch_type_t watch_type, int fd)
+watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
 {
     assert (iw != NULL);
     assert (fd != -1);
+
+    uint32_t fflags = inotify_to_kqueue (iw->flags,
+                                         S_ISDIR (st->st_mode),
+                                         watch_type == WATCH_DEPENDENCY);
+    /* Skip watches with empty kqueue filter flags */
+    if (fflags == 0) {
+        return NULL;
+    }
 
     watch *w = calloc (1, sizeof (struct watch));
     if (w == NULL) {
@@ -162,15 +163,12 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd)
     w->iw = iw;
     w->fd = fd;
     w->flags = watch_type != WATCH_USER ? WF_ISSUBWATCH : 0;
+    w->flags |= S_ISDIR (st->st_mode) ? WF_ISDIR : 0;
     w->refcount = 0;
+    /* Inode number obtained via fstat call cannot be used here as it
+     * differs from readdir`s one at mount points. */
+    w->inode = st->st_ino;
 
-    int is_dir = 0;
-    _file_information (w->fd, &is_dir, &w->inode);
-    w->flags |= is_dir ? WF_ISDIR : 0;
-
-    uint32_t fflags = inotify_to_kqueue (iw->flags,
-                                         w->flags & WF_ISDIR,
-                                         w->flags & WF_ISSUBWATCH);
     if (watch_register_event (w, fflags) == -1) {
         free (w);
         return NULL;

@@ -331,7 +331,7 @@ worker_remove (worker *wrk,
     SLIST_FOREACH (iw, &wrk->head, next) {
 
         if (iw->wd == id) {
-            enqueue_event (iw, IN_IGNORED, 0, NULL);
+            enqueue_event (iw, IN_IGNORED, NULL);
             flush_events (wrk);
             worker_remove_iwatch (wrk, iw);
             break;

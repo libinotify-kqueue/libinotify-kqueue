@@ -128,6 +128,35 @@ void start_stop_test::run ()
         should ("pair of softlinked files should be opened with the same watch ID", wid == wid2);
     }
 
+    /* IN_ONESHOT flag tests */
+    cons.input.setup ("sst-working", IN_ATTRIB | IN_ONESHOT);
+    cons.output.wait ();
+    wid = cons.output.added_watch_id ();
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("touch sst-working");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_ATTRIB for sst_working on touch",
+            contains (received, event ("", wid, IN_ATTRIB)));
+    should ("receive IN_IGNORED after one event have been received "
+            "if watch was opened with IN_ONESHOT flag set",
+            contains (received, event ("", wid, IN_IGNORED)));
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("touch sst-working");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("Stop receiving events after one event have been received "
+            "if watch was opened with IN_ONESHOT flag set",
+            !contains (received, event ("", wid, IN_ATTRIB)));
+
     cons.input.interrupt ();
 }
 

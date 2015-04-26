@@ -78,7 +78,7 @@ AC_ARG_ENABLE([unsafe_fchdir],
 )
 
 atfuncs_support=yes
-AC_CHECK_FUNCS(openat fdopendir,,atfuncs_support=no)
+AC_CHECK_FUNCS(openat fdopendir fstatat,,atfuncs_support=no)
 if test "$atfuncs_support" = "yes"; then
     AC_DEFINE([HAVE_ATFUNCS],[1],[Define to 1 if relative pathname functions detected])
 fi
@@ -124,6 +124,16 @@ if test "$have_o_evtonly" = "yes"; then
 else
     AC_MSG_WARN([O_EVTONLY open(2) flag is not supported on your system. Unmounting of fs where watch located is unavailable])
 fi
+
+
+AC_CHECK_MEMBER([struct dirent.d_type],
+[
+    AC_DEFINE([DIRENT_HAVE_D_TYPE],[1],[Define to 1 if dirent have d_type field])
+],
+[],
+[
+    [@%:@include <dirent.h>]
+])
 
 
 AC_OUTPUT

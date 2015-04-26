@@ -27,10 +27,7 @@
 #include "worker.h"
 
 void* worker_thread (void *arg);
-int   enqueue_event (i_watch    *iw,
-                     uint32_t    mask,
-                     uint32_t    cookie,
-                     const char *name);
+int   enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di);
 void  flush_events  (worker *wrk);
 
 #endif /* __WORKER_THREAD_H__ */

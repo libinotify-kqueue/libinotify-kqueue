@@ -23,6 +23,7 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 
+#include <sys/stat.h> /* S_ISDIR */
 #include <sys/uio.h>  /* iovec */
 
 #include <stdint.h> /* uint32_t */

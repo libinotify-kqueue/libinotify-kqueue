@@ -24,10 +24,15 @@
 #define __DEP_LIST_H__
 
 #include <sys/types.h> /* ino_t */
+#include <sys/stat.h>  /* mode_t */
 #include <sys/queue.h> /* SLIST macroses */
+
+#define S_IFUNK 0000000 /* mode_t extension. File type is unknown */
+#define S_ISUNK(m) (((m) & S_IFMT) == S_IFUNK)
 
 typedef struct dep_item {
     ino_t inode;
+    mode_t type;
     char path[];
 } dep_item;
 
@@ -60,7 +65,7 @@ typedef struct traverse_cbs {
     no_entry_cb      names_updated;
 } traverse_cbs;
 
-dep_item* di_create       (const char *path, ino_t inode);
+dep_item* di_create       (const char *path, ino_t inode, mode_t type);
 void      di_free         (dep_item *di);
 
 dep_list* dl_create       ();

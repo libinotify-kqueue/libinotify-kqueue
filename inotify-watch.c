@@ -24,6 +24,7 @@
 #include <sys/stat.h>  /* fstat */
 
 #include <assert.h>    /* assert */
+#include <errno.h>     /* errno */
 #include <fcntl.h>     /* AT_FDCWD */
 #include <stdint.h>    /* uint32_t */
 #include <stdlib.h>    /* calloc, free */
@@ -49,6 +50,12 @@
 int
 iwatch_open (const char *path, uint32_t flags)
 {
+    if (flags == 0) {
+        errno = EINVAL;
+        perror_msg ("Failed to open watch %s. Bad event mask %x", path, flags);
+        return -1;
+    }
+
     int fd = watch_open (AT_FDCWD, path, flags);
     if (fd == -1) {
         perror_msg ("Failed to open inotify watch %s", path);
@@ -91,6 +98,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
     iw->flags = flags;
     iw->inode = st.st_ino;
     iw->dev = st.st_dev;
+    iw->is_closed = 0;
 
     watch_set_init (&iw->watches);
 
@@ -103,7 +111,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
         }
     }
 
-    watch *parent = watch_init (iw, WATCH_USER, fd);
+    watch *parent = watch_init (iw, WATCH_USER, fd, &st);
     if (parent == NULL) {
         iwatch_free (iw);
         return NULL;
@@ -115,11 +123,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
 
         dep_node *iter;
         SLIST_FOREACH (iter, &iw->deps->head, next) {
-            watch *neww = iwatch_add_subwatch (iw, iter->item);
-            if (neww == NULL) {
-                perror_msg ("Failed to start watching a dependency %s",
-                            iter->item->path);
-            }
+            iwatch_add_subwatch (iw, iter->item);
         }
     }
     return iw;
@@ -150,24 +154,61 @@ iwatch_free (i_watch *iw)
  * @return A pointer to a created watch.
  **/
 watch*
-iwatch_add_subwatch (i_watch *iw, const dep_item *di)
+iwatch_add_subwatch (i_watch *iw, dep_item *di)
 {
     assert (iw != NULL);
     assert (iw->deps != NULL);
     assert (di != NULL);
 
+    if (iw->is_closed) {
+        return NULL;
+    }
+
     watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL) {
+        di->type = w->flags & WF_ISDIR ? S_IFDIR : S_IFREG;
         goto hold;
+    }
+
+    /* Don`t open a watches with empty kqueue filter flags */
+    if (!S_ISUNK (di->type)
+      && inotify_to_kqueue (iw->flags, S_ISDIR (di->type), 1) == 0) {
+        return NULL;
     }
 
     int fd = watch_open (iw->wd, di->path, IN_DONT_FOLLOW);
     if (fd == -1) {
         perror_msg ("Failed to open file %s", di->path);
-        return NULL;
+        goto lstat;
     }
 
-    w = watch_init (iw, WATCH_DEPENDENCY, fd);
+    struct stat st;
+    if (fstat (fd, &st) == -1) {
+        perror_msg ("Failed to stat subwatch %s", di->path);
+        close (fd);
+        goto lstat;
+    }
+
+    di->type = st.st_mode & S_IFMT;
+
+    /* Correct inode number if opened file is not a listed one */
+    if (di->inode != st.st_ino) {
+        if (iw->dev != st.st_dev) {
+            /* It`s a mountpoint. Keep underlying directory inode number */
+            st.st_ino = di->inode;
+        } else {
+            /* Race detected. Use new inode number and try to find watch again */
+            perror_msg ("%s has been replaced after directory listing", di->path);
+            di->inode = st.st_ino;
+            w = watch_set_find (&iw->watches, di->inode);
+            if (w != NULL) {
+                close (fd);
+                goto hold;
+            }
+        }
+    }
+
+    w = watch_init (iw, WATCH_DEPENDENCY, fd, &st);
     if (w == NULL) {
         close (fd);
         return NULL;
@@ -178,6 +219,16 @@ iwatch_add_subwatch (i_watch *iw, const dep_item *di)
 hold:
     ++w->refcount;
     return w;
+
+lstat:
+    if (S_ISUNK (di->type)) {
+        if (fstatat (iw->wd, di->path, &st, AT_SYMLINK_NOFOLLOW) != -1) {
+            di->type = st.st_mode & S_IFMT;
+        } else {
+            perror_msg ("Failed to lstat subwatch %s", di->path);
+        }
+    }
+    return NULL;
 }
 
 /**
@@ -217,34 +268,42 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
 {
     assert (iw != NULL);
 
+    /* merge flags if IN_MASK_ADD flag is set */
+    if (flags & IN_MASK_ADD) {
+        flags |= iw->flags;
+    }
+
     iw->flags = flags;
 
-    watch *w;
-    RB_FOREACH (w, watch_set, &iw->watches) {
+    watch *w, *tmpw;
+    /* update kwatches or close those we dont need to watch */
+    RB_FOREACH_SAFE (w, watch_set, &iw->watches, tmpw) {
         uint32_t fflags = inotify_to_kqueue (flags,
                                              w->flags & WF_ISDIR,
                                              w->flags & WF_ISSUBWATCH);
-        watch_register_event (w, fflags);
+        if (fflags == 0) {
+            watch_set_delete (&iw->watches, w);
+        } else {
+            watch_register_event (w, fflags);
+        }
     }
-}
 
-/**
- * Check if a file under given path is/was a directory. Use worker's
- * cached data (watches) to query file type (this function is called
- * when something happens in a watched directory, so we SHOULD have
- * a watch for its contents
- *
- * @param[in] iw  A inotify watch for which a change has been triggered.
- * @param[in] di  A dependency list item
- *
- * @return 1 if dir (cached), 0 otherwise.
- **/
-int
-iwatch_subwatch_is_dir (i_watch *iw, const dep_item *di)
-{
-    watch *w = watch_set_find (&iw->watches, di->inode);
-    if (w != NULL && w->flags & WF_ISDIR) {
-            return 1;
+    if (iw->deps != NULL) {
+        /* create list of unwatched subfiles */
+        dep_list *dl = dl_shallow_copy (iw->deps);
+        dep_node *iter, *tmpdn, *prev = NULL;
+        SLIST_FOREACH_SAFE (iter, &iw->deps->head, next, tmpdn) {
+            if (watch_set_find (&iw->watches, iter->item->inode)) {
+                dl_remove_after (dl, prev);
+            } else {
+                prev = iter;
+            }
+        }
+
+        /* And finally try to watch that list */
+        SLIST_FOREACH (iter, &dl->head, next) {
+            iwatch_add_subwatch (iw, iter->item);
+        }
+        dl_shallow_free (dl);
     }
-    return 0;
 }

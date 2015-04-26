@@ -98,10 +98,11 @@ dn_create (dep_item *di)
  *
  * @param[in] path  A name of a file (the string is not copied!).
  * @param[in] inode A file's inode number.
+ * @param[in] type  A file`s type (compatible with mode_t values)
  * @return A pointer to a new item or NULL in the case of error.
  **/
 dep_item*
-di_create (const char *path, ino_t inode)
+di_create (const char *path, ino_t inode, mode_t type)
 {
     size_t pathlen = strlen (path) + 1;
 
@@ -113,6 +114,7 @@ di_create (const char *path, ino_t inode)
 
     strlcpy (di->path, path, pathlen);
     di->inode = inode;
+    di->type = type;
     return di;
 }
 
@@ -345,13 +347,21 @@ dl_listing (int fd)
         struct dirent *ent;
         dep_item *item;
         dep_node *node;
+        mode_t type;
 
         while ((ent = readdir (dir)) != NULL) {
             if (!strcmp (ent->d_name, ".") || !strcmp (ent->d_name, "..")) {
                 continue;
             }
 
-            item = di_create (ent->d_name, ent->d_ino);
+#ifdef DIRENT_HAVE_D_TYPE
+            if (ent->d_type != DT_UNKNOWN)
+                type = DTTOIF (ent->d_type);
+            else
+#endif
+                type = S_IFUNK;
+
+            item = di_create (ent->d_name, ent->d_ino, type);
             if (item == NULL) {
                 perror_msg ("Failed to allocate a new item during listing");
                 goto error;

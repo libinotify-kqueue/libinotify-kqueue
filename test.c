@@ -131,6 +131,8 @@ void get_event (int fd, const char * target)
             strcat(action, " was opened");
         if (pevent->mask & IN_IGNORED)
             strcat(action, " was ignored");
+        if (pevent->mask & IN_UNMOUNT)
+            strcat(action, " was unmounted");
 
         /*
           printf ("wd=%d mask=%x cookie=%d len=%d dir=%s\n",
