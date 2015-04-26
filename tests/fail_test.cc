@@ -20,6 +20,7 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <cstdlib>
 #include "fail_test.hh"
 
 fail_test::fail_test (journal &j)
