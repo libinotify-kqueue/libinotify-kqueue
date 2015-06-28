@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2014 Vladimir Kondratiev <wulf@cicgroup.ru>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -20,35 +20,34 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include <pthread.h>
-#if defined(__FreeBSD__)
 #include <sys/types.h>
-#elif defined(__linux__)
-#include <cstdint>
-#endif
+#include <sys/stat.h>  /* stat */
 
-static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+#include <errno.h>  /* errno */
+#include <stdlib.h> /* free */
 
-void acquire_log_lock ()
+#include "compat.h"
+
+int
+fstatat (int fd, const char *path, struct stat *buf, int flag)
 {
-    pthread_mutex_lock (&log_mutex);
-}
+    char *fullpath;
+    int retval, save_errno;
 
-void release_log_lock ()
-{
-    pthread_mutex_unlock (&log_mutex);
-}
+    fullpath = fd_concat (fd, path);
+    if (fullpath == NULL) {
+        return -1;
+    }
 
-unsigned long current_thread ()
-{
-#ifdef __linux__
-    return static_cast<uintptr_t>(pthread_self ());
-#elif defined (__NetBSD__) || defined (__OpenBSD__) || \
-      defined(__APPLE__) || defined(__DragonFly__)
-    return reinterpret_cast<unsigned long>(pthread_self ());
-#elif defined (__FreeBSD__)
-    return reinterpret_cast<uintptr_t>(pthread_self ());
-#else
-#   error Currently unsupported
-#endif
+    if (flag & AT_SYMLINK_NOFOLLOW) {
+        retval = lstat (fullpath, buf);
+    } else {
+        retval = stat (fullpath, buf);
+    }
+
+    save_errno = errno;
+    free (fullpath);
+    errno = save_errno;
+
+    return retval;
 }

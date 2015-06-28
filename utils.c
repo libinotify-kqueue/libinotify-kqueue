@@ -27,6 +27,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include "compat.h"
+
 #include <unistd.h> /* read, write */
 #include <errno.h>  /* EINTR */
 #include <stdlib.h> /* malloc */
@@ -34,7 +36,6 @@
 #include <fcntl.h> /* fcntl */
 #include <stdio.h>
 #include <assert.h>
-#include <stdarg.h> /* va_list */
 
 #include <sys/types.h>
 #include <sys/stat.h>  /* fstat */
@@ -42,8 +43,6 @@
 
 #include "sys/inotify.h"
 #include "utils.h"
-
-#include "config.h"
 
 /**
  * Create a new inotify event.
@@ -266,7 +265,9 @@ is_deleted (int fd)
     struct stat st;
 
     if (fstat (fd, &st) == -1) {
-        perror_msg ("fstat %d failed", fd);
+        if (errno != ENOENT) {
+            perror_msg ("fstat %d failed", fd);
+        }
         return 1;
     }
 
@@ -297,30 +298,24 @@ set_cloexec_flag (int fd, int value)
 }
 
 /**
- * Print an error message, if allowed.
+ * Perform dup(2) and set the FD_CLOEXEC flag on the new file descriptor
  *
- * The function uses perror, so the errno-based error description will
- * be printed too.
- * The library should be built with --enable-perrors configure option.
- *
- * @param[in] msg A message format to print.
- * @param[in] ... A set of parameters to include in the message, according
- *      to the format string.
+ * @param[in] oldd A file descriptor to duplicate.
+ * @return A new file descriptor on success, or -1 if an error occurs.
+ *      The external variable errno indicates the cause of the error.
  **/
-void
-perror_msg (const char *msg, ...)
+int
+dup_cloexec (int oldd)
 {
-#ifdef ENABLE_PERRORS
-    const int msgsz = 2048; /* should be enough */
-    char buf[msgsz];
-    va_list vl;
-
-    va_start (vl, msg);
-    vsnprintf (buf, msgsz, msg, vl);
-    va_end (vl);
-
-    perror (buf);
+#ifdef F_DUPFD_CLOEXEC
+    int newd = fcntl (oldd, F_DUPFD_CLOEXEC, 0);
 #else
-    (void) msg;
+    int newd = fcntl (oldd, F_DUPFD, 0);
+
+    if ((newd != -1) && (set_cloexec_flag (newd, 1) == -1)) {
+        close (newd);
+        newd = -1;
+    }
 #endif
+    return newd;
 }

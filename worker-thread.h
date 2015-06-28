@@ -23,6 +23,8 @@
 #ifndef __WORKER_THREAD_H__
 #define __WORKER_THREAD_H__
 
+#include "compat.h"
+
 #include "inotify-watch.h"
 #include "worker.h"
 

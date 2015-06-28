@@ -25,10 +25,6 @@
 
 #include "platform.hh"
 
-extern "C" {
-#include "compat.h"
-}
-
 class action {
     pthread_barrier_t barrier;
 

@@ -20,6 +20,10 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include "compat.h"
+
+#include <pthread.h>
+#include <signal.h> 
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h> /* open() */
@@ -70,7 +74,7 @@ worker_cmd_add (worker_cmd *cmd, const char *filename, uint32_t mask)
     worker_cmd_reset (cmd);
 
     cmd->type = WCMD_ADD;
-    cmd->add.filename = strdup (filename);
+    cmd->add.filename = filename;
     cmd->add.mask = mask;
 }
 
@@ -101,9 +105,6 @@ worker_cmd_reset (worker_cmd *cmd)
 {
     assert (cmd != NULL);
 
-    if (cmd->type == WCMD_ADD) {
-        free (cmd->add.filename);
-    }
     cmd->type = 0;
     cmd->retval = 0;
     cmd->add.filename = NULL;
@@ -152,6 +153,8 @@ worker_create ()
 {
     pthread_attr_t attr;
     struct kevent ev;
+    sigset_t set, oset;
+    int result;
 
     worker* wrk = calloc (1, sizeof (worker));
 
@@ -197,7 +200,17 @@ worker_create ()
     /* create a run a worker thread */
     pthread_attr_init (&attr);
     pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
-    if (pthread_create (&wrk->thread, &attr, worker_thread, wrk) != 0) {
+
+    sigemptyset (&set);
+    sigaddset (&set, SIGPIPE);
+    pthread_sigmask (SIG_BLOCK, &set, &oset);
+
+    result = pthread_create (&wrk->thread, &attr, worker_thread, wrk);
+    
+    pthread_attr_destroy (&attr);
+    pthread_sigmask (SIG_SETMASK, &oset, NULL);
+
+    if (result != 0) {
         perror_msg ("Failed to start a new worker thread");
         goto failure;
     }

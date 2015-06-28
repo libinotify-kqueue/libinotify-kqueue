@@ -26,12 +26,14 @@ AC_ARG_ENABLE([perrors],
 )
 
 
+AX_PTHREAD([], AC_MSG_ERROR(No pthread library found in your system!))
+
+
 kqueue_support=no
 AC_CHECK_HEADERS([sys/event.h],
 [
     AC_CHECK_FUNCS(kqueue,,AC_MSG_ERROR(No kqueue detected in your system!))
     AC_CHECK_FUNCS(kevent,,AC_MSG_ERROR(No kevent detected in your system!))
-    AC_DEFINE([BUILD_LIBRARY],[1],[Define to 1 if libinotify is built])
     kqueue_support=yes
 ],
 [
@@ -43,6 +45,74 @@ AC_CHECK_HEADERS([sys/event.h],
     fi
 ])
 AM_CONDITIONAL(BUILD_LIBRARY, [test "$kqueue_support" = "yes"])
+
+
+AC_MSG_CHECKING(for SLIST_FOREACH_SAFE in sys/queue.h)
+AC_COMPILE_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <sys/queue.h>
+    ],
+    [
+        @%:@ifndef SLIST_FOREACH_SAFE
+        @%:@error
+        @%:@endif
+        return 0;
+    ])
+],
+    have_sys_queue_h=yes,
+    have_sys_queue_h=no
+)
+AC_MSG_RESULT($have_sys_queue_h)
+
+
+AC_MSG_CHECKING(for SLIST_REMOVE_AFTER in sys/queue.h)
+AC_COMPILE_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <sys/queue.h>
+    ],
+    [
+        @%:@ifndef SLIST_REMOVE_AFTER
+        @%:@error
+        @%:@endif
+        return 0;
+    ])
+],
+    AC_MSG_RESULT(yes),
+[
+    AC_MSG_RESULT(no)
+    have_sys_queue_h=no
+],
+)
+if test "$have_sys_queue_h" = "yes"; then
+    AC_DEFINE([HAVE_SYS_QUEUE_H],[1],[Define to 1 if the system has useable sys/queue.h])
+fi
+
+
+AC_MSG_CHECKING(for RB_FOREACH_SAFE in sys/tree.h)
+AC_COMPILE_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <sys/tree.h>
+    ],
+    [
+        @%:@ifndef RB_FOREACH_SAFE
+        @%:@error
+        @%:@endif
+        return 0;
+    ])
+],
+    have_sys_tree_h=yes,
+    have_sys_tree_h=no
+)
+AC_MSG_RESULT($have_sys_tree_h)
+if test "$have_sys_tree_h" = "yes"; then
+    AC_DEFINE([HAVE_SYS_TREE_H],[1],[Define to 1 if the system has useable sys/tree.h])
+fi
 
 
 AC_MSG_CHECKING(for pthread_barrier)
@@ -62,11 +132,12 @@ AC_COMPILE_IFELSE(
 ],
 [
     AC_DEFINE([HAVE_PTHREAD_BARRIER],[1],[Define to 1 if the system has pthread_barrier])
-    AC_MSG_RESULT(yes)
+    have_pthread_barrier=yes
 ],
-    AC_MSG_RESULT(no)
+    have_pthread_barrier=no
 )
-
+AC_MSG_RESULT($have_pthread_barrier)
+AM_CONDITIONAL(HAVE_PTHREAD_BARRIER, [test "$have_pthread_barrier" = "yes"])
 
 AC_ARG_ENABLE([unsafe_fchdir],
     AS_HELP_STRING([--enable-unsafe-fchdir], [allow unsafe use of fchdir to track of watched directory path changes on its renaming]),
@@ -82,6 +153,10 @@ AC_CHECK_FUNCS(openat fdopendir fstatat,,atfuncs_support=no)
 if test "$atfuncs_support" = "yes"; then
     AC_DEFINE([HAVE_ATFUNCS],[1],[Define to 1 if relative pathname functions detected])
 fi
+AM_CONDITIONAL(HAVE_ATFUNCS, [test "$atfuncs_support" = "yes"])
+AM_CONDITIONAL(HAVE_OPENAT, [test "$ac_cv_func_openat" = "yes"])
+AM_CONDITIONAL(HAVE_FDOPENDIR, [test "$ac_cv_func_fdopendir" = "yes"])
+AM_CONDITIONAL(HAVE_FSTATAT, [test "$ac_cv_func_fstatat" = "yes"])
 
 AC_MSG_CHECKING(for F_GETPATH in fcntl.h)
 AC_COMPILE_IFELSE(

@@ -23,14 +23,14 @@
 #ifndef __WORKER_H__
 #define __WORKER_H__
 
+#include "compat.h"
+
 #include <sys/uio.h> /* iovec */
 
 #include <pthread.h>
-#include <stdint.h>
 
 typedef struct worker worker;
 
-#include "compat.h"
 #include "worker-thread.h"
 #include "dep-list.h"
 #include "inotify-watch.h"
@@ -56,7 +56,7 @@ typedef struct worker_cmd {
 
     union {
         struct {
-            char *filename;
+            const char *filename;
             uint32_t mask;
         } add;
 

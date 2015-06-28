@@ -20,6 +20,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include "compat.h"
+
 #include <errno.h>  /* errno */
 #include <fcntl.h>  /* open */
 #include <unistd.h> /* close */
@@ -33,7 +35,6 @@
 #include <stdio.h>    /* snprintf */
 
 #include "utils.h"
-#include "compat.h"
 #include "conversions.h"
 #include "watch.h"
 #include "sys/inotify.h"
@@ -86,12 +87,21 @@ watch_open (int dirfd, const char *path, uint32_t flags)
 {
     assert (path != NULL);
 
-    int openflags = O_EVTONLY | O_NONBLOCK;
+    int openflags = O_NONBLOCK;
+#ifdef O_EVTONLY
+    openflags |= O_EVTONLY;
+#else
+    openflags |= O_RDONLY;
+#endif
 #ifdef O_CLOEXEC
-        openflags |= O_CLOEXEC;
+    openflags |= O_CLOEXEC;
 #endif
     if (flags & IN_DONT_FOLLOW) {
+#ifdef O_SYMLINK
         openflags |= O_SYMLINK;
+#else
+        openflags |= O_NOFOLLOW;
+#endif
     }
 #ifdef O_DIRECTORY
     if (flags & IN_ONLYDIR) {

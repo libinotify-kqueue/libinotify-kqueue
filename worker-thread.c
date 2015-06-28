@@ -20,6 +20,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include "compat.h"
+
 #include <stddef.h> /* NULL */
 #include <assert.h>
 #include <errno.h>  /* errno */

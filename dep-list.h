@@ -23,9 +23,10 @@
 #ifndef __DEP_LIST_H__
 #define __DEP_LIST_H__
 
+#include "compat.h"
+
 #include <sys/types.h> /* ino_t */
 #include <sys/stat.h>  /* mode_t */
-#include <sys/queue.h> /* SLIST macroses */
 
 #define S_IFUNK 0000000 /* mode_t extension. File type is unknown */
 #define S_ISUNK(m) (((m) & S_IFMT) == S_IFUNK)

@@ -11,7 +11,6 @@ nobase_include_HEADERS = sys/inotify.h
 
 libinotify_la_SOURCES = \
     utils.c \
-    compat.c \
     conversions.c \
     dep-list.c \
     inotify-watch.c \
@@ -21,12 +20,28 @@ libinotify_la_SOURCES = \
     worker.c \
     controller.c
 
-libinotify_la_CFLAGS = -I. -DNDEBUG
-if FREEBSD
-libinotify_la_LDFLAGS = -pthread
-else
-libinotify_la_LDFLAGS = -lpthread
+if !HAVE_PTHREAD_BARRIER
+libinotify_la_SOURCES += compat/pthread_barrier.c
 endif
+
+if !HAVE_ATFUNCS
+libinotify_la_SOURCES += compat/atfuncs.c
+endif
+
+if !HAVE_OPENAT
+libinotify_la_SOURCES += compat/openat.c
+endif
+
+if !HAVE_FDOPENDIR
+libinotify_la_SOURCES += compat/fdopendir.c
+endif
+
+if !HAVE_FSTATAT
+libinotify_la_SOURCES += compat/fstatat.c
+endif
+
+libinotify_la_CFLAGS = -I. -DNDEBUG @PTHREAD_CFLAGS@
+libinotify_la_LDFLAGS = @PTHREAD_LIBS@ -export-symbols libinotify.sym
 endif
 
 ############################################################
@@ -63,20 +78,19 @@ check_libinotify_SOURCES = \
     tests/bugs_test.cc \
     tests/tests.cc
 
+check_libinotify_CXXFLAGS = @PTHREAD_CFLAGS@
+check_libinotify_LDFLAGS = @PTHREAD_LIBS@
+
 if LINUX
-check_libinotify_CXXFLAGS = -std=c++0x
-check_libinotify_SOURCES += compat.c
+check_libinotify_CXXFLAGS += -std=c++0x
+endif
+
+if !HAVE_PTHREAD_BARRIER
+check_libinotify_SOURCES += compat/pthread_barrier.c
 endif
 
 if BUILD_LIBRARY
 check_libinotify_LDADD = libinotify.la
 endif
-
-if FREEBSD
-check_libinotify_LDFLAGS = -pthread
-else
-check_libinotify_LDFLAGS = -lpthread
-endif
-
 
 noinst_programs = check_libinotify

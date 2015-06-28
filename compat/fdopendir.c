@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2014 Vladimir Kondratiev <wulf@cicgroup.ru>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -20,35 +20,25 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include <pthread.h>
-#if defined(__FreeBSD__)
 #include <sys/types.h>
-#elif defined(__linux__)
-#include <cstdint>
-#endif
+#include <dirent.h> /* opendir */
 
-static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+#include "compat.h"
 
-void acquire_log_lock ()
+DIR *
+fdopendir (int fd)
 {
-    pthread_mutex_lock (&log_mutex);
-}
+    DIR *dir;
+    char *dirpath = fd_getpath_cached (fd);
+    if (dirpath == NULL) {
+        return NULL;
+    }
 
-void release_log_lock ()
-{
-    pthread_mutex_unlock (&log_mutex);
-}
+    dir = opendir (dirpath);
+    /* close fd just now as it will not be closed on closedir */
+    if (dir != NULL) {
+        close (fd);
+    }
 
-unsigned long current_thread ()
-{
-#ifdef __linux__
-    return static_cast<uintptr_t>(pthread_self ());
-#elif defined (__NetBSD__) || defined (__OpenBSD__) || \
-      defined(__APPLE__) || defined(__DragonFly__)
-    return reinterpret_cast<unsigned long>(pthread_self ());
-#elif defined (__FreeBSD__)
-    return reinterpret_cast<uintptr_t>(pthread_self ());
-#else
-#   error Currently unsupported
-#endif
+    return dir;
 }

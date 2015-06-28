@@ -20,20 +20,20 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include "compat.h"
+
 #include <sys/types.h>
 #include <sys/stat.h>  /* fstat */
 
 #include <assert.h>    /* assert */
 #include <errno.h>     /* errno */
 #include <fcntl.h>     /* AT_FDCWD */
-#include <stdint.h>    /* uint32_t */
 #include <stdlib.h>    /* calloc, free */
 #include <string.h>    /* strcmp */
 #include <unistd.h>    /* close */
 
 #include "sys/inotify.h"
 
-#include "compat.h"
 #include "conversions.h"
 #include "inotify-watch.h"
 #include "utils.h"
