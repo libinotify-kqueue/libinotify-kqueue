@@ -291,7 +291,7 @@ fd_concat (int fd, const char *file)
     char *path = NULL;
     struct stat st;
 
-    if (fd == AT_FDCWD) {
+    if (fd == AT_FDCWD || file[0] == '/') {
 
         if (stat (file, &st) != -1
           && S_ISDIR (st.st_mode)
