@@ -32,6 +32,7 @@
 
 #include <sys/types.h>
 #include <sys/event.h>
+#include <sys/stat.h>
 
 #include "sys/inotify.h"
 
@@ -71,6 +72,8 @@ inotify_init (void) __THROW
 INO_EXPORT int
 inotify_init1 (int flags) __THROW
 {
+    int lfd = -1;
+
 #ifdef O_CLOEXEC
     if (flags & ~(IN_CLOEXEC|O_CLOEXEC|IN_NONBLOCK|O_NONBLOCK)) {
 #else
@@ -88,6 +91,7 @@ inotify_init1 (int flags) __THROW
             worker *wrk = worker_create (flags);
             if (wrk != NULL) {
                 workers[i] = wrk;
+                lfd = wrk->io[INOTIFY_FD];
 
                 /* We can face into situation when there are two workers with
                  * the same inotify FDs. It usually occurs when a worker fd has
@@ -95,7 +99,7 @@ inotify_init1 (int flags) __THROW
                  * yet. The fd is free, and when we create a new worker, we can
                  * receive the same fd. So check for duplicates and remove them
                  * now. */
-                int j, lfd = wrk->io[INOTIFY_FD];
+                int j;
                 for (j = 0; j < WORKER_SZ; j++) {
                     worker *jw = workers[j];
                     if (jw != NULL && jw->io[INOTIFY_FD] == lfd && jw != wrk) {
@@ -103,17 +107,15 @@ inotify_init1 (int flags) __THROW
                         perror_msg ("Collision found: fd %d", lfd);
                     }
                 }
-
-                pthread_mutex_unlock (&workers_mutex);
-                return wrk->io[INOTIFY_FD];
-            } else {
-                /* Failed to create worker */
-                break;
             }
+
+            pthread_mutex_unlock (&workers_mutex);
+            return lfd;
         }
     }
 
     pthread_mutex_unlock (&workers_mutex);
+    errno = EMFILE;
     return -1;
 }
 
@@ -134,6 +136,29 @@ inotify_add_watch (int         fd,
                    const char *name,
                    uint32_t    mask) __THROW
 {
+    struct stat st;
+
+    if (!is_opened (fd)) {
+        return -1;	/* errno = EBADF */
+    }
+
+    /*
+     * this lstat() call guards worker from incorrectly specified path.
+     * E.g, it prevents catching of SIGSEGV when pathname points outside
+     * of the process's accessible address space
+     */
+    if (lstat (name, &st) == -1) {
+        perror_msg("failed to lstat watch %s",
+                   errno != EFAULT ? name : "<bad addr>");
+        return -1;
+    }
+
+    if (mask == 0) {
+        perror_msg ("Failed to open watch %s. Bad event mask %x", name, mask);
+        errno = EINVAL;
+        return -1;
+    }
+
     pthread_mutex_lock (&workers_mutex);
 
     /* look up for an appropriate worker */
@@ -152,6 +177,7 @@ inotify_add_watch (int         fd,
                 worker_free (wrk);
                 workers[i] = NULL;
                 pthread_mutex_unlock (&workers_mutex);
+                errno = EBADF;
                 return -1;
             }
 
@@ -179,6 +205,7 @@ inotify_add_watch (int         fd,
     }
 
     pthread_mutex_unlock (&workers_mutex);
+    errno = EINVAL;
     return -1;
 }
 
@@ -197,9 +224,10 @@ INO_EXPORT int
 inotify_rm_watch (int fd,
                   int wd) __THROW
 {
-    assert (fd != -1);
-    assert (wd != -1);
-    
+    if (!is_opened (fd)) {
+        return -1;	/* errno = EBADF */
+    }
+
     pthread_mutex_lock (&workers_mutex);
 
     int i;
@@ -216,6 +244,7 @@ inotify_rm_watch (int fd,
                 worker_free (wrk);
                 workers[i] = NULL;
                 pthread_mutex_unlock (&workers_mutex);
+                errno = EBADF;
                 return -1;
             }
 
@@ -243,7 +272,8 @@ inotify_rm_watch (int fd,
     }
 
     pthread_mutex_unlock (&workers_mutex);
-    return 0;
+    errno = EINVAL;
+    return -1;
 }
 
 /**

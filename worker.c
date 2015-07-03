@@ -392,9 +392,9 @@ worker_remove (worker *wrk,
             enqueue_event (iw, IN_IGNORED, NULL);
             flush_events (wrk);
             worker_remove_iwatch (wrk, iw);
-            break;
+            return 0;
         }
     }
-    /* Assume always success */
-    return 0;
+    errno = EINVAL;
+    return -1;
 }
