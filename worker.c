@@ -269,22 +269,6 @@ failure:
 }
 
 /**
- * Remove an inotify watch from worker.
- *
- * @param[in] wrk A pointer to #worker.
- * @param[in] iw A pointer to #i_watch to remove.
- **/
-static void
-worker_remove_iwatch (worker *wrk, i_watch *iw)
-{
-    assert (wrk != NULL);
-    assert (iw != NULL);
-
-    SLIST_REMOVE (&wrk->head, iw, i_watch, next);
-    iwatch_free (iw);
-}
-
-/**
  * Free a worker and all the associated memory.
  *
  * @param[in] wrk A pointer to #worker.
@@ -295,7 +279,7 @@ worker_free (worker *wrk)
     assert (wrk != NULL);
 
     int i;
-    i_watch *iw, *tmp;
+    i_watch *iw;
 
     if (wrk->io[KQUEUE_FD] != -1) {
         close (wrk->io[KQUEUE_FD]);
@@ -306,8 +290,10 @@ worker_free (worker *wrk)
     wrk->closed = 1;
 
     worker_cmd_release (&wrk->cmd);
-    SLIST_FOREACH_SAFE (iw, &wrk->head, next, tmp) {
-        worker_remove_iwatch (wrk, iw);
+    while (!SLIST_EMPTY (&wrk->head)) {
+        iw = SLIST_FIRST (&wrk->head);
+        SLIST_REMOVE_HEAD (&wrk->head, next);
+        iwatch_free (iw);
     }
 
     for (i = 0; i < wrk->iovcnt; i++) {
@@ -391,7 +377,8 @@ worker_remove (worker *wrk,
         if (iw->wd == id) {
             enqueue_event (iw, IN_IGNORED, NULL);
             flush_events (wrk);
-            worker_remove_iwatch (wrk, iw);
+            SLIST_REMOVE (&wrk->head, iw, i_watch, next);
+            iwatch_free (iw);
             return 0;
         }
     }

@@ -219,10 +219,12 @@ dl_shallow_free (dep_list *dl)
 {
     assert (dl != NULL);
 
-    dep_node *ptr, *tmp;
+    dep_node *dn;
 
-    SLIST_FOREACH_SAFE (ptr, &dl->head, next, tmp) {
-        free (ptr);
+    while (!SLIST_EMPTY (&dl->head)) {
+        dn = SLIST_FIRST (&dl->head);
+        SLIST_REMOVE_HEAD (&dl->head, next);
+        free (dn);
     }
 
     free (dl);
@@ -254,11 +256,13 @@ dl_free (dep_list *dl)
 {
     assert (dl != NULL);
 
-    dep_node *iter, *tmp;
+    dep_node *dn;
 
-    SLIST_FOREACH_SAFE (iter, &dl->head, next, tmp) {
-        di_free (iter->item);
-        free (iter);
+    while (!SLIST_EMPTY (&dl->head)) {
+        dn = SLIST_FIRST (&dl->head);
+        SLIST_REMOVE_HEAD (&dl->head, next);
+        di_free (dn->item);
+        free (dn);
     }
 
     free (dl);
