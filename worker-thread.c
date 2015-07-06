@@ -366,9 +366,10 @@ produce_notifications (worker *wrk, struct kevent *event)
     uint32_t flags = event->fflags;
 
     if (!(w->flags & WF_ISSUBWATCH)) {
-        /* Treat deletes as link number changes if links still exist */
-        if (flags & NOTE_DELETE && S_ISREG (w->flags) && !is_deleted (w->fd)) {
-            flags = (flags | NOTE_LINK) & ~NOTE_DELETE;
+        /* Set deleted flag if no more links exist */
+        if (flags & NOTE_DELETE &&
+            (!S_ISREG (w->flags) || is_deleted (w->fd))) {
+                w->flags |= WF_DELETED;
         }
 
         if (flags & NOTE_WRITE && S_ISDIR (w->flags)) {
@@ -377,7 +378,7 @@ produce_notifications (worker *wrk, struct kevent *event)
 
         enqueue_event (iw, kqueue_to_inotify (flags, w->flags), NULL);
 
-        if (flags & (NOTE_DELETE | NOTE_REVOKE)) {
+        if (w->flags & WF_DELETED || flags & NOTE_REVOKE) {
             iw->is_closed = 1;
         }
     } else {

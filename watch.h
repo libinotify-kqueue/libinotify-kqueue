@@ -38,6 +38,7 @@ typedef mode_t watch_flags_t;
 #include "inotify-watch.h"
 
 #define WF_ISSUBWATCH S_IXOTH /* a type of watch */
+#define WF_DELETED    S_IROTH /* file`s link count == 0 */
 
 typedef enum watch_type {
     WATCH_USER,
