@@ -21,6 +21,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <unistd.h>
+
 #include <algorithm>
 #include "symlink_test.hh"
 
@@ -209,7 +211,7 @@ void symlink_test::run ()
         cons.output.reset ();
         cons.input.receive ();
 
-        system ("touch -h slt-wd3/baz");
+        lchown ("slt-wd3/baz", getuid(), -1);
 
         cons.output.wait ();
         received = cons.output.registered ();
