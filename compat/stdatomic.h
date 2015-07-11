@@ -27,11 +27,53 @@
  * $FreeBSD: head/sys/sys/stdatomic.h 263998 2014-04-01 14:46:11Z tijl $
  */
 
+/*
+ * Some notes taken from previous porting attempt made by Nhat Minh Lê:
+ *     https://gist.github.com/nhatminhle/5181506
+ *
+ * An implementation of C11 stdatomic.h directly borrowed from FreeBSD with
+ * minor modifications for portability to other systems. Works for recent Clang
+ * (that implement the feature c_atomic) and GCC 4.7+; includes compatibility
+ * for GCC below 4.7 but I wouldn't recommend it.
+ *
+ * Caveats and limitations:
+ * - Only the ``_Atomic parentheses'' notation is implemented, while
+ *   the ``_Atomic space'' one is not.
+ * - _Atomic types must be typedef'ed, or programs using them will not type
+ *   check correctly (incompatible anonymous structure types).
+ * - Non-scalar _Atomic types would require runtime support for runtime
+ *   locking, which, as far as I know, is not currently available on any
+ *   system.
+ */
+
 #ifndef _STDATOMIC_H_
 #define	_STDATOMIC_H_
 
-#include <sys/cdefs.h>
-#include <sys/_types.h>
+#include <stddef.h>
+#include <stdint.h>
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#include <uchar.h>
+#endif
+
+
+#ifndef	__has_extension
+#define	__has_extension(x)	0
+#endif
+#ifndef	__has_builtin
+#define	__has_builtin(x)	0
+#endif
+#ifndef	__GNUC_PREREQ__
+#if defined(__GNUC__) && defined(__GNUC_MINOR__)
+#define	__GNUC_PREREQ__(ma, mi)	\
+	(__GNUC__ > (ma) || __GNUC__ == (ma) && __GNUC_MINOR__ >= (mi))
+#else
+#define	__GNUC_PREREQ__(ma, mi)	0
+#endif
+#endif
+#if !__has_extension(c_atomic) && !__has_extension(cxx_atomic)
+#define	_Atomic(T)		struct { T volatile __val; }
+#endif
+
 
 #if __has_extension(c_atomic) || __has_extension(cxx_atomic)
 #define	__CLANG_ATOMICS
@@ -165,11 +207,7 @@ atomic_signal_fence(memory_order __order __unused)
  * 7.17.5 Lock-free property.
  */
 
-#if defined(_KERNEL)
-/* Atomics in kernelspace are always lock-free. */
-#define	atomic_is_lock_free(obj) \
-	((void)(obj), (_Bool)1)
-#elif defined(__CLANG_ATOMICS)
+#if defined(__CLANG_ATOMICS)
 #define	atomic_is_lock_free(obj) \
 	__atomic_is_lock_free(sizeof(*(obj)), obj)
 #elif defined(__GNUC_ATOMICS)
@@ -196,31 +234,33 @@ typedef _Atomic(long)			atomic_long;
 typedef _Atomic(unsigned long)		atomic_ulong;
 typedef _Atomic(long long)		atomic_llong;
 typedef _Atomic(unsigned long long)	atomic_ullong;
-typedef _Atomic(__char16_t)		atomic_char16_t;
-typedef _Atomic(__char32_t)		atomic_char32_t;
-typedef _Atomic(___wchar_t)		atomic_wchar_t;
-typedef _Atomic(__int_least8_t)		atomic_int_least8_t;
-typedef _Atomic(__uint_least8_t)	atomic_uint_least8_t;
-typedef _Atomic(__int_least16_t)	atomic_int_least16_t;
-typedef _Atomic(__uint_least16_t)	atomic_uint_least16_t;
-typedef _Atomic(__int_least32_t)	atomic_int_least32_t;
-typedef _Atomic(__uint_least32_t)	atomic_uint_least32_t;
-typedef _Atomic(__int_least64_t)	atomic_int_least64_t;
-typedef _Atomic(__uint_least64_t)	atomic_uint_least64_t;
-typedef _Atomic(__int_fast8_t)		atomic_int_fast8_t;
-typedef _Atomic(__uint_fast8_t)		atomic_uint_fast8_t;
-typedef _Atomic(__int_fast16_t)		atomic_int_fast16_t;
-typedef _Atomic(__uint_fast16_t)	atomic_uint_fast16_t;
-typedef _Atomic(__int_fast32_t)		atomic_int_fast32_t;
-typedef _Atomic(__uint_fast32_t)	atomic_uint_fast32_t;
-typedef _Atomic(__int_fast64_t)		atomic_int_fast64_t;
-typedef _Atomic(__uint_fast64_t)	atomic_uint_fast64_t;
-typedef _Atomic(__intptr_t)		atomic_intptr_t;
-typedef _Atomic(__uintptr_t)		atomic_uintptr_t;
-typedef _Atomic(__size_t)		atomic_size_t;
-typedef _Atomic(__ptrdiff_t)		atomic_ptrdiff_t;
-typedef _Atomic(__intmax_t)		atomic_intmax_t;
-typedef _Atomic(__uintmax_t)		atomic_uintmax_t;
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+typedef _Atomic(char16_t)		atomic_char16_t;
+typedef _Atomic(char32_t)		atomic_char32_t;
+#endif
+typedef _Atomic(wchar_t)		atomic_wchar_t;
+typedef _Atomic(int_least8_t)		atomic_int_least8_t;
+typedef _Atomic(uint_least8_t)		atomic_uint_least8_t;
+typedef _Atomic(int_least16_t)		atomic_int_least16_t;
+typedef _Atomic(uint_least16_t)		atomic_uint_least16_t;
+typedef _Atomic(int_least32_t)		atomic_int_least32_t;
+typedef _Atomic(uint_least32_t)		atomic_uint_least32_t;
+typedef _Atomic(int_least64_t)		atomic_int_least64_t;
+typedef _Atomic(uint_least64_t)		atomic_uint_least64_t;
+typedef _Atomic(int_fast8_t)		atomic_int_fast8_t;
+typedef _Atomic(uint_fast8_t)		atomic_uint_fast8_t;
+typedef _Atomic(int_fast16_t)		atomic_int_fast16_t;
+typedef _Atomic(uint_fast16_t)		atomic_uint_fast16_t;
+typedef _Atomic(int_fast32_t)		atomic_int_fast32_t;
+typedef _Atomic(uint_fast32_t)		atomic_uint_fast32_t;
+typedef _Atomic(int_fast64_t)		atomic_int_fast64_t;
+typedef _Atomic(uint_fast64_t)		atomic_uint_fast64_t;
+typedef _Atomic(intptr_t)		atomic_intptr_t;
+typedef _Atomic(uintptr_t)		atomic_uintptr_t;
+typedef _Atomic(size_t)			atomic_size_t;
+typedef _Atomic(ptrdiff_t)		atomic_ptrdiff_t;
+typedef _Atomic(intmax_t)		atomic_intmax_t;
+typedef _Atomic(uintmax_t)		atomic_uintmax_t;
 
 /*
  * 7.17.7 Operations on atomic types.
@@ -339,7 +379,6 @@ __extension__ ({							\
  * disciplined enough to always provide explicit barriers.
  */
 
-#ifndef _KERNEL
 #define	atomic_compare_exchange_strong(object, expected, desired)	\
 	atomic_compare_exchange_strong_explicit(object, expected,	\
 	    desired, memory_order_seq_cst, memory_order_seq_cst)
@@ -362,7 +401,6 @@ __extension__ ({							\
 	atomic_load_explicit(object, memory_order_seq_cst)
 #define	atomic_store(object, desired)					\
 	atomic_store_explicit(object, desired, memory_order_seq_cst)
-#endif /* !_KERNEL */
 
 /*
  * 7.17.8 Atomic flag type and operations.
@@ -391,7 +429,6 @@ atomic_flag_clear_explicit(volatile atomic_flag *__object, memory_order __order)
 	atomic_store_explicit(&__object->__flag, 0, __order);
 }
 
-#ifndef _KERNEL
 static __inline _Bool
 atomic_flag_test_and_set(volatile atomic_flag *__object)
 {
@@ -406,6 +443,5 @@ atomic_flag_clear(volatile atomic_flag *__object)
 
 	atomic_flag_clear_explicit(__object, memory_order_seq_cst);
 }
-#endif /* !_KERNEL */
 
 #endif /* !_STDATOMIC_H_ */

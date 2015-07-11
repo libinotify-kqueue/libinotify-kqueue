@@ -46,7 +46,11 @@
 #endif
 
 #ifndef __cplusplus /* requires stdbool.h */
+#ifdef HAVE_STDATOMIC_H
 #include <stdatomic.h>
+#else
+#include "compat/stdatomic.h"
+#endif
 #endif
 
 #include <sys/stat.h>

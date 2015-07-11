@@ -139,6 +139,57 @@ AC_COMPILE_IFELSE(
 AC_MSG_RESULT($have_pthread_barrier)
 AM_CONDITIONAL(HAVE_PTHREAD_BARRIER, [test "$have_pthread_barrier" = "yes"])
 
+
+AC_MSG_CHECKING(for useable stdatomic.h)
+AC_COMPILE_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <stdatomic.h>
+    ],
+    [
+        atomic_uint t;
+        atomic_init(&t, 0);
+        atomic_fetch_add(&t, 1);
+        atomic_fetch_sub(&t, 1);
+        atomic_load(&t);
+        return 0;
+    ])
+],
+[
+    AC_DEFINE([HAVE_STDATOMIC_H],[1],[Define to 1 if the system has useable stdatomic.h])
+    have_stdatomic_h=yes
+],
+    have_stdatomic_h=no
+)
+AC_MSG_RESULT($have_stdatomic_h)
+
+if test "$have_stdatomic_h" = "no"; then
+    AC_MSG_CHECKING(whether compiler supports atomic operations)
+    AC_RUN_IFELSE(
+    [
+        AC_LANG_PROGRAM(
+        [
+            @%:@include "compat/stdatomic.h"
+        ],
+        [
+            atomic_uint t;
+            atomic_init(&t, 0);
+            atomic_fetch_add(&t, 1);
+            atomic_fetch_sub(&t, 1);
+            return atomic_load(&t);
+        ])
+    ],
+    [
+        AC_DEFINE([HAVE_COMPAT_STDATOMIC_H],[1],[Define to 1 if the compiler supports atomic operations with compat/stdatomic.h])
+        have_compat_stdatomic_h=yes
+    ],
+        have_compat_stdatomic_h=no
+    )
+    AC_MSG_RESULT($have_compat_stdatomic_h)
+fi
+
+
 AC_ARG_ENABLE([unsafe_fchdir],
     AS_HELP_STRING([--enable-unsafe-fchdir], [allow unsafe use of fchdir to track of watched directory path changes on its renaming]),
 [
