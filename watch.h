@@ -31,11 +31,16 @@
 #include <sys/stat.h>  /* stat */
 
 typedef struct watch watch;
+/* Inherit watch_flags_t from <sys/stat.h> mode_t type.
+ * It is hackish but allow to use existing stat macroses */
+typedef mode_t watch_flags_t;
 
 #include "inotify-watch.h"
 
-#define WF_ISSUBWATCH (1<<0)  /* a type of watch */
-#define WF_ISDIR      (1<<1)  /* watched item is a directory */
+#define WF_ISSUBWATCH S_IXOTH /* a type of watch */
+#define WF_DELETED    S_IROTH /* file`s link count == 0 */
+#define WF_MODIFIED   S_IWOTH /* file has been modified i.e. received
+                               * NOTE_WRITE since last NOTE_CLOSE event */
 
 typedef enum watch_type {
     WATCH_USER,
@@ -45,13 +50,16 @@ typedef enum watch_type {
 
 struct watch {
     i_watch *iw;              /* A pointer to parent inotify watch */
-    uint32_t flags;           /* A watch flags. Not in inotify/kqueue format */
+    watch_flags_t flags;      /* A watch flags. Not in inotify/kqueue format */
     size_t refcount;          /* number of dependency list items corresponding
                                * to that watch */ 
     int fd;                   /* file descriptor of a watched entry */
     ino_t inode;              /* inode number taken from readdir call */
     RB_ENTRY(watch) link;     /* RB tree links */
 };
+
+uint32_t inotify_to_kqueue (uint32_t flags, watch_flags_t wf);
+uint32_t kqueue_to_inotify (uint32_t flags, watch_flags_t wf);
 
 int    watch_open (int dirfd, const char *path, uint32_t flags);
 watch *watch_init (i_watch *iw,

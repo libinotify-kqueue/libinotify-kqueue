@@ -38,11 +38,12 @@ void response::setup (const events &registered)
     LOG (named() << " YAY!!!");
 }
 
-void response::setup (int watch_id)
+void response::setup (int watch_id, int error)
 {
     LOG (named() << ": Passing back new watch id");
     current = WATCH_ID;
     variants._watch_id = watch_id;
+    variants._error = error;
     // printf("Response: settup up for id %d\n", watch_id);
     wait ();
 }
@@ -62,5 +63,11 @@ int response::added_watch_id () const
 {
     assert (current == WATCH_ID);
     return variants._watch_id;
+}
+
+int response::added_watch_error () const
+{
+    assert (current == WATCH_ID);
+    return variants._error;
 }
 

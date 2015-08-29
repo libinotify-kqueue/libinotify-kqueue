@@ -35,6 +35,7 @@ public:
     int watch (const std::string &filename, uint32_t flags);
     void cancel (int wid);
     events receive_during (int timeout) const;
+    int get_fd ();
 
     static long bytes_available (int fd);
 };

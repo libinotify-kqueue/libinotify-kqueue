@@ -34,7 +34,6 @@
 
 #include "sys/inotify.h"
 
-#include "conversions.h"
 #include "inotify-watch.h"
 #include "utils.h"
 #include "watch-set.h"
@@ -50,12 +49,6 @@
 int
 iwatch_open (const char *path, uint32_t flags)
 {
-    if (flags == 0) {
-        errno = EINVAL;
-        perror_msg ("Failed to open watch %s. Bad event mask %x", path, flags);
-        return -1;
-    }
-
     int fd = watch_open (AT_FDCWD, path, flags);
     if (fd == -1) {
         perror_msg ("Failed to open inotify watch %s", path);
@@ -166,13 +159,13 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
 
     watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL) {
-        di->type = w->flags & WF_ISDIR ? S_IFDIR : S_IFREG;
+        di->type = w->flags & S_IFMT;
         goto hold;
     }
 
     /* Don`t open a watches with empty kqueue filter flags */
-    if (!S_ISUNK (di->type)
-      && inotify_to_kqueue (iw->flags, S_ISDIR (di->type), 1) == 0) {
+    watch_flags_t wf = (di->type & S_IFMT) | WF_ISSUBWATCH;
+    if (!S_ISUNK (di->type) && inotify_to_kqueue (iw->flags, wf) == 0) {
         return NULL;
     }
 
@@ -278,9 +271,7 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
     watch *w, *tmpw;
     /* update kwatches or close those we dont need to watch */
     RB_FOREACH_SAFE (w, watch_set, &iw->watches, tmpw) {
-        uint32_t fflags = inotify_to_kqueue (flags,
-                                             w->flags & WF_ISDIR,
-                                             w->flags & WF_ISSUBWATCH);
+        uint32_t fflags = inotify_to_kqueue (flags, w->flags);
         if (fflags == 0) {
             watch_set_delete (&iw->watches, w);
         } else {

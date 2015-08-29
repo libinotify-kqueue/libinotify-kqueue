@@ -34,9 +34,10 @@
 
 #include "sys/inotify.h"
 
+#include "config.h"
 #include "utils.h"
-#include "conversions.h"
 #include "inotify-watch.h"
+#include "watch.h"
 #include "worker.h"
 #include "worker-thread.h"
 
@@ -162,6 +163,7 @@ process_command (worker *wrk)
  **/
 typedef struct {
     i_watch *iw;
+    uint32_t fflags;
 } handle_context;
 
 /**
@@ -203,6 +205,11 @@ handle_added (void *udata, dep_item *di)
     assert (ctx->iw != NULL);
 
     iwatch_add_subwatch (ctx->iw, di);
+#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+    if (ctx->fflags & NOTE_EXTEND) {
+        enqueue_event (ctx->iw, IN_MOVED_TO, di);
+    } else
+#endif
     enqueue_event (ctx->iw, IN_CREATE, di);
 }
 
@@ -223,6 +230,11 @@ handle_removed (void *udata, dep_item *di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
+#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+    if (ctx->fflags & NOTE_EXTEND) {
+        enqueue_event (ctx->iw, IN_MOVED_FROM, di);
+    } else
+#endif
     enqueue_event (ctx->iw, IN_DELETE, di);
     iwatch_del_subwatch (ctx->iw, di);
 }
@@ -265,6 +277,14 @@ handle_overwritten (void *udata, dep_item *from_di, dep_item *to_di)
 {
     assert (udata != NULL);
 
+    handle_context *ctx = (handle_context *) udata;
+    assert (ctx->iw != NULL);
+
+#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+    if (ctx->fflags & NOTE_EXTEND) {
+        handle_replaced (udata, from_di);
+    } else
+#endif
     handle_removed (udata, from_di);
     handle_added (udata, to_di);
 }
@@ -336,6 +356,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     handle_context ctx;
     memset (&ctx, 0, sizeof (ctx));
     ctx.iw = iw;
+    ctx.fflags = event->fflags;
 
     if (dl_calculate (was, now, &cbs, &ctx) == -1) {
         iw->deps = was;
@@ -365,30 +386,39 @@ produce_notifications (worker *wrk, struct kevent *event)
 
     uint32_t flags = event->fflags;
 
+    if (flags & NOTE_WRITE) {
+        w->flags |= WF_MODIFIED;
+    }
+
     if (!(w->flags & WF_ISSUBWATCH)) {
-        /* Treat deletes as link number changes if links still exist */
-        if (flags & NOTE_DELETE && !(w->flags & WF_ISDIR)
-          && !is_deleted (w->fd)) {
-            flags = (flags | NOTE_LINK) & ~NOTE_DELETE;
+        /* Set deleted flag if no more links exist */
+        if (flags & NOTE_DELETE &&
+            (!S_ISREG (w->flags) || is_deleted (w->fd))) {
+                w->flags |= WF_DELETED;
         }
 
-        if (flags & NOTE_WRITE && w->flags & WF_ISDIR) {
+        if (flags & NOTE_WRITE && S_ISDIR (w->flags)) {
             produce_directory_diff (iw, event);
         }
 
-        enqueue_event (iw,
-                       kqueue_to_inotify (flags,
-                                          w->flags & WF_ISDIR,
-                                          w->flags & WF_ISSUBWATCH),
-                       NULL);
+#if ! defined (DIRECTORY_LISTING_REWINDS) && \
+    defined (NOTE_OPEN) && defined (NOTE_CLOSE)
+        /* Mask events produced by open/closedir calls while directory diffing.
+         * Kqueue coalesces both events as kevent is not called that time */
+        if (flags & (NOTE_OPEN | NOTE_CLOSE)
+          && S_ISDIR (w->flags) && w->flags & WF_MODIFIED) {
+            flags &= ~(NOTE_OPEN | NOTE_CLOSE);
+            w->flags &= ~WF_MODIFIED;
+        }
+#endif
 
-        if (flags & (NOTE_DELETE | NOTE_REVOKE)) {
+        enqueue_event (iw, kqueue_to_inotify (flags, w->flags), NULL);
+
+        if (w->flags & WF_DELETED || flags & NOTE_REVOKE) {
             iw->is_closed = 1;
         }
     } else {
-        uint32_t i_flags = kqueue_to_inotify (flags,
-                                              w->flags & WF_ISDIR,
-                                              w->flags & WF_ISSUBWATCH);
+        uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
         dep_node *iter = NULL;
         SLIST_FOREACH (iter, &iw->deps->head, next) {
             dep_item *di = iter->item;
@@ -399,6 +429,12 @@ produce_notifications (worker *wrk, struct kevent *event)
         }
     }
     flush_events (wrk);
+
+#ifdef NOTE_CLOSE
+    if (flags & NOTE_CLOSE) {
+        w->flags &= ~WF_MODIFIED;
+    }
+#endif
 
     if (iw->is_closed) {
         worker_remove (wrk, iw->wd);

@@ -35,9 +35,119 @@
 #include <stdio.h>    /* snprintf */
 
 #include "utils.h"
-#include "conversions.h"
 #include "watch.h"
 #include "sys/inotify.h"
+
+/**
+ * Convert the inotify watch mask to the kqueue event filter flags.
+ *
+ * @param[in] flags An inotify watch mask.
+ * @param[in] wf    A kqueue watch internal flags.
+ * @return Converted kqueue event filter flags.
+ **/
+uint32_t
+inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
+{
+    uint32_t result = 0;
+
+    if (!(S_ISREG (wf) || S_ISDIR (wf) || S_ISLNK (wf))) {
+        return result;
+    }
+
+#ifdef NOTE_OPEN
+    if (flags & IN_OPEN)
+        result |= NOTE_OPEN;
+#endif
+#ifdef NOTE_CLOSE
+    if (flags & IN_CLOSE_NOWRITE)
+        result |= NOTE_CLOSE;
+    if (flags & IN_CLOSE_WRITE && S_ISREG (wf))
+        result |= (NOTE_CLOSE | NOTE_WRITE);
+#endif
+#ifdef NOTE_READ
+    if (flags & IN_ACCESS && S_ISREG (wf))
+        result |= NOTE_READ;
+#endif
+    if (flags & IN_ATTRIB)
+        result |= NOTE_ATTRIB;
+    if (flags & IN_MODIFY && S_ISREG (wf))
+        result |= NOTE_WRITE;
+    if (!(wf & WF_ISSUBWATCH)) {
+        if (S_ISDIR (wf)) {
+            result |= NOTE_WRITE;
+#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+            result |= NOTE_EXTEND;
+#endif
+        }
+        if (flags & IN_ATTRIB && S_ISREG (wf))
+            result |= NOTE_LINK;
+        if (flags & IN_MOVE_SELF)
+            result |= NOTE_RENAME;
+        result |= NOTE_DELETE | NOTE_REVOKE;
+    }
+    return result;
+}
+
+/**
+ * Convert the kqueue event filter flags to the inotify watch mask.
+ *
+ * @param[in] flags A kqueue filter flags.
+ * @param[in] wf    A kqueue watch internal flags.
+ * @return Converted inotify watch mask.
+ **/
+uint32_t
+kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
+{
+    uint32_t result = 0;
+
+#ifdef NOTE_OPEN
+    if (flags & NOTE_OPEN)
+        result |= IN_OPEN;
+#endif
+#ifdef NOTE_CLOSE
+    if (flags & NOTE_CLOSE) {
+        if (wf & WF_MODIFIED && S_ISREG (wf))
+            result |= IN_CLOSE_WRITE;
+        else
+            result |= IN_CLOSE_NOWRITE;
+    }
+#endif
+#ifdef NOTE_READ
+    if (flags & NOTE_READ && S_ISREG (wf))
+        result |= IN_ACCESS;
+#endif
+
+    if (flags & NOTE_ATTRIB)
+        result |= IN_ATTRIB;
+
+    if (flags & NOTE_LINK && S_ISREG (wf) && !(wf & WF_ISSUBWATCH))
+        result |= IN_ATTRIB;
+
+    if (flags & NOTE_WRITE && S_ISREG (wf))
+        result |= IN_MODIFY;
+
+    if (flags & NOTE_DELETE && !(wf & WF_ISSUBWATCH)) {
+        /* Treat deletes as link number changes if links still exist */
+        if (wf & WF_DELETED || !S_ISREG (wf))
+            result |= IN_DELETE_SELF;
+        else
+            result |= IN_ATTRIB;
+    }
+
+    if (flags & NOTE_RENAME && !(wf & WF_ISSUBWATCH))
+        result |= IN_MOVE_SELF;
+
+    if (flags & NOTE_REVOKE && !(wf & WF_ISSUBWATCH))
+        result |= IN_UNMOUNT;
+
+    /* IN_ISDIR flag for subwatches is set in the enqueue_event routine */
+    if ((result & (IN_ATTRIB | IN_OPEN | IN_ACCESS | IN_CLOSE))
+        && S_ISDIR (wf) && !(wf & WF_ISSUBWATCH)) {
+        result |= IN_ISDIR;
+    }
+
+    return result;
+}
 
 /* struct kevent is declared slightly differently on the different BSDs.
  * This macros will help to avoid cast warnings on the supported platforms. */
@@ -156,9 +266,10 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
     assert (iw != NULL);
     assert (fd != -1);
 
-    uint32_t fflags = inotify_to_kqueue (iw->flags,
-                                         S_ISDIR (st->st_mode),
-                                         watch_type == WATCH_DEPENDENCY);
+    watch_flags_t wf = watch_type != WATCH_USER ? WF_ISSUBWATCH : 0;
+    wf |= st->st_mode & S_IFMT;
+
+    uint32_t fflags = inotify_to_kqueue (iw->flags, wf);
     /* Skip watches with empty kqueue filter flags */
     if (fflags == 0) {
         return NULL;
@@ -172,8 +283,7 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
 
     w->iw = iw;
     w->fd = fd;
-    w->flags = watch_type != WATCH_USER ? WF_ISSUBWATCH : 0;
-    w->flags |= S_ISDIR (st->st_mode) ? WF_ISDIR : 0;
+    w->flags = wf;
     w->refcount = 0;
     /* Inode number obtained via fstat call cannot be used here as it
      * differs from readdir`s one at mount points. */

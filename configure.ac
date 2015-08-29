@@ -201,6 +201,98 @@ else
 fi
 
 
+AC_MSG_CHECKING(for NOTE_OPEN in sys/event.h)
+AC_COMPILE_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <sys/types.h>
+        @%:@include <sys/event.h>
+    ],
+    [
+        int a = NOTE_OPEN;
+    ])
+],
+    have_note_open=yes,
+    have_note_open=no
+)
+AC_MSG_RESULT($have_note_open)
+
+
+AC_MSG_CHECKING(for NOTE_CLOSE in sys/event.h)
+AC_COMPILE_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <sys/types.h>
+        @%:@include <sys/event.h>
+    ],
+    [
+        int a = NOTE_CLOSE;
+    ])
+],
+    have_note_close=yes,
+    have_note_close=no
+)
+AC_MSG_RESULT($have_note_close)
+
+
+AC_MSG_CHECKING(for NOTE_READ in sys/event.h)
+AC_COMPILE_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <sys/types.h>
+        @%:@include <sys/event.h>
+    ],
+    [
+        int a = NOTE_READ;
+    ])
+],
+    have_note_read=yes,
+    have_note_read=no
+)
+AC_MSG_RESULT($have_note_read)
+
+
+AC_MSG_CHECKING(for NODE_EXTEND on renaming of file in subdirectory)
+rm -rf iktestdir
+mkdir iktestdir
+touch iktestfile
+AC_RUN_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <sys/types.h>
+        @%:@include <sys/event.h>
+        @%:@include <sys/time.h>
+        @%:@include <stdio.h>
+        @%:@include <fcntl.h>
+    ],
+    [
+        int fd, kq;
+        struct kevent ev;
+        static const struct timespec tout = { 1, 0 };
+
+        if ((fd = open("iktestdir", O_RDONLY)) == -1) return 1;
+        if ((kq = kqueue()) == -1) return 1;
+        EV_SET(&ev, fd, EVFILT_VNODE, EV_ADD | EV_ENABLE | EV_ONESHOT,
+            NOTE_WRITE | NOTE_EXTEND, 0, 0);
+        if (kevent(kq, &ev, 1, NULL, 0, &tout) == -1) return 1;
+        if (rename ("iktestfile", "iktestdir/iktestfile") == -1) return 1;
+        if (kevent(kq, NULL, 0, &ev, 1, &tout) != 1) return 1;
+        return (ev.fflags & NOTE_EXTEND) ? 0 : 1;
+    ])
+],
+[
+    AC_DEFINE([HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME],[1],[Define to 1 if rename set NODE_EXTEND flag])
+    AC_MSG_RESULT(yes)
+],
+    AC_MSG_RESULT(no)
+)
+rm -rf iktestdir
+
+
 AC_CHECK_MEMBER([struct dirent.d_type],
 [
     AC_DEFINE([DIRENT_HAVE_D_TYPE],[1],[Define to 1 if dirent have d_type field])
@@ -209,6 +301,22 @@ AC_CHECK_MEMBER([struct dirent.d_type],
 [
     [@%:@include <dirent.h>]
 ])
+
+
+# There are two ways we can reread directory opened already. Namely:
+# 1. Open directory by realtive path "." to file descriptor than read & close
+# 2. Rewind directory than read it one more time and leave opened
+# Former one is more reliable but latter is prefered when system has NOTE_OPEN
+# or NOTE_CLOSE events and we dont want that kqueue catches open and closedirs
+# issued by directory diffing routines.
+#
+# Define this if we can reuse filedes opened once before or leave undefined if
+# we have to execute open/close pair on every directory read.
+
+if test "$ac_cv_func_fdopendir" = "yes" -a "$have_o_evtonly" = "no" -a \
+    \( "$have_note_open" = "yes" -o "$have_note_close" = "yes" \) ; then
+    AC_DEFINE([DIRECTORY_LISTING_REWINDS], [1], [Define to 1 if reusing of watched dir filedes is necessary])
+fi
 
 
 AC_OUTPUT

@@ -21,6 +21,7 @@
 *******************************************************************************/
 
 #include <cassert>
+#include <cerrno>
 #include <algorithm>
 #include "log.hh"
 #include "consumer.hh"
@@ -58,9 +59,10 @@ void consumer::register_activity (request::activity activity)
 void consumer::add_modify_watch (request::add_modify add_modify)
 {
     uint32_t id = ino.watch (add_modify.path, add_modify.mask);
+    int error = errno;
     LOG ("CONS: Added watch");
     input.reset ();
-    output.setup (id);
+    output.setup (id, error);
 }
 
 void consumer::remove_watch (request::remove remove)
@@ -90,4 +92,9 @@ void consumer::run ()
 
         LOG ("CONS: Sleeping on input");
     }
+}
+
+int consumer::get_fd ()
+{
+    return ino.get_fd ();
 }

@@ -46,6 +46,7 @@ public:
     ~consumer ();
     static void* run_ (void *ptr);
     void run ();
+    int get_fd ();
 };
 
 

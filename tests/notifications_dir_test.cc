@@ -150,6 +150,30 @@ void notifications_dir_test::run ()
     cons.output.reset ();
     cons.input.receive ();
 
+    system ("mv ntfsdt-working/one ntfsdt-cache/one");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_MOVED_FROM event on moving file from directory "
+            "to another location within the same mount point",
+            contains (received, event ("one", wid, IN_MOVED_FROM)));
+
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    system ("mv ntfsdt-cache/one ntfsdt-working/one");
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_MOVED_TO event on moving file to directory "
+            "from another location within the same mount point",
+            contains (received, event ("one", wid, IN_MOVED_TO)));
+
+
+    cons.output.reset ();
+    cons.input.receive ();
+
     system ("mv ntfsdt-working/foo ntfsdt-working/bar");
 
     cons.output.wait ();

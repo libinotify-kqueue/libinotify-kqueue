@@ -39,6 +39,7 @@ private:
     struct {
         events _registered;
         int _watch_id;
+        int _error;
     } variants;
 
     variant current;
@@ -46,11 +47,12 @@ private:
 public:
     response ();
     void setup (const events &registered);
-    void setup (int watch_id);
+    void setup (int watch_id, int error);
 
     variant current_variant () const;
     events registered () const;
     int added_watch_id () const;
+    int added_watch_error () const;
 };
 
 #endif // __RESPONSE_HH__

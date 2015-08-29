@@ -40,7 +40,6 @@
 #include "sys/inotify.h"
 
 #include "utils.h"
-#include "conversions.h"
 #include "worker-thread.h"
 #include "worker.h"
 
@@ -141,7 +140,46 @@ worker_cmd_release (worker_cmd *cmd)
     pthread_barrier_destroy (&cmd->sync);
 }
 
+/**
+ * Create communication pipe
+ *
+ * @param[in] filedes A pair of descriptors used in referencing the new pipe
+ * @param[in] flags   A Pipe flags in inotify(linux) or fcntl.h(BSD) format
+ * @return 0 on success, -1 otherwise
+ **/
+static int
+pipe_init (int fildes[2], int flags)
+{
+    if (socketpair (AF_UNIX, SOCK_STREAM, 0, fildes) == -1) {
+        perror_msg ("Failed to create a socket pair");
+        return -1;
+    }
 
+    if (set_cloexec_flag (fildes[KQUEUE_FD], 1) == -1) {
+        perror_msg ("Failed to set cloexec flag on socket");
+        return -1;
+    }
+
+    /* Check flags for both linux and BSD CLOEXEC values */
+    if (set_cloexec_flag (fildes[INOTIFY_FD],
+#ifdef O_CLOEXEC
+                          flags & (IN_CLOEXEC|O_CLOEXEC)) == -1) {
+#else
+                          flags & IN_CLOEXEC) == -1) {
+#endif
+        perror_msg ("Failed to set cloexec flag on socket");
+        return -1;
+    }
+
+    /* Check flags for both linux and BSD NONBLOCK values */
+    if (set_nonblock_flag (fildes[INOTIFY_FD],
+                           flags & (IN_NONBLOCK|O_NONBLOCK)) == -1) {
+        perror_msg ("Failed to set socket into nonblocking mode");
+        return -1;
+    }
+
+    return 0;
+}
 
 /**
  * Create a new worker and start its thread.
@@ -149,7 +187,7 @@ worker_cmd_release (worker_cmd *cmd)
  * @return A pointer to a new worker.
  **/
 worker*
-worker_create ()
+worker_create (int flags)
 {
     pthread_attr_t attr;
     struct kevent ev;
@@ -166,6 +204,8 @@ worker_create ()
     wrk->iovalloc = 0;
     wrk->iovcnt = 0;
     wrk->iov = NULL;
+    wrk->io[INOTIFY_FD] = -1;
+    wrk->io[KQUEUE_FD] = -1;
 
     wrk->kq = kqueue ();
     if (wrk->kq == -1) {
@@ -173,8 +213,8 @@ worker_create ()
         goto failure;
     }
 
-    if (socketpair (AF_UNIX, SOCK_STREAM, 0, (int *) wrk->io) == -1) {
-        perror_msg ("Failed to create a socket pair");
+    if (pipe_init ((int *) wrk->io, flags) == -1) {
+        perror_msg ("Failed to create a pipe");
         goto failure;
     }
 
@@ -220,25 +260,12 @@ worker_create ()
     
 failure:
     if (wrk != NULL) {
+        if (wrk->io[INOTIFY_FD] != -1) {
+            close (wrk->io[INOTIFY_FD]);
+        }
         worker_free (wrk);
     }
     return NULL;
-}
-
-/**
- * Remove an inotify watch from worker.
- *
- * @param[in] wrk A pointer to #worker.
- * @param[in] iw A pointer to #i_watch to remove.
- **/
-static void
-worker_remove_iwatch (worker *wrk, i_watch *iw)
-{
-    assert (wrk != NULL);
-    assert (iw != NULL);
-
-    SLIST_REMOVE (&wrk->head, iw, i_watch, next);
-    iwatch_free (iw);
 }
 
 /**
@@ -252,17 +279,21 @@ worker_free (worker *wrk)
     assert (wrk != NULL);
 
     int i;
-    i_watch *iw, *tmp;
+    i_watch *iw;
 
-    close (wrk->io[KQUEUE_FD]);
-    wrk->io[KQUEUE_FD] = -1;
+    if (wrk->io[KQUEUE_FD] != -1) {
+        close (wrk->io[KQUEUE_FD]);
+        wrk->io[KQUEUE_FD] = -1;
+    }
 
     close (wrk->kq);
     wrk->closed = 1;
 
     worker_cmd_release (&wrk->cmd);
-    SLIST_FOREACH_SAFE (iw, &wrk->head, next, tmp) {
-        worker_remove_iwatch (wrk, iw);
+    while (!SLIST_EMPTY (&wrk->head)) {
+        iw = SLIST_FIRST (&wrk->head);
+        SLIST_REMOVE_HEAD (&wrk->head, next);
+        iwatch_free (iw);
     }
 
     for (i = 0; i < wrk->iovcnt; i++) {
@@ -346,10 +377,11 @@ worker_remove (worker *wrk,
         if (iw->wd == id) {
             enqueue_event (iw, IN_IGNORED, NULL);
             flush_events (wrk);
-            worker_remove_iwatch (wrk, iw);
-            break;
+            SLIST_REMOVE (&wrk->head, iw, i_watch, next);
+            iwatch_free (iw);
+            return 0;
         }
     }
-    /* Assume always success */
-    return 0;
+    errno = EINVAL;
+    return -1;
 }

@@ -126,3 +126,8 @@ long inotify_client::bytes_available (int fd)
 
     return avail;
 }
+
+int inotify_client::get_fd ()
+{
+    return fd;
+}

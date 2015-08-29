@@ -297,6 +297,29 @@ set_cloexec_flag (int fd, int value)
     return fcntl (fd, F_SETFD, flags);
 }
 
+/*
+ * Set the O_NONBLOCK flag of file descriptor fd if value is nonzero
+ * clear the flag if value is 0.
+ *
+ * @param[in] fd    A file descriptor to modify.
+ * @param[in] value A nonblock flag value to set.
+ * @return 0 on success, or -1 on error with errno set.
+ **/
+int
+set_nonblock_flag (int fd, int value)
+{
+    int flags = fcntl (fd, F_GETFL, 0);
+    if (flags < 0)
+        return flags;
+
+    if (value != 0)
+        flags |= O_NONBLOCK;
+    else
+        flags &= ~O_NONBLOCK;
+
+    return fcntl (fd, F_SETFL, flags);
+}
+
 /**
  * Perform dup(2) and set the FD_CLOEXEC flag on the new file descriptor
  *

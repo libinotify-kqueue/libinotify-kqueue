@@ -1,5 +1,6 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2015 Vladimir Kondratiev <wulf@cicgroup.ru>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -20,8 +21,20 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <cerrno>
+#include <csetjmp>
+#include <csignal>
 #include <cstdlib>
 #include "fail_test.hh"
+
+#define INVALID_FILENO		10000
+#define NONINOTIFY_FILENO	1 /* stdout */
+
+static std::jmp_buf jbuf;
+static void catch_segv (int signo)
+{
+    std::longjmp (jbuf, 1);
+}
 
 fail_test::fail_test (journal &j)
 : test ("Failures", j)
@@ -37,28 +50,93 @@ void fail_test::setup ()
 void fail_test::run ()
 {
     consumer cons;
+    sig_t oldsegvhandler;
     int wid = 0;
+    int error = 0;
+
+    wid = inotify_add_watch (INVALID_FILENO, "fail-working", IN_ALL_EVENTS);
+    should ("watch id is -1, errno set to EBADF when starting watching an "
+            "invalid file descriptor", wid == -1 && errno == EBADF);
+
+    cons.output.reset ();
+    error = inotify_rm_watch (INVALID_FILENO, 0);
+    should ("watch id is -1, errno set to EBADF when stopping watching an "
+            "invalid file descriptor", error == -1 && errno == EBADF);
+
+    cons.output.reset ();
+    wid = inotify_add_watch (NONINOTIFY_FILENO, "fail-working", IN_ALL_EVENTS);
+    should ("watch id is -1, errno set to EINVAL when starting watching a "
+            "valid noninotify file descriptor", wid == -1 && errno == EINVAL);
+
+    cons.output.reset ();
+    error = inotify_rm_watch (NONINOTIFY_FILENO, 0);
+    should ("inotify_rm_watch returns -1, errno set to EINVAL when stopping "
+            "watching a valid noninotify file descriptor",
+            error == -1 && errno == EINVAL);
+
+    cons.output.reset ();
+    error = inotify_rm_watch (cons.get_fd (), INVALID_FILENO);
+    should ("inotify_rm_watch returns -1, errno set to EINVAL when stopping "
+            "watching an invalid watch descriptor",
+            error == -1 && errno == EINVAL);
+
+    cons.output.reset ();
+    error = inotify_rm_watch (cons.get_fd (), NONINOTIFY_FILENO);
+    should ("inotify_rm_watch returns -1, errno set to EINVAL when stopping "
+            "watching an noninotify watch descriptor",
+            error == -1 && errno == EINVAL);
 
     /* Add a watch, should fail */
+    cons.output.reset ();
     cons.input.setup ("non-existent", IN_ALL_EVENTS);
     cons.output.wait ();
 
     wid = cons.output.added_watch_id ();
-    should ("watch id is -1 when starting watching a non-existent file", wid == -1);
+    error = cons.output.added_watch_error ();
+    should ("watch id is -1, errno set to ENOENT when starting watching a "
+            "non-existent file", wid == -1 && error == ENOENT);
 
     cons.output.reset ();
     cons.input.setup ("fail-working", IN_ATTRIB | IN_ONLYDIR);
     cons.output.wait ();
 
     wid = cons.output.added_watch_id ();
-    should ("do not start watching a file if IN_ONLYDIR flag is set", wid == -1);
+    error = cons.output.added_watch_error ();
+    should ("watch id is -1, errno set to ENOTDIR when starting watching a "
+            "file with IN_ONLYDIR flag set", wid == -1 && error == ENOTDIR);
 
     cons.output.reset ();
     cons.input.setup ("fail-working", 0);
     cons.output.wait ();
 
     wid = cons.output.added_watch_id ();
-    should ("do not start watching a file if no event flags are set", wid == -1);
+    error = cons.output.added_watch_error ();
+    should ("watch id is -1, errno set to EINVAL when starting watching a "
+            "file with no event flags set", wid == -1 && error == EINVAL);
+
+    cons.output.reset ();
+    chmod ("fail-working", 0);
+    cons.input.setup ("fail-working", IN_ALL_EVENTS);
+    cons.output.wait ();
+
+    wid = cons.output.added_watch_id ();
+    error = cons.output.added_watch_error ();
+    should ("watch id is -1, errno set to EACCES when starting watching a "
+            "file without read access", wid == -1 && error == EACCES);
+
+    cons.output.reset ();
+    oldsegvhandler = std::signal (SIGSEGV, catch_segv);
+    if (setjmp(jbuf) == 0) {
+        wid = inotify_add_watch (cons.get_fd (), (char *)-1, IN_ALL_EVENTS);
+    } else {
+        std::cout << "SIGSEGV catched!!! other tests will probably fail\n";
+        wid = -1;
+        errno = -SIGSEGV; /* Invalid errno */
+    }
+    std::signal (SIGSEGV, oldsegvhandler);
+    should ("watch id is -1, errno set to EFAULT when starting watching a "
+            "file with pathname pointing outside of the process's accessible "
+            "address space", wid == -1 && errno == EFAULT);
 
     cons.input.interrupt ();
 }
