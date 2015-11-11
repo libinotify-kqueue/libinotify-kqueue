@@ -241,8 +241,7 @@ worker_create (int flags)
     pthread_attr_init (&attr);
     pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
 
-    sigemptyset (&set);
-    sigaddset (&set, SIGPIPE);
+    sigfillset (&set);
     pthread_sigmask (SIG_BLOCK, &set, &oset);
 
     result = pthread_create (&wrk->thread, &attr, worker_thread, wrk);
