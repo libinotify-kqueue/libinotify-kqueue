@@ -41,13 +41,21 @@
 
 
 #define WORKER_SZ 100
-static worker* volatile workers[WORKER_SZ] = {NULL};
+static worker* volatile workers[WORKER_SZ];
 static pthread_mutex_t workers_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int initialized = 0;
+static worker dummy_wrk = {
+    .io = { -1, -1 },
+    .mutex = PTHREAD_MUTEX_INITIALIZER
+};
+
+#define WRK_FREE (&dummy_wrk)
 
 #define WORKERSET_LOCK()   pthread_mutex_lock (&workers_mutex)
 #define WORKERSET_UNLOCK() pthread_mutex_unlock (&workers_mutex)
 
 static worker *worker_find (int fd);
+static void    workers_init (void);
 
 /**
  * Create a new inotify instance.
@@ -90,9 +98,13 @@ inotify_init1 (int flags) __THROW
 
     WORKERSET_LOCK ();
 
+    if (!initialized) {
+        workers_init();
+    }
+
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
-        if (workers[i] == NULL) {
+        if (workers[i] == WRK_FREE) {
             worker *wrk = worker_create (flags);
             if (wrk != NULL) {
                 workers[i] = wrk;
@@ -107,8 +119,9 @@ inotify_init1 (int flags) __THROW
                 int j;
                 for (j = 0; j < WORKER_SZ; j++) {
                     worker *jw = workers[j];
-                    if (jw != NULL && jw->io[INOTIFY_FD] == lfd && jw != wrk) {
-                        workers[j] = NULL;
+                    if (jw != WRK_FREE && jw->io[INOTIFY_FD] == lfd &&
+                        jw != wrk) {
+                        workers[j] = WRK_FREE;
                         perror_msg ("Collision found: fd %d", lfd);
                     }
                 }
@@ -142,6 +155,7 @@ inotify_add_watch (int         fd,
                    uint32_t    mask) __THROW
 {
     struct stat st;
+    int retval, error;
 
     if (!is_opened (fd)) {
         return -1;	/* errno = EBADF */
@@ -171,11 +185,13 @@ inotify_add_watch (int         fd,
     }
 
     worker_cmd_add (&wrk->cmd, name, mask);
-    safe_write (wrk->io[INOTIFY_FD], "*", 1);
-
-    worker_cmd_wait (&wrk->cmd);
-    int retval = wrk->cmd.retval;
-    int error = wrk->cmd.error;
+    wrk->cmd.retval = -1;
+    wrk->cmd.error = EBADF;
+    if (safe_write (wrk->io[INOTIFY_FD], "*", 1) != -1) {
+        worker_cmd_wait (&wrk->cmd);
+    }
+    retval = wrk->cmd.retval;
+    error = wrk->cmd.error;
 
     WORKER_UNLOCK (wrk);
     WORKERSET_UNLOCK ();
@@ -200,6 +216,8 @@ int
 inotify_rm_watch (int fd,
                   int wd) __THROW
 {
+    int retval, error;
+
     if (!is_opened (fd)) {
         return -1;	/* errno = EBADF */
     }
@@ -211,11 +229,13 @@ inotify_rm_watch (int fd,
     }
 
     worker_cmd_remove (&wrk->cmd, wd);
-    safe_write (wrk->io[INOTIFY_FD], "*", 1);
-
-    worker_cmd_wait (&wrk->cmd);
-    int retval = wrk->cmd.retval;
-    int error = wrk->cmd.error;
+    wrk->cmd.retval = -1;
+    wrk->cmd.error = EBADF;
+    if (safe_write (wrk->io[INOTIFY_FD], "*", 1) != -1) {
+        worker_cmd_wait (&wrk->cmd);
+    }
+    retval = wrk->cmd.retval;
+    error = wrk->cmd.error;
 
     WORKER_UNLOCK (wrk);
     WORKERSET_UNLOCK ();
@@ -242,7 +262,7 @@ worker_erase (worker *wrk)
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
         if (workers[i] == wrk) {
-            workers[i] = NULL;
+            workers[i] = WRK_FREE;
             break;
         }
     }
@@ -257,18 +277,22 @@ worker_erase (worker *wrk)
 static worker *
 worker_find (int fd)
 {
+    if (!initialized) {
+        errno = EINVAL;
+        return NULL;
+    }
+
     WORKERSET_LOCK ();
 
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
         worker *wrk = workers[i];
-        if (wrk != NULL
-            && wrk->io[INOTIFY_FD] == fd
-            && is_opened (wrk->io[INOTIFY_FD])) {
+        if (wrk != WRK_FREE && wrk->io[INOTIFY_FD] == fd) {
             WORKER_LOCK (wrk);
-
-            /* Closed flag could be set before we lock on a mutex */
-            if (wrk->io[INOTIFY_FD] == -1) {
+            if (wrk != workers[i]) {
+                /* RACE: worker thread overwrote worker pointer in between
+                   obtaining pointer on wrk and locking its mutex. */
+                perror_msg ("race detected. fd: %d", fd);
                 WORKER_UNLOCK (wrk);
                 WORKERSET_UNLOCK ();
                 errno = EBADF;
@@ -282,4 +306,17 @@ worker_find (int fd)
     WORKERSET_UNLOCK ();
     errno = EINVAL;
     return NULL;
+}
+
+/**
+ * Initialize inotify at first first use. Should be run via pthread_once
+ **/
+static void
+workers_init (void)
+{
+    int i;
+    for (i = 0; i < WORKER_SZ; i++) {
+        workers[i] = WRK_FREE;
+    }
+    initialized = 1;
 }
