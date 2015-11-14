@@ -53,7 +53,7 @@ static pthread_mutex_t workers_mutex = PTHREAD_MUTEX_INITIALIZER;
  *
  * @return  -1 on failure, a file descriptor on success.
  **/
-INO_EXPORT int
+int
 inotify_init (void) __THROW
 {
     return inotify_init1 (0);
@@ -69,7 +69,7 @@ inotify_init (void) __THROW
  * @param[in] flags A combination of inotify_init1 flags
  * @return  -1 on failure, a file descriptor on success.
  **/
-INO_EXPORT int
+int
 inotify_init1 (int flags) __THROW
 {
     int lfd = -1;
@@ -131,7 +131,7 @@ inotify_init1 (int flags) __THROW
  * @param[in] mask A combination of inotify flags. 
  * @return id of a watch, -1 on failure.
  **/
-INO_EXPORT int
+int
 inotify_add_watch (int         fd,
                    const char *name,
                    uint32_t    mask) __THROW
@@ -220,7 +220,7 @@ inotify_add_watch (int         fd,
  * @param[in] wd Watch id.
  * @return 0 on success, -1 on failure.
  **/
-INO_EXPORT int
+int
 inotify_rm_watch (int fd,
                   int wd) __THROW
 {

@@ -58,6 +58,13 @@
 #define SIZE_MAX SIZE_T_MAX
 #endif
 
+#ifndef AT_FDCWD
+#define AT_FDCWD		-100
+#endif
+#ifndef AT_SYMLINK_NOFOLLOW
+#define AT_SYMLINK_NOFOLLOW	0x200 /* Do not follow symbolic links */
+#endif
+
 #ifndef HAVE_PTHREAD_BARRIER
 typedef struct {
     int count;               /* the number of threads to wait on a barrier */
@@ -70,19 +77,16 @@ typedef struct {
 
 /* barrier attributes are not supported */
 typedef void pthread_barrierattr_t;
+#endif
 
+__BEGIN_DECLS
+
+#ifndef HAVE_PTHREAD_BARRIER
 void pthread_barrier_init    (pthread_barrier_t *impl,
                               const pthread_barrierattr_t *attr,
                               unsigned count);
 void pthread_barrier_wait    (pthread_barrier_t *impl);
 void pthread_barrier_destroy (pthread_barrier_t *impl);
-#endif
-
-#ifndef AT_FDCWD
-#define AT_FDCWD		-100
-#endif
-#ifndef AT_SYMLINK_NOFOLLOW
-#define AT_SYMLINK_NOFOLLOW	0x200 /* Do not follow symbolic links */
 #endif
 
 #ifndef HAVE_ATFUNCS
@@ -98,5 +102,7 @@ DIR *fdopendir (int fd);
 #ifndef HAVE_FSTATAT
 int fstatat (int fd, const char *path, struct stat *buf, int flag);
 #endif
+
+__END_DECLS
 
 #endif /* __COMPAT_H__ */

@@ -26,9 +26,7 @@
 #include <cstddef> // NULL
 #include <string>
 
-extern "C" {
 #include "compat.h"
-}
 
 #ifdef __linux__
 #  include <sys/inotify.h>

@@ -11,13 +11,6 @@
   #endif
 #endif
 
-#ifdef __cplusplus
-  #define INO_EXPORT extern "C"
-#else
-  #define INO_EXPORT
-#endif
-
-
 
 /* Flags for the parameter of inotify_init1. */
 #define IN_CLOEXEC	02000000	/* Linux x86 O_CLOEXEC */
@@ -78,19 +71,21 @@ struct inotify_event
 			 IN_CLOSE_NOWRITE | IN_OPEN | IN_MOVED_FROM | IN_MOVE_SELF | \
 			 IN_MOVED_TO | IN_DELETE | IN_CREATE | IN_DELETE_SELF)
 
+__BEGIN_DECLS
 
 /* Create and initialize inotify-kqueue instance. */
-INO_EXPORT int inotify_init (void) __THROW;
+int inotify_init (void) __THROW;
 
 /* Create and initialize inotify-kqueue instance. */
-INO_EXPORT int inotify_init1 (int flags) __THROW;
+int inotify_init1 (int flags) __THROW;
 
 /* Add watch of object NAME to inotify-kqueue instance FD. Notify about
    events specified by MASK. */
-INO_EXPORT int inotify_add_watch (int fd, const char *name, uint32_t mask) __THROW;
+int inotify_add_watch (int fd, const char *name, uint32_t mask) __THROW;
 
 /* Remove the watch specified by WD from the inotify instance FD. */
-INO_EXPORT int inotify_rm_watch (int fd, int wd) __THROW;
+int inotify_rm_watch (int fd, int wd) __THROW;
 
+__END_DECLS
 
 #endif /* __BSD_INOTIFY_H__ */
