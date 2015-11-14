@@ -45,6 +45,10 @@
 #include <inttypes.h>
 #endif
 
+#ifndef __cplusplus /* requires stdbool.h */
+#include <stdatomic.h>
+#endif
+
 #include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>

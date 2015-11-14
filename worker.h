@@ -84,11 +84,19 @@ struct worker {
     SLIST_HEAD(, i_watch) head; /* linked list of inotify watches */
 
     pthread_mutex_t mutex; /* worker mutex */
+    _Atomic(uint) mutex_rc;/* worker mutex sleepers/holders refcount */
     worker_cmd cmd;        /* operation to perform on a worker */
 };
 
-#define WORKER_LOCK(wrk)    pthread_mutex_lock (&(wrk)->mutex)
-#define WORKER_UNLOCK(wrk)  pthread_mutex_unlock (&(wrk)->mutex)
+#define WORKER_LOCK(wrk) do { \
+    atomic_fetch_add (&(wrk)->mutex_rc, 1); \
+    pthread_mutex_lock (&(wrk)->mutex); \
+} while (0)
+#define WORKER_UNLOCK(wrk) do { \
+    assert (atomic_load (&(wrk)->mutex_rc) > 0); \
+    pthread_mutex_unlock (&(wrk)->mutex); \
+    atomic_fetch_sub (&(wrk)->mutex_rc, 1); \
+} while (0)
 
 worker* worker_create         (int flags);
 void    worker_free           (worker *wrk);

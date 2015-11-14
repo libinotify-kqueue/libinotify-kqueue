@@ -42,7 +42,7 @@
 
 #define WORKER_SZ 100
 static worker* volatile workers[WORKER_SZ];
-static pthread_mutex_t workers_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_rwlock_t workers_rwlock = PTHREAD_RWLOCK_INITIALIZER;
 static int initialized = 0;
 static worker dummy_wrk = {
     .io = { -1, -1 },
@@ -51,8 +51,9 @@ static worker dummy_wrk = {
 
 #define WRK_FREE (&dummy_wrk)
 
-#define WORKERSET_LOCK()   pthread_mutex_lock (&workers_mutex)
-#define WORKERSET_UNLOCK() pthread_mutex_unlock (&workers_mutex)
+#define WORKERSET_RLOCK()  pthread_rwlock_rdlock (&workers_rwlock)
+#define WORKERSET_WLOCK()  pthread_rwlock_wrlock (&workers_rwlock)
+#define WORKERSET_UNLOCK() pthread_rwlock_unlock (&workers_rwlock)
 
 static worker *worker_find (int fd);
 static void    workers_init (void);
@@ -96,7 +97,7 @@ inotify_init1 (int flags) __THROW
         return -1;
     }
 
-    WORKERSET_LOCK ();
+    WORKERSET_WLOCK ();
 
     if (!initialized) {
         workers_init();
@@ -282,7 +283,7 @@ worker_find (int fd)
         return NULL;
     }
 
-    WORKERSET_LOCK ();
+    WORKERSET_RLOCK ();
 
     int i;
     for (i = 0; i < WORKER_SZ; i++) {

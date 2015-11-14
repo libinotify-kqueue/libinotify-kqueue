@@ -245,6 +245,7 @@ worker_create (int flags)
     }
 
     pthread_mutex_init (&wrk->mutex, NULL);
+    atomic_init (&wrk->mutex_rc, 0);
 
     worker_cmd_init (&wrk->cmd);
 
@@ -307,17 +308,12 @@ worker_free (worker *wrk)
         free (wrk->iov[i].iov_base);
     }
     free (wrk->iov);
-    /*
-     * Wait for user thread to release worker`s mutex
-     * XXX: this trick works when and only when no threads are sleeping on mutex.
-     *      It`s our case as worker mutex access is already serialized by
-     *      workerset lock so any user thread takes worker mutex promptly.
-     */
-    while (pthread_mutex_destroy (&wrk->mutex) == EBUSY) {
-        perror_msg ("worker mutex is busy. try to destroy it again");
+    /* Wait for user thread(s) to release worker`s mutex */
+    while (atomic_load (&wrk->mutex_rc) > 0) {
         WORKER_LOCK (wrk);
         WORKER_UNLOCK (wrk);
     }
+    pthread_mutex_destroy (&wrk->mutex);
     /* And only after that destroy worker_cmd sync primitives */
     worker_cmd_release (&wrk->cmd);
     free (wrk);
