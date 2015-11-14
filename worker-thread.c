@@ -474,7 +474,6 @@ worker_thread (void *arg)
 
         if (received.ident == wrk->io[KQUEUE_FD]) {
             if (received.flags & EV_EOF) {
-                wrk->closed = 1;
                 wrk->io[INOTIFY_FD] = -1;
                 worker_erase (wrk);
 

@@ -82,7 +82,6 @@ struct worker {
     int iovalloc;          /* number of iovs allocated */
     pthread_t thread;      /* worker thread */
     SLIST_HEAD(, i_watch) head; /* linked list of inotify watches */
-    volatile int closed;   /* closed flag */
 
     pthread_mutex_t mutex; /* worker mutex */
     worker_cmd cmd;        /* operation to perform on a worker */

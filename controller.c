@@ -264,12 +264,11 @@ worker_find (int fd)
         worker *wrk = workers[i];
         if (wrk != NULL
             && wrk->io[INOTIFY_FD] == fd
-            && wrk->closed == 0
             && is_opened (wrk->io[INOTIFY_FD])) {
             WORKER_LOCK (wrk);
 
             /* Closed flag could be set before we lock on a mutex */
-            if (wrk->closed) {
+            if (wrk->io[INOTIFY_FD] == -1) {
                 WORKER_UNLOCK (wrk);
                 WORKERSET_UNLOCK ();
                 errno = EBADF;

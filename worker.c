@@ -265,7 +265,6 @@ worker_create (int flags)
         goto failure;
     }
 
-    wrk->closed = 0;
     return wrk;
     
 failure:
@@ -297,7 +296,6 @@ worker_free (worker *wrk)
     }
 
     close (wrk->kq);
-    wrk->closed = 1;
 
     while (!SLIST_EMPTY (&wrk->head)) {
         iw = SLIST_FIRST (&wrk->head);
