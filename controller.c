@@ -50,6 +50,7 @@ static worker dummy_wrk = {
 };
 
 #define WRK_FREE (&dummy_wrk)
+#define WRK_RESV NULL
 
 #define WORKERSET_RLOCK()  pthread_rwlock_rdlock (&workers_rwlock)
 #define WORKERSET_WLOCK()  pthread_rwlock_wrlock (&workers_rwlock)
@@ -106,36 +107,43 @@ inotify_init1 (int flags) __THROW
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
         if (workers[i] == WRK_FREE) {
-            worker *wrk = worker_create (flags);
-            if (wrk != NULL) {
-                workers[i] = wrk;
-                lfd = wrk->io[INOTIFY_FD];
-
-                /* We can face into situation when there are two workers with
-                 * the same inotify FDs. It usually occurs when a worker fd has
-                 * been closed but the worker has not been removed from a list
-                 * yet. The fd is free, and when we create a new worker, we can
-                 * receive the same fd. So check for duplicates and remove them
-                 * now. */
-                int j;
-                for (j = 0; j < WORKER_SZ; j++) {
-                    worker *jw = workers[j];
-                    if (jw != WRK_FREE && jw->io[INOTIFY_FD] == lfd &&
-                        jw != wrk) {
-                        workers[j] = WRK_FREE;
-                        perror_msg ("Collision found: fd %d", lfd);
-                    }
-                }
-            }
-
-            WORKERSET_UNLOCK ();
-            return lfd;
+            workers[i] = WRK_RESV;
+            break;
         }
     }
 
     WORKERSET_UNLOCK ();
-    errno = EMFILE;
-    return -1;
+
+    if (i == WORKER_SZ) {
+        errno = EMFILE;
+        return -1;
+    }
+
+    worker *wrk = worker_create (flags);
+    if (wrk == NULL) {
+        workers[i] = WRK_FREE;
+        return -1;
+    }
+
+    workers[i] = wrk;
+    lfd = wrk->io[INOTIFY_FD];
+
+    /* We can face into situation when there are two workers with the same
+     * inotify FDs. It usually occurs when a worker fd has been closed but
+     * the worker has not been removed from a list yet. The fd is free, and
+     * when we create a new worker, we can * receive the same fd. So check
+     * for duplicates and remove them now. */
+    int j;
+    for (j = 0; j < WORKER_SZ; j++) {
+        worker *jw = workers[j];
+        if (jw != WRK_FREE && jw != WRK_RESV && jw->io[INOTIFY_FD] == lfd &&
+            jw != wrk) {
+            workers[j] = WRK_FREE;
+            perror_msg ("Collision found: fd %d", lfd);
+        }
+    }
+
+    return lfd;
 }
 
 
@@ -288,7 +296,7 @@ worker_find (int fd)
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
         worker *wrk = workers[i];
-        if (wrk != WRK_FREE && wrk->io[INOTIFY_FD] == fd) {
+        if (wrk != WRK_FREE && wrk != WRK_RESV && wrk->io[INOTIFY_FD] == fd) {
             WORKER_LOCK (wrk);
             if (wrk != workers[i]) {
                 /* RACE: worker thread overwrote worker pointer in between
