@@ -35,6 +35,10 @@ if !HAVE_FSTATAT
 libinotify_la_SOURCES += compat/fstatat.c
 endif
 
+if NO_STDATOMIC
+libinotify_la_SOURCES += compat/ik_atomic.c
+endif
+
 libinotify_la_CFLAGS = -I. -DNDEBUG @PTHREAD_CFLAGS@
 libinotify_la_LDFLAGS = @PTHREAD_LIBS@ -export-symbols libinotify.sym
 endif

@@ -188,6 +188,7 @@ if test "$have_stdatomic_h" = "no"; then
     )
     AC_MSG_RESULT($have_compat_stdatomic_h)
 fi
+AM_CONDITIONAL(NO_STDATOMIC, [test "$have_stdatomic_h" = "no" -a "$have_compat_stdatomic_h" = "no"])
 
 
 AC_ARG_ENABLE([unsafe_fchdir],

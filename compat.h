@@ -48,8 +48,10 @@
 #ifndef __cplusplus /* requires stdbool.h */
 #ifdef HAVE_STDATOMIC_H
 #include <stdatomic.h>
-#else
+#elif defined (HAVE_COMPAT_STDATOMIC_H)
 #include "compat/stdatomic.h"
+#else
+#include "compat/ik_atomic.h"
 #endif
 #endif
 
