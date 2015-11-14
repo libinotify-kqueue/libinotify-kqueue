@@ -177,8 +177,6 @@ inotify_add_watch (int         fd,
             /* Closed flag could be set before we lock on a mutex */
             if (wrk->closed) {
                 WORKER_UNLOCK (wrk);
-                worker_free (wrk);
-                workers[i] = NULL;
                 WORKERSET_UNLOCK ();
                 errno = EBADF;
                 return -1;
@@ -192,13 +190,6 @@ inotify_add_watch (int         fd,
             int error = wrk->cmd.error;
 
             WORKER_UNLOCK (wrk);
-
-            /* TODO: ???? */
-            if (wrk->closed) {
-                worker_free (wrk);
-                workers[i] = NULL;
-            }
-
             WORKERSET_UNLOCK ();
             if (retval == -1) {
                 errno = error;
@@ -244,8 +235,6 @@ inotify_rm_watch (int fd,
 
             if (wrk->closed) {
                 WORKER_UNLOCK (wrk);
-                worker_free (wrk);
-                workers[i] = NULL;
                 WORKERSET_UNLOCK ();
                 errno = EBADF;
                 return -1;
@@ -259,13 +248,6 @@ inotify_rm_watch (int fd,
             int error = wrk->cmd.error;
 
             WORKER_UNLOCK (wrk);
-
-            /* TODO: ???? */
-            if (wrk->closed) {
-                worker_free (wrk);
-                workers[i] = NULL;
-            }
-
             WORKERSET_UNLOCK ();
             if (retval == -1) {
                 errno = error;

@@ -478,14 +478,13 @@ worker_thread (void *arg)
                 wrk->io[INOTIFY_FD] = -1;
                 worker_erase (wrk);
 
-                if (WORKER_TRYLOCK (wrk) == 0) {
-                    WORKER_UNLOCK (wrk);
-                    worker_free (wrk);
-                }
-                /* If we could not lock on a worker, it means that an inotify
-                 * call (add_watch/rm_watch) has already locked it. In this
-                 * case worker will be freed by a caller (caller checks the
-                 * `closed' flag. */
+                /* Notify user threads waiting for add/rm_watch of grim news */
+                wrk->cmd.retval = -1;
+                wrk->cmd.error = EBADF;
+                worker_cmd_post (&wrk->cmd);
+
+                worker_free (wrk);
+
                 return NULL;
             } else {
                 process_command (wrk);

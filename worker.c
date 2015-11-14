@@ -299,7 +299,6 @@ worker_free (worker *wrk)
     close (wrk->kq);
     wrk->closed = 1;
 
-    worker_cmd_release (&wrk->cmd);
     while (!SLIST_EMPTY (&wrk->head)) {
         iw = SLIST_FIRST (&wrk->head);
         SLIST_REMOVE_HEAD (&wrk->head, next);
@@ -310,8 +309,19 @@ worker_free (worker *wrk)
         free (wrk->iov[i].iov_base);
     }
     free (wrk->iov);
-    pthread_mutex_destroy (&wrk->mutex);
-
+    /*
+     * Wait for user thread to release worker`s mutex
+     * XXX: this trick works when and only when no threads are sleeping on mutex.
+     *      It`s our case as worker mutex access is already serialized by
+     *      workerset lock so any user thread takes worker mutex promptly.
+     */
+    while (pthread_mutex_destroy (&wrk->mutex) == EBUSY) {
+        perror_msg ("worker mutex is busy. try to destroy it again");
+        WORKER_LOCK (wrk);
+        WORKER_UNLOCK (wrk);
+    }
+    /* And only after that destroy worker_cmd sync primitives */
+    worker_cmd_release (&wrk->cmd);
     free (wrk);
 }
 
