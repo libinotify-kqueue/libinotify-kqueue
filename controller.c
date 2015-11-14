@@ -170,19 +170,19 @@ inotify_add_watch (int         fd,
         return -1;
     }
 
-            worker_cmd_add (&wrk->cmd, name, mask);
-            safe_write (wrk->io[INOTIFY_FD], "*", 1);
+    worker_cmd_add (&wrk->cmd, name, mask);
+    safe_write (wrk->io[INOTIFY_FD], "*", 1);
 
-            worker_cmd_wait (&wrk->cmd);
-            int retval = wrk->cmd.retval;
-            int error = wrk->cmd.error;
+    worker_cmd_wait (&wrk->cmd);
+    int retval = wrk->cmd.retval;
+    int error = wrk->cmd.error;
 
-            WORKER_UNLOCK (wrk);
-            WORKERSET_UNLOCK ();
-            if (retval == -1) {
-                errno = error;
-            }
-            return retval;
+    WORKER_UNLOCK (wrk);
+    WORKERSET_UNLOCK ();
+    if (retval == -1) {
+        errno = error;
+    }
+    return retval;
 }
 
 /**
@@ -210,19 +210,19 @@ inotify_rm_watch (int fd,
         return -1;
     }
 
-            worker_cmd_remove (&wrk->cmd, wd);
-            safe_write (wrk->io[INOTIFY_FD], "*", 1);
+    worker_cmd_remove (&wrk->cmd, wd);
+    safe_write (wrk->io[INOTIFY_FD], "*", 1);
 
-            worker_cmd_wait (&wrk->cmd);
-            int retval = wrk->cmd.retval;
-            int error = wrk->cmd.error;
+    worker_cmd_wait (&wrk->cmd);
+    int retval = wrk->cmd.retval;
+    int error = wrk->cmd.error;
 
-            WORKER_UNLOCK (wrk);
-            WORKERSET_UNLOCK ();
-            if (retval == -1) {
-                errno = error;
-            }
-            return retval;
+    WORKER_UNLOCK (wrk);
+    WORKERSET_UNLOCK ();
+    if (retval == -1) {
+        errno = error;
+    }
+    return retval;
 }
 
 /**
