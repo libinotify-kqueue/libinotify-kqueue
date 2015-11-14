@@ -44,6 +44,9 @@
 static worker* volatile workers[WORKER_SZ] = {NULL};
 static pthread_mutex_t workers_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+#define WORKERSET_LOCK()   pthread_mutex_lock (&workers_mutex)
+#define WORKERSET_UNLOCK() pthread_mutex_unlock (&workers_mutex)
+
 /**
  * Create a new inotify instance.
  *
@@ -83,7 +86,7 @@ inotify_init1 (int flags) __THROW
         return -1;
     }
 
-    pthread_mutex_lock (&workers_mutex);
+    WORKERSET_LOCK ();
 
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
@@ -109,12 +112,12 @@ inotify_init1 (int flags) __THROW
                 }
             }
 
-            pthread_mutex_unlock (&workers_mutex);
+            WORKERSET_UNLOCK ();
             return lfd;
         }
     }
 
-    pthread_mutex_unlock (&workers_mutex);
+    WORKERSET_UNLOCK ();
     errno = EMFILE;
     return -1;
 }
@@ -159,7 +162,7 @@ inotify_add_watch (int         fd,
         return -1;
     }
 
-    pthread_mutex_lock (&workers_mutex);
+    WORKERSET_LOCK ();
 
     /* look up for an appropriate worker */
     int i;
@@ -169,14 +172,14 @@ inotify_add_watch (int         fd,
             && wrk->io[INOTIFY_FD] == fd
             && wrk->closed == 0
             && is_opened (wrk->io[INOTIFY_FD])) {
-            pthread_mutex_lock (&wrk->mutex);
+            WORKER_LOCK (wrk);
 
             /* Closed flag could be set before we lock on a mutex */
             if (wrk->closed) {
-                pthread_mutex_unlock (&wrk->mutex);
+                WORKER_UNLOCK (wrk);
                 worker_free (wrk);
                 workers[i] = NULL;
-                pthread_mutex_unlock (&workers_mutex);
+                WORKERSET_UNLOCK ();
                 errno = EBADF;
                 return -1;
             }
@@ -188,7 +191,7 @@ inotify_add_watch (int         fd,
             int retval = wrk->cmd.retval;
             int error = wrk->cmd.error;
 
-            pthread_mutex_unlock (&wrk->mutex);
+            WORKER_UNLOCK (wrk);
 
             /* TODO: ???? */
             if (wrk->closed) {
@@ -196,7 +199,7 @@ inotify_add_watch (int         fd,
                 workers[i] = NULL;
             }
 
-            pthread_mutex_unlock (&workers_mutex);
+            WORKERSET_UNLOCK ();
             if (retval == -1) {
                 errno = error;
             }
@@ -204,7 +207,7 @@ inotify_add_watch (int         fd,
         }
     }
 
-    pthread_mutex_unlock (&workers_mutex);
+    WORKERSET_UNLOCK ();
     errno = EINVAL;
     return -1;
 }
@@ -228,7 +231,7 @@ inotify_rm_watch (int fd,
         return -1;	/* errno = EBADF */
     }
 
-    pthread_mutex_lock (&workers_mutex);
+    WORKERSET_LOCK ();
 
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
@@ -237,13 +240,13 @@ inotify_rm_watch (int fd,
             && wrk->io[INOTIFY_FD] == fd
             && wrk->closed == 0
             && is_opened (wrk->io[INOTIFY_FD])) {
-            pthread_mutex_lock (&wrk->mutex);
+            WORKER_LOCK (wrk);
 
             if (wrk->closed) {
-                pthread_mutex_unlock (&wrk->mutex);
+                WORKER_UNLOCK (wrk);
                 worker_free (wrk);
                 workers[i] = NULL;
-                pthread_mutex_unlock (&workers_mutex);
+                WORKERSET_UNLOCK ();
                 errno = EBADF;
                 return -1;
             }
@@ -255,7 +258,7 @@ inotify_rm_watch (int fd,
             int retval = wrk->cmd.retval;
             int error = wrk->cmd.error;
 
-            pthread_mutex_unlock (&wrk->mutex);
+            WORKER_UNLOCK (wrk);
 
             /* TODO: ???? */
             if (wrk->closed) {
@@ -263,7 +266,7 @@ inotify_rm_watch (int fd,
                 workers[i] = NULL;
             }
 
-            pthread_mutex_unlock (&workers_mutex);
+            WORKERSET_UNLOCK ();
             if (retval == -1) {
                 errno = error;
             }
@@ -271,7 +274,7 @@ inotify_rm_watch (int fd,
         }
     }
 
-    pthread_mutex_unlock (&workers_mutex);
+    WORKERSET_UNLOCK ();
     errno = EINVAL;
     return -1;
 }

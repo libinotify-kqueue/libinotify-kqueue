@@ -479,8 +479,8 @@ worker_thread (void *arg)
                 wrk->io[INOTIFY_FD] = -1;
                 worker_erase (wrk);
 
-                if (pthread_mutex_trylock (&wrk->mutex) == 0) {
-                    pthread_mutex_unlock (&wrk->mutex);
+                if (WORKER_TRYLOCK (wrk) == 0) {
+                    WORKER_UNLOCK (wrk);
                     worker_free (wrk);
                 }
                 /* If we could not lock on a worker, it means that an inotify

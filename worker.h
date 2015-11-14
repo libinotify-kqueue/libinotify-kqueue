@@ -86,6 +86,9 @@ struct worker {
     worker_cmd cmd;        /* operation to perform on a worker */
 };
 
+#define WORKER_LOCK(wrk)    pthread_mutex_lock (&(wrk)->mutex)
+#define WORKER_TRYLOCK(wrk) pthread_mutex_trylock (&(wrk)->mutex)
+#define WORKER_UNLOCK(wrk)  pthread_mutex_unlock (&(wrk)->mutex)
 
 worker* worker_create         (int flags);
 void    worker_free           (worker *wrk);
