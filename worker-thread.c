@@ -112,6 +112,17 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
 void
 flush_events (worker *wrk)
 {
+#ifdef SIGPIPE_RECIPIENT_IS_PROCESS
+    /*
+     * Most OSes (Linux, Solaris and FreeBSD) delivers SIGPIPE to thread which
+     * issued write (worker thread) as it is syncronous signal. At least some
+     * versions of NetBSD and OpenBSD delivers it to any thread in process
+     * making blocking SIGPIPE in worker thread useless. As closing of opposite
+     * end of the pipe is a legal method of closing inotify we try to reduce
+     * chances of SIGPIPE in this case with extra check.
+     */
+    if (is_opened (wrk->io[INOTIFY_FD]))
+#endif
     if (safe_writev (wrk->io[KQUEUE_FD], wrk->iov, wrk->iovcnt) == -1) {
         perror_msg ("Sending of inotify events to socket failed");
     }
