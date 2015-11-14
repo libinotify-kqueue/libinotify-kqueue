@@ -23,6 +23,7 @@
 #include "compat.h"
 
 #include <pthread.h>
+#include <semaphore.h>
 #include <signal.h> 
 #include <stdlib.h>
 #include <string.h>
@@ -56,7 +57,7 @@ void worker_cmd_init (worker_cmd *cmd)
 {
     assert (cmd != NULL);
     memset (cmd, 0, sizeof (worker_cmd));
-    pthread_barrier_init (&cmd->sync, NULL, 2);
+    sem_init (&cmd->sync_sem, 0, 0);
 }
 
 /**
@@ -112,10 +113,19 @@ worker_cmd_reset (worker_cmd *cmd)
 }
 
 /**
- * Wait on a worker command.
+ * Signal user thread if worker command is done
  *
- * This function is used by both user and worker threads for
- * synchronization.
+ * @param[in] cmd A pointer to #worker_cmd.
+ **/
+void
+worker_cmd_post (worker_cmd *cmd)
+{
+    assert (cmd != NULL);
+    sem_post(&cmd->sync_sem);
+}
+
+/**
+ * Wait for worker command to complete
  *
  * @param[in] cmd A pointer to #worker_cmd.
  **/
@@ -123,7 +133,8 @@ void
 worker_cmd_wait (worker_cmd *cmd)
 {
     assert (cmd != NULL);
-    pthread_barrier_wait (&cmd->sync);
+    do { /* NOTHING */
+    } while (sem_wait(&cmd->sync_sem) == -1 && errno == EINTR);
 }
 
 /**
@@ -137,7 +148,7 @@ void
 worker_cmd_release (worker_cmd *cmd)
 {
     assert (cmd != NULL);
-    pthread_barrier_destroy (&cmd->sync);
+    sem_destroy (&cmd->sync_sem);
 }
 
 /**

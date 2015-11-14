@@ -163,8 +163,7 @@ process_command (worker *wrk)
         return;
     }
 
-    /* TODO: is the situation when nobody else waits on a barrier possible? */
-    worker_cmd_wait (&wrk->cmd);
+    worker_cmd_post (&wrk->cmd);
 }
 
 /** 

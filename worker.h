@@ -28,6 +28,7 @@
 #include <sys/uio.h> /* iovec */
 
 #include <pthread.h>
+#include <semaphore.h>
 
 typedef struct worker worker;
 
@@ -63,12 +64,13 @@ typedef struct worker_cmd {
         int rm_id;
     };
 
-    pthread_barrier_t sync;
+    sem_t sync_sem;
 } worker_cmd;
 
 void worker_cmd_init    (worker_cmd *cmd);
 void worker_cmd_add     (worker_cmd *cmd, const char *filename, uint32_t mask);
 void worker_cmd_remove  (worker_cmd *cmd, int watch_id);
+void worker_cmd_post    (worker_cmd *cmd);
 void worker_cmd_wait    (worker_cmd *cmd);
 void worker_cmd_release (worker_cmd *cmd);
 
