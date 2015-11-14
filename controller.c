@@ -47,6 +47,8 @@ static pthread_mutex_t workers_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define WORKERSET_LOCK()   pthread_mutex_lock (&workers_mutex)
 #define WORKERSET_UNLOCK() pthread_mutex_unlock (&workers_mutex)
 
+static worker *worker_find (int fd);
+
 /**
  * Create a new inotify instance.
  *
@@ -162,25 +164,11 @@ inotify_add_watch (int         fd,
         return -1;
     }
 
-    WORKERSET_LOCK ();
-
     /* look up for an appropriate worker */
-    int i;
-    for (i = 0; i < WORKER_SZ; i++) {
-        worker *wrk = workers[i];
-        if (wrk != NULL
-            && wrk->io[INOTIFY_FD] == fd
-            && wrk->closed == 0
-            && is_opened (wrk->io[INOTIFY_FD])) {
-            WORKER_LOCK (wrk);
-
-            /* Closed flag could be set before we lock on a mutex */
-            if (wrk->closed) {
-                WORKER_UNLOCK (wrk);
-                WORKERSET_UNLOCK ();
-                errno = EBADF;
-                return -1;
-            }
+    worker *wrk = worker_find (fd);
+    if (wrk == NULL) {
+        return -1;
+    }
 
             worker_cmd_add (&wrk->cmd, name, mask);
             safe_write (wrk->io[INOTIFY_FD], "*", 1);
@@ -195,12 +183,6 @@ inotify_add_watch (int         fd,
                 errno = error;
             }
             return retval;
-        }
-    }
-
-    WORKERSET_UNLOCK ();
-    errno = EINVAL;
-    return -1;
 }
 
 /**
@@ -222,23 +204,11 @@ inotify_rm_watch (int fd,
         return -1;	/* errno = EBADF */
     }
 
-    WORKERSET_LOCK ();
-
-    int i;
-    for (i = 0; i < WORKER_SZ; i++) {
-        worker *wrk = workers[i];
-        if (wrk != NULL
-            && wrk->io[INOTIFY_FD] == fd
-            && wrk->closed == 0
-            && is_opened (wrk->io[INOTIFY_FD])) {
-            WORKER_LOCK (wrk);
-
-            if (wrk->closed) {
-                WORKER_UNLOCK (wrk);
-                WORKERSET_UNLOCK ();
-                errno = EBADF;
-                return -1;
-            }
+    /* look up for an appropriate worker */
+    worker *wrk = worker_find (fd);
+    if (wrk == NULL) {
+        return -1;
+    }
 
             worker_cmd_remove (&wrk->cmd, wd);
             safe_write (wrk->io[INOTIFY_FD], "*", 1);
@@ -253,12 +223,6 @@ inotify_rm_watch (int fd,
                 errno = error;
             }
             return retval;
-        }
-    }
-
-    WORKERSET_UNLOCK ();
-    errno = EINVAL;
-    return -1;
 }
 
 /**
@@ -282,4 +246,41 @@ worker_erase (worker *wrk)
             break;
         }
     }
+}
+
+/**
+ * Find a worker in a list of workers by Inotify instance file descriptor
+ *
+ * @param[in] fd Inotify instance file descriptor.
+ * @return pointer on locked worker on success, NULL on failure with errno set.
+ **/
+static worker *
+worker_find (int fd)
+{
+    WORKERSET_LOCK ();
+
+    int i;
+    for (i = 0; i < WORKER_SZ; i++) {
+        worker *wrk = workers[i];
+        if (wrk != NULL
+            && wrk->io[INOTIFY_FD] == fd
+            && wrk->closed == 0
+            && is_opened (wrk->io[INOTIFY_FD])) {
+            WORKER_LOCK (wrk);
+
+            /* Closed flag could be set before we lock on a mutex */
+            if (wrk->closed) {
+                WORKER_UNLOCK (wrk);
+                WORKERSET_UNLOCK ();
+                errno = EBADF;
+                return NULL;
+            }
+
+            return wrk;
+        }
+    }
+
+    WORKERSET_UNLOCK ();
+    errno = EINVAL;
+    return NULL;
 }
