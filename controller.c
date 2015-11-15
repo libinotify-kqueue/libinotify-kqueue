@@ -196,7 +196,13 @@ inotify_add_watch (int         fd,
     worker_cmd_add (&wrk->cmd, name, mask);
     wrk->cmd.retval = -1;
     wrk->cmd.error = EBADF;
+#ifdef EVFILT_USER
+    struct kevent ke;
+    EV_SET (&ke, wrk->io[KQUEUE_FD], EVFILT_USER, 0, NOTE_TRIGGER, 0, 0);
+    if (kevent (wrk->kq, &ke, 1, NULL, 0, NULL) != -1) {
+#else
     if (safe_write (wrk->io[INOTIFY_FD], "*", 1) != -1) {
+#endif
         worker_cmd_wait (&wrk->cmd);
     }
     retval = wrk->cmd.retval;
@@ -240,7 +246,13 @@ inotify_rm_watch (int fd,
     worker_cmd_remove (&wrk->cmd, wd);
     wrk->cmd.retval = -1;
     wrk->cmd.error = EBADF;
+#ifdef EVFILT_USER
+    struct kevent ke;
+    EV_SET (&ke, wrk->io[KQUEUE_FD], EVFILT_USER, 0, NOTE_TRIGGER, 0, 0);
+    if (kevent (wrk->kq, &ke, 1, NULL, 0, NULL) != -1) {
+#else
     if (safe_write (wrk->io[INOTIFY_FD], "*", 1) != -1) {
+#endif
         worker_cmd_wait (&wrk->cmd);
     }
     retval = wrk->cmd.retval;

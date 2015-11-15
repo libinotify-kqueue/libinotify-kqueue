@@ -231,6 +231,14 @@ worker_create (int flags)
 
     SLIST_INIT (&wrk->head);
 
+#ifdef EVFILT_USER
+    EV_SET (&ev, wrk->io[KQUEUE_FD], EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, 0);
+    if (kevent (wrk->kq, &ev, 1, NULL, 0, NULL) == -1) {
+        perror_msg ("Failed to register kqueue event on pipe");
+        goto failure;
+    }
+#endif
+
     EV_SET (&ev,
             wrk->io[KQUEUE_FD],
             EVFILT_READ,

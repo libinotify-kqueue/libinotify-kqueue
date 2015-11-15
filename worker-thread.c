@@ -145,9 +145,11 @@ process_command (worker *wrk)
 {
     assert (wrk != NULL);
 
+#ifndef EVFILT_USER
     /* read a byte */
     char unused;
     safe_read (wrk->io[KQUEUE_FD], &unused, 1);
+#endif
 
     if (wrk->cmd.type == WCMD_ADD) {
         wrk->cmd.retval = worker_add_or_modify (wrk,
