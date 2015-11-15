@@ -1,16 +1,22 @@
-Index: lib/libc/sys/open.2
-===================================================================
---- lib/libc/sys/open.2	(revision 272513)
-+++ lib/libc/sys/open.2	(working copy)
-@@ -115,6 +115,7 @@
+commit c9e14bfde94f7342b5f533a37682e53345dcdb85
+Author: Vladimir Kondratiev <wulf@cicgroup.ru>
+Date:   Mon Jul 27 19:44:44 2015 +0300
+
+    Add O_SYMLINK open(2) flag support
+
+diff --git a/lib/libc/sys/open.2 b/lib/libc/sys/open.2
+index a546666..5366e92 100644
+--- lib/libc/sys/open.2
++++ lib/libc/sys/open.2
+@@ -115,6 +115,7 @@ O_DIRECT	eliminate or reduce cache effects
  O_FSYNC		synchronous writes
  O_SYNC		synchronous writes
  O_NOFOLLOW	do not follow symlinks
 +O_SYMLINK	allow open of symlinks
- O_NOCTTY	don't assign controlling terminal
- O_TTY_INIT	restore default terminal attributes
+ O_NOCTTY	ignored
+ O_TTY_INIT	ignored
  O_DIRECTORY	error if file is not a directory
-@@ -179,6 +180,14 @@
+@@ -179,6 +180,14 @@ is a symbolic link then the
  .Fn open
  will fail.
  .Pp
@@ -25,11 +31,11 @@ Index: lib/libc/sys/open.2
  When opening a file, a lock with
  .Xr flock 2
  semantics can be obtained by setting
-Index: sys/kern/vfs_vnops.c
-===================================================================
---- sys/kern/vfs_vnops.c	(revision 272513)
-+++ sys/kern/vfs_vnops.c	(working copy)
-@@ -243,8 +243,8 @@
+diff --git a/sys/kern/vfs_vnops.c b/sys/kern/vfs_vnops.c
+index 6d07e7f..29b9973 100644
+--- sys/kern/vfs_vnops.c
++++ sys/kern/vfs_vnops.c
+@@ -266,8 +266,8 @@ restart:
  		}
  	} else {
  		ndp->ni_cnd.cn_nameiop = LOOKUP;
@@ -40,7 +46,7 @@ Index: sys/kern/vfs_vnops.c
  		if (!(fmode & FWRITE))
  			ndp->ni_cnd.cn_flags |= LOCKSHARED;
  		if (!(vn_open_flags & VN_OPEN_NOAUDIT))
-@@ -281,7 +281,7 @@
+@@ -304,7 +304,7 @@ vn_open_vnode(struct vnode *vp, int fmode, struct ucred *cred,
  	struct flock lf;
  	int error, have_flock, lock_flags, type;
  
@@ -49,7 +55,7 @@ Index: sys/kern/vfs_vnops.c
  		return (EMLINK);
  	if (vp->v_type == VSOCK)
  		return (EOPNOTSUPP);
-@@ -291,6 +291,8 @@
+@@ -314,6 +314,8 @@ vn_open_vnode(struct vnode *vp, int fmode, struct ucred *cred,
  	if (fmode & (FWRITE | O_TRUNC)) {
  		if (vp->v_type == VDIR)
  			return (EISDIR);
@@ -58,7 +64,7 @@ Index: sys/kern/vfs_vnops.c
  		accmode |= VWRITE;
  	}
  	if (fmode & FREAD)
-@@ -753,6 +755,8 @@
+@@ -784,6 +786,8 @@ vn_read(fp, uio, active_cred, flags, td)
  	    uio->uio_td, td));
  	KASSERT(flags & FOF_OFFSET, ("No FOF_OFFSET"));
  	vp = fp->f_vnode;
@@ -67,7 +73,7 @@ Index: sys/kern/vfs_vnops.c
  	ioflag = 0;
  	if (fp->f_flag & FNONBLOCK)
  		ioflag |= IO_NDELAY;
-@@ -839,6 +843,8 @@
+@@ -844,6 +848,8 @@ vn_write(fp, uio, active_cred, flags, td)
  	    uio->uio_td, td));
  	KASSERT(flags & FOF_OFFSET, ("No FOF_OFFSET"));
  	vp = fp->f_vnode;
@@ -76,7 +82,7 @@ Index: sys/kern/vfs_vnops.c
  	if (vp->v_type == VREG)
  		bwillwrite();
  	ioflag = IO_UNIT;
-@@ -1290,6 +1296,10 @@
+@@ -1313,6 +1319,10 @@ vn_truncate(struct file *fp, off_t length, struct ucred *active_cred,
  		error = EISDIR;
  		goto out;
  	}
@@ -87,19 +93,15 @@ Index: sys/kern/vfs_vnops.c
  #ifdef MAC
  	error = mac_vnode_check_write(active_cred, fp->f_cred, vp);
  	if (error)
-Index: sys/sys/fcntl.h
-===================================================================
---- sys/sys/fcntl.h	(revision 272513)
-+++ sys/sys/fcntl.h	(working copy)
-@@ -129,6 +129,11 @@
- #define	O_CLOEXEC	0x00100000
+diff --git a/sys/sys/fcntl.h b/sys/sys/fcntl.h
+index 5793229..a804c7e 100644
+--- sys/sys/fcntl.h
++++ sys/sys/fcntl.h
+@@ -131,6 +131,7 @@ typedef	__pid_t		pid_t;
+ 
+ #if __BSD_VISIBLE
+ #define	O_VERIFY	0x00200000	/* open only after verification */
++#define	O_SYMLINK	0x00400000	/* allow open of a symlink */
  #endif
  
-+#if __BSD_VISIBLE
-+/* allow open of a symlink */
-+#define	O_SYMLINK	0x00200000
-+#endif
-+
  /*
-  * XXX missing O_DSYNC, O_RSYNC.
-  */

@@ -1,8 +1,14 @@
-Index: lib/libc/sys/kqueue.2
-===================================================================
---- lib/libc/sys/kqueue.2	(revision 272513)
-+++ lib/libc/sys/kqueue.2	(working copy)
-@@ -365,6 +365,12 @@
+commit 11f8ed201ef663f46a7bb9cbe6363d71a4cece30
+Author: Vladimir Kondratiev <wulf@cicgroup.ru>
+Date:   Mon Jul 27 20:06:19 2015 +0300
+
+    Implement NOTE_OPEN, NOTE_CLOSE and NOTE_READ kqueue vnode events
+
+diff --git a/lib/libc/sys/kqueue.2 b/lib/libc/sys/kqueue.2
+index ca94852..b0d7f8b 100644
+--- lib/libc/sys/kqueue.2
++++ lib/libc/sys/kqueue.2
+@@ -387,6 +387,12 @@ The file referenced by the descriptor was renamed.
  Access to the file was revoked via
  .Xr revoke 2
  or the underlying file system was unmounted.
@@ -15,11 +21,11 @@ Index: lib/libc/sys/kqueue.2
  .El
  .Pp
  On return,
-Index: sys/kern/vfs_subr.c
-===================================================================
---- sys/kern/vfs_subr.c	(revision 272513)
-+++ sys/kern/vfs_subr.c	(working copy)
-@@ -4284,6 +4284,33 @@
+diff --git a/sys/kern/vfs_subr.c b/sys/kern/vfs_subr.c
+index 6976c3b..4df8de8 100644
+--- sys/kern/vfs_subr.c
++++ sys/kern/vfs_subr.c
+@@ -4418,6 +4418,33 @@ vop_symlink_post(void *ap, int rc)
  		VFS_KNOTE_LOCKED(a->a_dvp, NOTE_WRITE);
  }
  
@@ -53,11 +59,11 @@ Index: sys/kern/vfs_subr.c
  static struct knlist fs_knlist;
  
  static void
-Index: sys/kern/vnode_if.src
-===================================================================
---- sys/kern/vnode_if.src	(revision 272513)
-+++ sys/kern/vnode_if.src	(working copy)
-@@ -121,6 +121,7 @@
+diff --git a/sys/kern/vnode_if.src b/sys/kern/vnode_if.src
+index 63f8eb9..0789cdd 100644
+--- sys/kern/vnode_if.src
++++ sys/kern/vnode_if.src
+@@ -121,6 +121,7 @@ vop_mknod {
  
  
  %% open		vp	L L L
@@ -65,7 +71,7 @@ Index: sys/kern/vnode_if.src
  
  vop_open {
  	IN struct vnode *vp;
-@@ -132,6 +133,7 @@
+@@ -132,6 +133,7 @@ vop_open {
  
  
  %% close	vp	L L L
@@ -73,7 +79,7 @@ Index: sys/kern/vnode_if.src
  
  vop_close {
  	IN struct vnode *vp;
-@@ -186,6 +188,7 @@
+@@ -186,6 +188,7 @@ vop_markatime {
  };
  
  %% read		vp	L L L
@@ -81,11 +87,11 @@ Index: sys/kern/vnode_if.src
  
  vop_read {
  	IN struct vnode *vp;
-Index: sys/sys/event.h
-===================================================================
---- sys/sys/event.h	(revision 272513)
-+++ sys/sys/event.h	(working copy)
-@@ -118,6 +118,9 @@
+diff --git a/sys/sys/event.h b/sys/sys/event.h
+index 0f13231..a25a62e 100644
+--- sys/sys/event.h
++++ sys/sys/event.h
+@@ -120,6 +120,9 @@ struct kevent {
  #define	NOTE_LINK	0x0010			/* link count changed */
  #define	NOTE_RENAME	0x0020			/* vnode was renamed */
  #define	NOTE_REVOKE	0x0040			/* vnode access was revoked */
@@ -95,24 +101,24 @@ Index: sys/sys/event.h
  
  /*
   * data/hint flags for EVFILT_PROC and EVFILT_PROCDESC, shared with userspace
-Index: sys/sys/vnode.h
-===================================================================
---- sys/sys/vnode.h	(revision 272513)
-+++ sys/sys/vnode.h	(working copy)
-@@ -759,6 +759,7 @@
- int	vop_panic(struct vop_generic_args *ap);
+diff --git a/sys/sys/vnode.h b/sys/sys/vnode.h
+index cce39ef..d4a507a 100644
+--- sys/sys/vnode.h
++++ sys/sys/vnode.h
+@@ -772,6 +772,7 @@ int	dead_read(struct vop_read_args *ap);
+ int	dead_write(struct vop_write_args *ap);
  
  /* These are called from within the actual VOPS. */
 +void	vop_close_post(void *a, int rc);
  void	vop_create_post(void *a, int rc);
  void	vop_deleteextattr_post(void *a, int rc);
  void	vop_link_post(void *a, int rc);
-@@ -768,6 +769,8 @@
+@@ -781,6 +782,8 @@ void	vop_lookup_post(void *a, int rc);
  void	vop_lookup_pre(void *a);
  void	vop_mkdir_post(void *a, int rc);
  void	vop_mknod_post(void *a, int rc);
 +void	vop_open_post(void *a, int rc);
 +void	vop_read_post(void *a, int rc);
+ void	vop_reclaim_post(void *a, int rc);
  void	vop_remove_post(void *a, int rc);
  void	vop_rename_post(void *a, int rc);
- void	vop_rename_pre(void *a);
