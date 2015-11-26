@@ -23,7 +23,6 @@
 #include "compat.h"
 
 #include <pthread.h>
-#include <semaphore.h>
 #include <signal.h> 
 #include <stdlib.h>
 #include <string.h>

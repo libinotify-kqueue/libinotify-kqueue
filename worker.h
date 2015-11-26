@@ -28,7 +28,6 @@
 #include <sys/uio.h> /* iovec */
 
 #include <pthread.h>
-#include <semaphore.h>
 
 typedef struct worker worker;
 

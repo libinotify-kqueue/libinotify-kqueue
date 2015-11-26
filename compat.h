@@ -55,6 +55,26 @@
 #endif
 #endif
 
+#ifdef __APPLE__
+#include <dispatch/dispatch.h>
+#define sem_t dispatch_semaphore_t
+#define sem_init(sem, pshared, value) ({ \
+    int ret_; \
+    *(sem) = dispatch_semaphore_create(value); \
+    ret_ = (*(sem) == NULL) ? -1 : 0; \
+    ret_; \
+})
+#define sem_wait(sem) (dispatch_semaphore_wait(*(sem), DISPATCH_TIME_FOREVER) * 0)
+#define sem_post(sem) (dispatch_semaphore_signal(*(sem)) * 0)
+#define sem_destroy(sem) ({ \
+    while (dispatch_semaphore_wait(*(sem), DISPATCH_TIME_NOW) == 0) {} \
+    dispatch_release(*(sem)); \
+    0; \
+})
+#else
+#include <semaphore.h>
+#endif
+
 #include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>
