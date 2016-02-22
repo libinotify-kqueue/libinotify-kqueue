@@ -12,6 +12,7 @@ nobase_include_HEADERS = sys/inotify.h
 libinotify_la_SOURCES = \
     utils.c \
     dep-list.c \
+    event-queue.c \
     inotify-watch.c \
     watch-set.c \
     watch.c \

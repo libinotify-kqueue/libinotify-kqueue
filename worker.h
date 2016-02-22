@@ -25,14 +25,13 @@
 
 #include "compat.h"
 
-#include <sys/uio.h> /* iovec */
-
 #include <pthread.h>
 
 typedef struct worker worker;
 
 #include "worker-thread.h"
 #include "dep-list.h"
+#include "event-queue.h"
 #include "inotify-watch.h"
 #include "watch.h"
 
@@ -76,15 +75,13 @@ void worker_cmd_release (worker_cmd *cmd);
 struct worker {
     int kq;                /* kqueue descriptor */
     volatile int io[2];    /* a socket pair */
-    struct iovec *iov;     /* inotify events to send */
-    int iovcnt;            /* number of events enqueued */
-    int iovalloc;          /* number of iovs allocated */
     pthread_t thread;      /* worker thread */
     SLIST_HEAD(, i_watch) head; /* linked list of inotify watches */
 
     pthread_mutex_t mutex; /* worker mutex */
     _Atomic(uint) mutex_rc;/* worker mutex sleepers/holders refcount */
     worker_cmd cmd;        /* operation to perform on a worker */
+    event_queue eq;        /* inotify events queue */
 };
 
 #define WORKER_LOCK(wrk) do { \

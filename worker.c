@@ -39,6 +39,7 @@
 
 #include "sys/inotify.h"
 
+#include "event-queue.h"
 #include "utils.h"
 #include "worker-thread.h"
 #include "worker.h"
@@ -211,9 +212,6 @@ worker_create (int flags)
         goto failure;
     }
 
-    wrk->iovalloc = 0;
-    wrk->iovcnt = 0;
-    wrk->iov = NULL;
     wrk->io[INOTIFY_FD] = -1;
     wrk->io[KQUEUE_FD] = -1;
 
@@ -255,6 +253,7 @@ worker_create (int flags)
     atomic_init (&wrk->mutex_rc, 0);
 
     worker_cmd_init (&wrk->cmd);
+    event_queue_init (&wrk->eq);
 
     /* create a run a worker thread */
     pthread_attr_init (&attr);
@@ -295,7 +294,6 @@ worker_free (worker *wrk)
 {
     assert (wrk != NULL);
 
-    int i;
     i_watch *iw;
 
     if (wrk->io[KQUEUE_FD] != -1) {
@@ -311,10 +309,6 @@ worker_free (worker *wrk)
         iwatch_free (iw);
     }
 
-    for (i = 0; i < wrk->iovcnt; i++) {
-        free (wrk->iov[i].iov_base);
-    }
-    free (wrk->iov);
     /* Wait for user thread(s) to release worker`s mutex */
     while (atomic_load (&wrk->mutex_rc) > 0) {
         WORKER_LOCK (wrk);
@@ -323,6 +317,7 @@ worker_free (worker *wrk)
     pthread_mutex_destroy (&wrk->mutex);
     /* And only after that destroy worker_cmd sync primitives */
     worker_cmd_release (&wrk->cmd);
+    event_queue_free (&wrk->eq);
     free (wrk);
 }
 
@@ -396,8 +391,7 @@ worker_remove (worker *wrk,
     SLIST_FOREACH (iw, &wrk->head, next) {
 
         if (iw->wd == id) {
-            enqueue_event (iw, IN_IGNORED, NULL);
-            flush_events (wrk);
+            event_queue_enqueue (&wrk->eq, id, IN_IGNORED, 0, NULL);
             SLIST_REMOVE (&wrk->head, iw, i_watch, next);
             iwatch_free (iw);
             return 0;

@@ -52,7 +52,7 @@ static void handle_moved (void *udata, dep_item *from_di, dep_item *to_di);
  * @param[in] di   A pointer to dependency item for subfiles (NULL for user).
  * @return 0 on success, -1 otherwise.
  **/
-int
+static int
 enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
 {
     assert (iw != NULL);
@@ -68,17 +68,6 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
         iw->is_closed = 1;
     }
 
-    if (wrk->iovcnt >= wrk->iovalloc) {
-        int to_allocate = wrk->iovcnt + 1;
-        void *ptr = realloc (wrk->iov, sizeof (struct iovec) * to_allocate);
-        if (ptr == NULL) {
-            perror_msg ("Failed to extend events to %d items", to_allocate);       
-            return -1;
-        }
-        wrk->iov = ptr;
-        wrk->iovalloc = to_allocate;
-    }
-
     const char *name = NULL;
     uint32_t cookie = 0;
     if (di != NULL) {
@@ -91,48 +80,12 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
         }
     }
 
-    wrk->iov[wrk->iovcnt].iov_base = create_inotify_event (iw->wd, mask,
-        cookie, name, &wrk->iov[wrk->iovcnt].iov_len);
-
-    if (wrk->iov[wrk->iovcnt].iov_base != NULL) {
-        ++wrk->iovcnt;
-    } else {
-        perror_msg ("Failed to create a inotify event %x", mask);
+    if (event_queue_enqueue (&wrk->eq, iw->wd, mask, cookie, name) == -1) {
+        perror_msg ("Failed to enqueue a inotify event %x", mask);
         return -1;
     }
 
     return 0;
-}
-
-/**
- * Flush inotify events queue to socket
- *
- * @param[in] wrk A pointer to #worker.
- **/
-void
-flush_events (worker *wrk)
-{
-#ifdef SIGPIPE_RECIPIENT_IS_PROCESS
-    /*
-     * Most OSes (Linux, Solaris and FreeBSD) delivers SIGPIPE to thread which
-     * issued write (worker thread) as it is syncronous signal. At least some
-     * versions of NetBSD and OpenBSD delivers it to any thread in process
-     * making blocking SIGPIPE in worker thread useless. As closing of opposite
-     * end of the pipe is a legal method of closing inotify we try to reduce
-     * chances of SIGPIPE in this case with extra check.
-     */
-    if (is_opened (wrk->io[INOTIFY_FD]))
-#endif
-    if (safe_writev (wrk->io[KQUEUE_FD], wrk->iov, wrk->iovcnt) == -1) {
-        perror_msg ("Sending of inotify events to socket failed");
-    }
-
-    int i;
-    for (i = 0; i < wrk->iovcnt; i++) {
-        free (wrk->iov[i].iov_base);
-    }
-
-    wrk->iovcnt = 0;
 }
 
 /**
@@ -440,7 +393,7 @@ produce_notifications (worker *wrk, struct kevent *event)
             }
         }
     }
-    flush_events (wrk);
+    event_queue_flush (&wrk->eq, (int *) wrk->io);
 
 #ifdef NOTE_CLOSE
     if (flags & NOTE_CLOSE) {
