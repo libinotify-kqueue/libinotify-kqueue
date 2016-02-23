@@ -48,8 +48,14 @@ everything works in your system:
 
   $ make test
 
-There are 60+ tests, and since some events cann't be implemented
-using only userspace kqueue(2), this test will always fail:
+There are 100+ tests, and since some events cann't be implemented
+using only original kqueue(2), these tests will most probably fail:
+
+> In test "Directory notifications":
+>    failed: receive IN_MOVED_FROM event on moving file from directory to
+>            another location within the same mount point
+>    failed: receive IN_MOVED_TO event on moving file to directory from
+>            another location within the same mount point
 
 > In test "Open/close notifications":
 >    failed: receive IN_OPEN on cat
@@ -59,14 +65,18 @@ using only userspace kqueue(2), this test will always fail:
 >    failed: receive IN_OPEN on modify
 >    failed: receive IN_CLOSE_WRITE on modify
 
-Sometimes these cheks will also fail:
+> In test "Symbolic links":
+>    failed: Start watch successfully on a symlink file with IN_DONT_FOLLOW
+>    failed: Receive IN_ATTRIB after touching symlink itself
+>    failed: Receive IN_MOVE_SELF after moving the symlink
+>    failed: Receive IN_DELETE_SELF after removing the symlink
 
-> In test "Directory notifications":
->    failed: receive IN_DELETE_SELF on removing a directory
->    failed: receive IN_IGNORED on removing a directory
+To solve these issues some vfs and kqueue extensions was developed.
+Patches can be found in patches subdirectory of project and are
+applicable to FreeBSD 11-CURRENT. A patched kernel passes all tests
+flawlessly.
 
-It is a known problem and it is going to be fixed. If you will get
-any other results, please feel free to report it at:
+If you will get any other results, please feel free to report it at:
 
   https://github.com/dmatveev/libinotify-kqueue/issues
 
@@ -95,23 +105,38 @@ by the library's inotify_init().
 Status
 ------
 
-The library is feature-complete, i.e. it implements and provides
-everything what can be implemented/provided using kqueue(2). The
-support of the remaining events (listed in the "Testing" section)
-will be added as soon as it will be possible to do with kqueue(2)
-(or using other tools in the userspace) in all major supported
-operating systems.
+The library is almost feature-complete, i.e. it implements and
+provides most of what can be implemented/provided using kqueue(2).
+Current state of project is described in following table:
 
-The other point is the performance, and the directory difference
-algorithm used in libinotify-kqueue can be optimized. It is the
-primary scope of the future work on the library.
+                    Original Patched
+  Inotify event     kernel   kernel     Event flags     Supported
 
+  IN_ACCESS         No       Yes        IN_IGNORED      Yes
+  IN_ATTRIB         Yes      Yes        IN_ISDIR        Yes
+  IN_CLOSE_WRITE    No       Yes *      IN_UNMOUNT      Yes
+  IN_CLOSE_NOWRITE  No       Yes        IN_Q_OVERFLOW   Yes
+  IN_CREATE         Yes      Yes
+  IN_DELETE         Yes      Yes        Watch flags     Supported
+  IN_DELETE_SELF    Yes      Yes
+  IN_MODIFY         Yes      Yes        IN_ONLYDIR      Yes
+  IN_MOVE_SELF      Yes      Yes        IN_DONT_FOLLOW  Yes ***
+  IN_MOVED_FROM     Yes **   Yes        IN_EXCL_UNLINK  No  ****
+  IN_MOVED_TO       Yes **   Yes        IN_MASK_ADD     Yes
+  IN_OPEN           No       Yes        IN_ONESHOT      Yes
+
+* IN_CLOSE_WRITE event have a different semantic. It fires not on
+  closing of a file opened with O_RDWR or O_WRONLY flags but on
+  closing of a file when actual write have happened
+** Only renaming file inside watched directory is supported
+*** Watching a symlink requires O_SYMLINK kernel patch to be applied
+**** Libinotify-kqueue behaves as IN_EXCL_UNLINK flag is always set
 
 
 Thanks
 ------
 
-Thanks to Julio Merino for mentoring my work during the initial
+Thanks to Julio Merino for mentoring this work during the initial
 library development on Google Summer Of Code 2011.
 
 Thanks to Antoine Jacoutot for support, reports, and the work
