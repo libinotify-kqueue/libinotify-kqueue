@@ -1,5 +1,6 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2014-2016 Vladimir Kondratiev <wulf@cicgroup.ru>
 
   Copyright 2008, 2013, 2014
       The Board of Trustees of the Leland Stanford Junior University
