@@ -24,6 +24,7 @@
 #include <sys/uio.h>   /* iovec */
 
 #include <stdlib.h>    /* realloc */
+#include <string.h>    /* memmove */
 
 #include "config.h"
 #include "event-queue.h"
@@ -117,11 +118,23 @@ event_queue_enqueue (event_queue *eq,
 /**
  * Flush inotify events queue to socket
  *
- * @param[in] eq A pointer to #event_queue.
- * @param[in] fd A pair of descriptors used in referencing the pipe
+ * @param[in] eq      A pointer to #event_queue.
+ * @param[in] fd      A pair of descriptors used in referencing the pipe
+ * @param[in] sbspace Amount of space in socket buffer available to write
+ *                    w/o blocking
  **/
-void event_queue_flush (event_queue *eq, int fd[2])
+void event_queue_flush (event_queue *eq, int fd[2], size_t sbspace)
 {
+    int iovcnt;
+    size_t iovlen = 0;
+
+    for (iovcnt = 0; iovcnt < eq->count; iovcnt++) {
+        iovlen += eq->iov[iovcnt].iov_len;
+        if (iovlen > sbspace) {
+            break;
+        }
+    }
+
 #ifdef SIGPIPE_RECIPIENT_IS_PROCESS
     /*
      * Most OSes (Linux, Solaris and FreeBSD) delivers SIGPIPE to thread which
@@ -133,14 +146,17 @@ void event_queue_flush (event_queue *eq, int fd[2])
      */
     if (is_opened (fd[INOTIFY_FD]))
 #endif
-    if (safe_writev (fd[KQUEUE_FD], eq->iov, eq->count) == -1) {
+    if (safe_writev (fd[KQUEUE_FD], eq->iov, iovcnt) == -1) {
         perror_msg ("Sending of inotify events to socket failed");
     }
 
     int i;
-    for (i = 0; i < eq->count; i++) {
+    for (i = 0; i < iovcnt; i++) {
         free (eq->iov[i].iov_base);
     }
 
-    eq->count = 0;
+    memmove (&eq->iov[0],
+             &eq->iov[iovcnt],
+             sizeof(struct iovec) * (eq->count - iovcnt));
+    eq->count -= iovcnt;
 }
