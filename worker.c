@@ -201,7 +201,7 @@ worker*
 worker_create (int flags)
 {
     pthread_attr_t attr;
-    struct kevent ev;
+    struct kevent ev[2];
     sigset_t set, oset;
     int result;
 
@@ -229,22 +229,26 @@ worker_create (int flags)
     SLIST_INIT (&wrk->head);
 
 #ifdef EVFILT_USER
-    EV_SET (&ev, wrk->io[KQUEUE_FD], EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, 0);
-    if (kevent (wrk->kq, &ev, 1, NULL, 0, NULL) == -1) {
-        perror_msg ("Failed to register kqueue event on pipe");
-        goto failure;
-    }
-#endif
-
-    EV_SET (&ev,
+    EV_SET (&ev[0], wrk->io[KQUEUE_FD], EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, 0);
+#else
+    EV_SET (&ev[0],
             wrk->io[KQUEUE_FD],
             EVFILT_READ,
             EV_ADD | EV_ENABLE | EV_CLEAR,
             NOTE_LOWAT,
             1,
             0);
+#endif
 
-    if (kevent (wrk->kq, &ev, 1, NULL, 0, NULL) == -1) {
+    EV_SET (&ev[1],
+            wrk->io[KQUEUE_FD],
+            EVFILT_WRITE,
+            EV_ADD | EV_ENABLE | EV_CLEAR,
+            0,
+            0,
+            0);
+
+    if (kevent (wrk->kq, ev, 2, NULL, 0, NULL) == -1) {
         perror_msg ("Failed to register kqueue event on pipe");
         goto failure;
     }

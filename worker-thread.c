@@ -393,7 +393,6 @@ produce_notifications (worker *wrk, struct kevent *event)
             }
         }
     }
-    event_queue_flush (&wrk->eq, (int *) wrk->io);
 
 #ifdef NOTE_CLOSE
     if (flags & NOTE_CLOSE) {
@@ -417,16 +416,21 @@ worker_thread (void *arg)
 {
     assert (arg != NULL);
     worker* wrk = (worker *) arg;
+    size_t sbspace = 0;
 
     for (;;) {
         struct kevent received;
+
+        if (sbspace > 0 && wrk->eq.count > 0) {
+            event_queue_flush (&wrk->eq, (int *) wrk->io);
+            sbspace = 0;
+        }
 
         int ret = kevent (wrk->kq, NULL, 0, &received, 1, NULL);
         if (ret == -1) {
             perror_msg ("kevent failed");
             continue;
         }
-
         if (received.ident == wrk->io[KQUEUE_FD]) {
             if (received.flags & EV_EOF) {
                 wrk->io[INOTIFY_FD] = -1;
@@ -440,6 +444,8 @@ worker_thread (void *arg)
                 worker_free (wrk);
 
                 return NULL;
+            } else if (received.filter == EVFILT_WRITE) {
+                sbspace = received.data;
             } else {
                 process_command (wrk);
             }
