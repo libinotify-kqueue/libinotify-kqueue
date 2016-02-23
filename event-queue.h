@@ -26,6 +26,9 @@
 #include <sys/types.h> /* uint32_t */
 #include <sys/uio.h>   /* iovec */
 
+/* linux`s /proc/sys/fs/inotify/max_queued_events counterpart */
+#define MAX_QUEUED_EVENTS	16384
+
 typedef struct event_queue {
     struct iovec *iov; /* inotify events to send */
     int count;         /* number of events enqueued */

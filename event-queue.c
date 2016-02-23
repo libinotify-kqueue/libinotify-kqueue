@@ -26,6 +26,7 @@
 #include <stdlib.h>    /* realloc */
 #include <string.h>    /* memmove */
 
+#include "sys/inotify.h"
 #include "config.h"
 #include "event-queue.h"
 #include "utils.h"
@@ -99,8 +100,22 @@ event_queue_enqueue (event_queue *eq,
                      uint32_t     cookie,
                      const char  *name)
 {
+    int retval = 0;
+
+    if (eq->count > MAX_QUEUED_EVENTS) {
+        return -1;
+    }
+
     if (event_queue_extend (eq) == -1) {
         return -1;
+    }
+
+    if (eq->count == MAX_QUEUED_EVENTS) {
+        wd = -1;
+        mask = IN_Q_OVERFLOW;
+        cookie = 0;
+        name = NULL;
+        retval = -1;
     }
 
     eq->iov[eq->count].iov_base = create_inotify_event (
@@ -112,7 +127,7 @@ event_queue_enqueue (event_queue *eq,
 
     ++eq->count;
 
-    return 0;
+    return retval;
 }
 
 /**
