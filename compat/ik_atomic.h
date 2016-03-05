@@ -22,7 +22,7 @@
 
 #include <pthread.h>
 
-pthread_mutex_t ik_atomic_mutex;
+extern pthread_mutex_t ik_atomic_mutex;
 
 #define	_Atomic(T)		T volatile
 #define	atomic_init(object, value)	(*(object) = (value))
