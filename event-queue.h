@@ -24,15 +24,27 @@
 #define __EVENT_QUEUE_H__
 
 #include <sys/types.h> /* uint32_t */
+#include <sys/socket.h>/* SO_NOSIGPIPE */
 #include <sys/uio.h>   /* iovec */
+
+#include "config.h"
 
 /* linux`s /proc/sys/fs/inotify/max_queued_events counterpart */
 #define MAX_QUEUED_EVENTS	16384
+
+#if defined (SIGPIPE_RECIPIENT_IS_PROCESS) && \
+    (defined (MSG_NOSIGNAL) || defined (SO_NOSIGPIPE))
+#define	AVOID_SIGPIPE_WITH_SEND	1
+#endif
 
 typedef struct event_queue {
     struct iovec *iov; /* inotify events to send */
     int count;         /* number of events enqueued */
     int allocated;     /* number of iovs allocated */
+#ifdef AVOID_SIGPIPE_WITH_SEND
+    char *msgbuf;      /* flat version of iov */
+    size_t msgalloc;   /* size of msgbuf */
+#endif
 } event_queue;
 
 void event_queue_init (event_queue *eq);
@@ -43,6 +55,6 @@ int  event_queue_enqueue (event_queue *eq,
                           uint32_t     mask,
                           uint32_t     cookie,
                           const char  *name);
-void event_queue_flush   (event_queue *eq, int fd[2], size_t sbspace);
+void event_queue_flush   (event_queue *eq, int fd, size_t sbspace);
 
 #endif /* __EVENT_QUEUE_H__ */

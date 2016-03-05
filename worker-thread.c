@@ -423,7 +423,7 @@ worker_thread (void *arg)
         struct kevent received;
 
         if (sbspace > 0 && wrk->eq.count > 0) {
-            event_queue_flush (&wrk->eq, (int *) wrk->io, sbspace);
+            event_queue_flush (&wrk->eq, wrk->io[KQUEUE_FD], sbspace);
             sbspace = 0;
         }
 

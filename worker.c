@@ -167,6 +167,11 @@ pipe_init (int fildes[2], int flags)
         return -1;
     }
 
+#ifdef SO_NOSIGPIPE
+     int on = 1;
+     setsockopt (fildes[KQUEUE_FD], SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+#endif
+
     if (set_cloexec_flag (fildes[KQUEUE_FD], 1) == -1) {
         perror_msg ("Failed to set cloexec flag on socket");
         return -1;

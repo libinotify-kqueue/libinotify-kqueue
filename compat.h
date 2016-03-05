@@ -79,6 +79,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <pthread.h>
 
 #ifndef DTTOIF
@@ -87,6 +88,13 @@
 
 #ifndef SIZE_MAX
 #define SIZE_MAX SIZE_T_MAX
+#endif
+
+/* FreeBSD 4.x doesn't have IOV_MAX exposed. */
+#ifndef IOV_MAX
+#if defined(__FreeBSD__) || defined(__APPLE__)
+#define IOV_MAX 1024
+#endif
 #endif
 
 #ifndef AT_FDCWD

@@ -65,6 +65,7 @@ struct inotify_event* create_inotify_event (int         wd,
 
 ssize_t safe_read   (int fd, void *data, size_t size);
 ssize_t safe_write  (int fd, const void *data, size_t size);
+ssize_t safe_send   (int fd, const void *data, size_t size, int flags);
 ssize_t safe_writev (int fd, const struct iovec iov[], int iovcnt);
 
 int is_opened (int fd);
