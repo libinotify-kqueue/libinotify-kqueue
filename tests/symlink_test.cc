@@ -211,7 +211,7 @@ void symlink_test::run ()
         cons.output.reset ();
         cons.input.receive ();
 
-        lchown ("slt-wd3/baz", getuid(), -1);
+        lchown ("slt-wd3/baz", getuid(), getgid());
 
         cons.output.wait ();
         received = cons.output.registered ();
