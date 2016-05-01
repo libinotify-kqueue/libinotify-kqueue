@@ -50,7 +50,7 @@ void notifications_test::run ()
 
 
     cons.output.reset ();
-    cons.input.receive (2);
+    cons.input.receive ();
 
     system ("touch ntfst-working");
 

@@ -126,7 +126,7 @@ void notifications_dir_test::run ()
 
     
     cons.output.reset ();
-    cons.input.receive (5);
+    cons.input.receive ();
 
     system ("mv ntfsdt-working/1 ntfsdt-working/one");
 
@@ -268,7 +268,7 @@ void notifications_dir_test::run ()
 
     
     cons.output.reset ();
-    cons.input.receive (5);
+    cons.input.receive ();
 
     system ("ls ntfsdt-working/dir >> /dev/null");
 
@@ -354,7 +354,7 @@ void notifications_dir_test::run ()
     wid = cons.output.added_watch_id ();
 
     cons.output.reset ();
-    cons.input.receive (4);
+    cons.input.receive ();
 
     system ("rm -rf ntfsdt-working-2");
 
