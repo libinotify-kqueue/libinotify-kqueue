@@ -307,7 +307,7 @@ AC_COMPILE_IFELSE(
 AC_MSG_RESULT($have_note_read)
 
 
-AC_MSG_CHECKING(for NODE_EXTEND on renaming of file in subdirectory)
+AC_MSG_CHECKING(for NOTE_EXTEND on renaming of file in subdirectory)
 rm -rf iktestdir
 mkdir iktestdir
 touch iktestfile
