@@ -352,10 +352,6 @@ produce_notifications (worker *wrk, struct kevent *event)
 
     uint32_t flags = event->fflags;
 
-    if (flags & NOTE_WRITE) {
-        w->flags |= WF_MODIFIED;
-    }
-
     if (!(w->flags & WF_ISSUBWATCH)) {
         /* Set deleted flag if no more links exist */
         if (flags & NOTE_DELETE &&
@@ -374,7 +370,6 @@ produce_notifications (worker *wrk, struct kevent *event)
         if (flags & (NOTE_OPEN | NOTE_CLOSE)
           && S_ISDIR (w->flags) && w->flags & WF_MODIFIED) {
             flags &= ~(NOTE_OPEN | NOTE_CLOSE);
-            w->flags &= ~WF_MODIFIED;
         }
 #endif
 
@@ -394,12 +389,6 @@ produce_notifications (worker *wrk, struct kevent *event)
             }
         }
     }
-
-#ifdef NOTE_CLOSE
-    if (flags & NOTE_CLOSE) {
-        w->flags &= ~WF_MODIFIED;
-    }
-#endif
 
     if (iw->is_closed) {
         worker_remove (wrk, iw->wd);

@@ -114,23 +114,20 @@ Current state of project is described in following table:
 
   IN_ACCESS         No       Yes        IN_IGNORED      Yes
   IN_ATTRIB         Yes      Yes        IN_ISDIR        Yes
-  IN_CLOSE_WRITE    No       Yes *      IN_UNMOUNT      Yes
+  IN_CLOSE_WRITE    No       Yes        IN_UNMOUNT      Yes
   IN_CLOSE_NOWRITE  No       Yes        IN_Q_OVERFLOW   Yes
   IN_CREATE         Yes      Yes
   IN_DELETE         Yes      Yes        Watch flags     Supported
   IN_DELETE_SELF    Yes      Yes
   IN_MODIFY         Yes      Yes        IN_ONLYDIR      Yes
-  IN_MOVE_SELF      Yes      Yes        IN_DONT_FOLLOW  Yes ***
-  IN_MOVED_FROM     Yes **   Yes        IN_EXCL_UNLINK  No  ****
-  IN_MOVED_TO       Yes **   Yes        IN_MASK_ADD     Yes
+  IN_MOVE_SELF      Yes      Yes        IN_DONT_FOLLOW  Yes **
+  IN_MOVED_FROM     Yes *    Yes        IN_EXCL_UNLINK  No  ***
+  IN_MOVED_TO       Yes *    Yes        IN_MASK_ADD     Yes
   IN_OPEN           No       Yes        IN_ONESHOT      Yes
 
-* IN_CLOSE_WRITE event have a different semantic. It fires not on
-  closing of a file opened with O_RDWR or O_WRONLY flags but on
-  closing of a file when actual write have happened
-** Only renaming file inside watched directory is supported
-*** Watching a symlink requires O_SYMLINK kernel patch to be applied
-**** Libinotify-kqueue behaves as IN_EXCL_UNLINK flag is always set
+* Only renaming file inside watched directory is supported
+** Watching a symlink requires O_SYMLINK kernel patch to be applied
+*** Libinotify-kqueue behaves as IN_EXCL_UNLINK flag is always set
 
 
 Thanks
