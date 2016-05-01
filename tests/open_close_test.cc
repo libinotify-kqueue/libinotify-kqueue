@@ -20,6 +20,9 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <cstdlib>
 
 #include "open_close_test.hh"
@@ -42,6 +45,7 @@ void open_close_test::run ()
     consumer cons;
     int file_wid = 0;
     int dir_wid = 0;
+    int fd, dup_fd;
     events received;
 
     cons.input.setup ("oct-file-working", IN_OPEN | IN_CLOSE_WRITE | IN_CLOSE_NOWRITE);
@@ -94,6 +98,58 @@ void open_close_test::run ()
     should ("receive IN_OPEN on modify",
             contains (received, event ("", file_wid, IN_OPEN)));
     should ("receive IN_CLOSE_WRITE on modify",
+            contains (received, event ("", file_wid, IN_CLOSE_WRITE)));
+
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    fd = open ("oct-file-working", O_RDONLY);
+    dup_fd = dup (fd);
+    close (fd);
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("not receive IN_CLOSE_NOWRITE on close() "
+            "of non last dup()-ed fd opened for read",
+            !contains (received, event ("", file_wid, IN_CLOSE_NOWRITE)));
+
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    close (dup_fd);
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_CLOSE_NOWRITE on close() "
+            "of last dup()-ed fd opened for read",
+            contains (received, event ("", file_wid, IN_CLOSE_NOWRITE)));
+
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    fd = open ("oct-file-working", O_WRONLY);
+    dup_fd = dup (fd);
+    close (fd);
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("not receive IN_CLOSE_WRITE on close() "
+            "of non last dup()-ed fd opened for write",
+            !contains (received, event ("", file_wid, IN_CLOSE_WRITE)));
+
+
+    cons.output.reset ();
+    cons.input.receive ();
+
+    close (dup_fd);
+
+    cons.output.wait ();
+    received = cons.output.registered ();
+    should ("receive IN_CLOSE_WRITE on close() "
+            "of last dup()-ed fd opened for write",
             contains (received, event ("", file_wid, IN_CLOSE_WRITE)));
 
     cons.input.interrupt ();
