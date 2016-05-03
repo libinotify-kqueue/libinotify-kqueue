@@ -40,6 +40,8 @@ typedef mode_t watch_flags_t;
 
 #define WF_ISSUBWATCH S_IXOTH /* a type of watch */
 #define WF_DELETED    S_IROTH /* file`s link count == 0 */
+#define WF_SKIP_NEXT  S_IWOTH /* Some evens (open/close/read) should be skipped
+                               * on the next round as produced by libinotify */
 
 typedef enum watch_type {
     WATCH_USER,

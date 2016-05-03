@@ -68,7 +68,7 @@ inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
         result |= NOTE_CLOSE_WRITE;
 #endif
 #ifdef NOTE_READ
-    if (flags & IN_ACCESS && S_ISREG (wf))
+    if (flags & IN_ACCESS && (S_ISREG (wf) || S_ISDIR (wf)))
         result |= NOTE_READ;
 #endif
     if (flags & IN_ATTRIB)
@@ -116,7 +116,7 @@ kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
         result |= IN_CLOSE_WRITE;
 #endif
 #ifdef NOTE_READ
-    if (flags & NOTE_READ && S_ISREG (wf))
+    if (flags & NOTE_READ && (S_ISREG (wf) || S_ISDIR (wf)))
         result |= IN_ACCESS;
 #endif
 

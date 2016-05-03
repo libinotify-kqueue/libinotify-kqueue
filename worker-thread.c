@@ -359,19 +359,28 @@ produce_notifications (worker *wrk, struct kevent *event)
                 w->flags |= WF_DELETED;
         }
 
-        if (flags & NOTE_WRITE && S_ISDIR (w->flags)) {
-            produce_directory_diff (iw, event);
-        }
-
 #if ! defined (DIRECTORY_LISTING_REWINDS) && \
     defined (NOTE_OPEN) && defined (NOTE_CLOSE)
         /* Mask events produced by open/closedir calls while directory diffing.
          * Kqueue coalesces both events as kevent is not called that time */
-        if (flags & (NOTE_OPEN | NOTE_CLOSE)
-          && S_ISDIR (w->flags) && w->flags & WF_MODIFIED) {
+        if (w->flags & WF_SKIP_NEXT) {
             flags &= ~(NOTE_OPEN | NOTE_CLOSE);
         }
 #endif
+#ifdef NOTE_READ
+        /* Mask event produced by readdir call while directory diffing. */
+        if (w->flags & WF_SKIP_NEXT) {
+            flags &= ~NOTE_READ;
+        }
+#endif
+        if (S_ISDIR (w->flags)) {
+            w->flags &= ~WF_SKIP_NEXT;
+        }
+
+        if (flags & NOTE_WRITE && S_ISDIR (w->flags)) {
+            produce_directory_diff (iw, event);
+            w->flags |= WF_SKIP_NEXT;
+        }
 
         enqueue_event (iw, kqueue_to_inotify (flags, w->flags), NULL);
 
