@@ -25,7 +25,7 @@ Downloading
 This project does not have a special home page yet. The source
 code and the issue tracker are hosted on Github:
 
-  https://github.com/dmatveev/libinotify-kqueue
+  https://github.com/libinotify-kqueue/libinotify-kqueue
 
 
 
@@ -78,7 +78,7 @@ flawlessly.
 
 If you will get any other results, please feel free to report it at:
 
-  https://github.com/dmatveev/libinotify-kqueue/issues
+  https://github.com/libinotify-kqueue/libinotify-kqueue/issues
 
 
 
