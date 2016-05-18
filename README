@@ -92,14 +92,20 @@ directories to be properly set in your project.
 
 Since the heart of the library is kqueue(2), the library has to
 keep many files open to provide proper monitoring. It is especially
-important when you monitor a single but large directory - EVERY file
-in this directory will be opened by a library. You can run out of
-file descriptors, so do not forget request more with setrlimit(2)
-before starting monitoring.
+important when you monitor a single but large directory. Rules are:
+If application specifies only IN_CREATE, IN_DELETE, IN_MOVED_FROM,
+IN_MOVED_TO, IN_DELETE_SELF or IN_MOVE_SELF events in mask argument
+of inotify_add_watch(2) then libinotify opens only watched directory
+itself. Adding IN_CLOSE_WRITE and/or IN_MODIFY events to ones
+mentioned before leads to opening of every regular file inside a
+watched directory. And adding one of IN_ACCESS, IN_ATTRIB,
+IN_CLOSE_NOWRITE or IN_OPEN flags to event mask leads to opening of
+all directories as well as regular files inside a watched directory.
+You can run out of file descriptors, so do not forget request more
+with setrlimit(2) before starting monitoring.
 
 Note that fcntl(2) calls are not supported on descriptors returned
 by the library's inotify_init().
-
 
 
 Status
