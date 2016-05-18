@@ -107,6 +107,19 @@ with setrlimit(2) before starting monitoring.
 Note that fcntl(2) calls are not supported on descriptors returned
 by the library's inotify_init().
 
+Linux implementation does not allow partial event reads from inotify
+file descriptor while socketpair(2) used for libinotify-kqueue allows
+arbitrary amount of data to be read from. So software unawared of
+that can lose datastream event position syncronization that leads to
+unpredictable results. To avoid that as much as possible socketpair
+buffer size has been reduced to reasonable small value (currently 4K)
+exposed as IN_DEF_SOCKBUFSIZE in sys/inotify.h header so it completely
+fits in read(2) buffer of most common applications. Applications using
+smaller read(2) buffer sizes should be fixed with increasing it or
+with supporting of concatenation of event parts. Usage of dinamicaly
+allocated buffers and read(2)s sized with FIONREAD ioctl(2) or alikes
+can be considered to be safe.
+
 
 Status
 ------

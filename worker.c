@@ -195,6 +195,16 @@ pipe_init (int fildes[2], int flags)
         return -1;
     }
 
+    int bufsize = IN_DEF_SOCKBUFSIZE;
+    if (setsockopt(fildes[INOTIFY_FD],
+                   SOL_SOCKET,
+                   SO_SNDBUF,
+                   &bufsize,
+                   sizeof(bufsize))) {
+        perror_msg ("Failed to set send buffer size for socket");
+        return -1;
+    }
+
     return 0;
 }
 

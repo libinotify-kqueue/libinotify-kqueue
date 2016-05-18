@@ -11,6 +11,15 @@
   #endif
 #endif
 
+/*
+ * Libinotify-specific: Default size of communication socket buffer in bytes.
+ * This defines a recommended read(2) buffer size for libinotify event
+ * consumers. Lower values can cause partial event reads. Bigger values
+ * is just a wasting of memory.
+ * The value is arbitrary, has been acquired from code sample in linux
+ * inotify(7) man page and seems to be very common among the inotify clients.
+ */
+#define	IN_DEF_SOCKBUFSIZE		4096
 
 /* Flags for the parameter of inotify_init1. */
 #define IN_CLOEXEC	02000000	/* Linux x86 O_CLOEXEC */
