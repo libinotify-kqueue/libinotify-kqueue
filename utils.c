@@ -39,7 +39,7 @@
 #include <assert.h>
 
 #include <sys/types.h>
-#include <sys/socket.h>/* send */
+#include <sys/socket.h>/* send, sendmsg */
 #include <sys/stat.h>  /* fstat */
 #include <sys/uio.h>   /* writev */
 
@@ -152,9 +152,126 @@ safe_send (int fd, const void *data, size_t size, int flags)
 }
 
 /**
- * EINTR-ready version of writev().
  * The canonical version of this routine is maintained in the rra-c-util,
  * which can be found at <http://www.eyrie.org/~eagle/software/rra-c-util/>.
+ */
+#define SAFE_GENERIC_VOP(fcn, fd, iov, iovcnt, ...)			\
+									\
+    ssize_t total, status = 0;						\
+    size_t left, offset;						\
+    int iovleft, i, count;						\
+    struct iovec *tmpiov;						\
+                                                                        \
+    /*									\
+     * Bounds-check the iovcnt argument.  This is just for our safety.  The	\
+     * system will probably impose a lower limit on iovcnt, causing the later	\
+     * writev to fail with an error we'll return.				\
+     */									\
+    if (iovcnt == 0)							\
+        return 0;							\
+    if (iovcnt < 0 || (size_t) iovcnt > SIZE_MAX / sizeof(struct iovec)) {	\
+        errno = EINVAL;							\
+        return -1;							\
+    }									\
+                                                                        \
+    /* Get a count of the total number of bytes in the iov array. */	\
+    for (total = 0, i = 0; i < iovcnt; i++)				\
+        total += iov[i].iov_len;					\
+    if (total == 0)							\
+        return 0;							\
+                                                                        \
+    /*									\
+     * First, try just writing it all out.  Most of the time this will succeed	\
+     * and save us lots of work.  Abort the write if we try ten times with no	\
+     * forward progress.						\
+     */									\
+    count = 0;								\
+    do {								\
+        if (++count > 10)						\
+            break;							\
+        status = fcn(fd, iov, iovcnt, ##__VA_ARGS__);			\
+        if (status > 0)							\
+            count = 0;							\
+    } while (status < 0 && errno == EINTR);				\
+    if (status < 0)							\
+        return -1;							\
+    if (status == total)						\
+        return total;							\
+                                                                        \
+    /*									\
+     * If we fell through to here, the first write partially succeeded.	\
+     * Figure out how far through the iov array we got, and then duplicate the	\
+     * rest of it so that we can modify it to reflect how much we manage to	\
+     * write on successive tries.					\
+     */									\
+    offset = status;							\
+    left = total - offset;						\
+    for (i = 0; offset >= (size_t) iov[i].iov_len; i++)			\
+        offset -= iov[i].iov_len;					\
+    iovleft = iovcnt - i;						\
+    assert(iovleft > 0);						\
+    tmpiov = calloc(iovleft, sizeof(struct iovec));			\
+    if (tmpiov == NULL)							\
+        return -1;							\
+    memcpy(tmpiov, iov + i, iovleft * sizeof(struct iovec));		\
+                                                                        \
+    /*									\
+     * status now contains the offset into the first iovec struct in tmpiov.	\
+     * Go into the write loop, trying to write out everything remaining at	\
+     * each point.  At the top of the loop, status will contain a count of	\
+     * bytes written out at the beginning of the set of iovec structs.		\
+     */									\
+    i = 0;								\
+    do {								\
+        if (++count > 10)						\
+            break;							\
+                                                                        \
+        /* Skip any leading data that has been written out. */		\
+        for (; offset >= (size_t) tmpiov[i].iov_len && iovleft > 0; i++) {	\
+            offset -= tmpiov[i].iov_len;				\
+            iovleft--;							\
+        }								\
+        tmpiov[i].iov_base = (char *) tmpiov[i].iov_base + offset;	\
+        tmpiov[i].iov_len -= offset;					\
+                                                                        \
+        /* Write out what's left and return success if it's all written. */	\
+        status = fcn(fd, tmpiov + i, iovleft, ##__VA_ARGS__);		\
+        if (status <= 0)						\
+            offset = 0;							\
+        else {								\
+            offset = status;						\
+            left -= offset;						\
+            count = 0;							\
+        }								\
+    } while (left > 0 && (status >= 0 || errno == EINTR));		\
+                                                                        \
+    /* We're either done or got an error; if we're done, left is now 0. */	\
+    free(tmpiov);							\
+    return (left == 0) ? total : -1;
+
+/**
+ * scatter-gather version of send with writev()-style parameters.
+ *
+ * @param[in] fd     A file descriptor to send to.
+ * @param[in] iov    An array of iovec buffers to wtite.
+ * @param[in] iovcnt A number of iovec buffers to write.
+ * @param[in] flags  A send(3) flags.
+ * @return Number of bytes which were written on success, -1 on failure.
+ **/
+ssize_t
+sendv (int fd, struct iovec iov[], int iovcnt, int flags)
+{
+    struct msghdr msg;
+
+    memset (&msg, 0, sizeof (msg));
+    msg.msg_iov = iov;
+    msg.msg_iovlen = iovcnt;
+
+    return (sendmsg (fd, &msg, flags));
+}
+
+/**
+ * EINTR-ready version of writev().
  *
  * @param[in] fd     A file descriptor to write to.
  * @param[in] iov    An array of iovec buffers to wtite.
@@ -164,97 +281,22 @@ safe_send (int fd, const void *data, size_t size, int flags)
 ssize_t
 safe_writev (int fd, const struct iovec iov[], int iovcnt)
 {
-    ssize_t total, status = 0;
-    size_t left, offset;
-    int iovleft, i, count;
-    struct iovec *tmpiov;
+    SAFE_GENERIC_VOP (writev, fd, iov, iovcnt);
+}
 
-    /*
-     * Bounds-check the iovcnt argument.  This is just for our safety.  The
-     * system will probably impose a lower limit on iovcnt, causing the later
-     * writev to fail with an error we'll return.
-     */
-    if (iovcnt == 0)
-        return 0;
-    if (iovcnt < 0 || (size_t) iovcnt > SIZE_MAX / sizeof(struct iovec)) {
-        errno = EINVAL;
-        return -1;
-    }
-
-    /* Get a count of the total number of bytes in the iov array. */
-    for (total = 0, i = 0; i < iovcnt; i++)
-        total += iov[i].iov_len;
-    if (total == 0)
-        return 0;
-
-    /*
-     * First, try just writing it all out.  Most of the time this will succeed
-     * and save us lots of work.  Abort the write if we try ten times with no
-     * forward progress.
-     */
-    count = 0;
-    do {
-        if (++count > 10)
-            break;
-        status = writev(fd, iov, iovcnt);
-        if (status > 0)
-            count = 0;
-    } while (status < 0 && errno == EINTR);
-    if (status < 0)
-        return -1;
-    if (status == total)
-        return total;
-
-    /*
-     * If we fell through to here, the first write partially succeeded.
-     * Figure out how far through the iov array we got, and then duplicate the
-     * rest of it so that we can modify it to reflect how much we manage to
-     * write on successive tries.
-     */
-    offset = status;
-    left = total - offset;
-    for (i = 0; offset >= (size_t) iov[i].iov_len; i++)
-        offset -= iov[i].iov_len;
-    iovleft = iovcnt - i;
-    assert(iovleft > 0);
-    tmpiov = calloc(iovleft, sizeof(struct iovec));
-    if (tmpiov == NULL)
-        return -1;
-    memcpy(tmpiov, iov + i, iovleft * sizeof(struct iovec));
-
-    /*
-     * status now contains the offset into the first iovec struct in tmpiov.
-     * Go into the write loop, trying to write out everything remaining at
-     * each point.  At the top of the loop, status will contain a count of
-     * bytes written out at the beginning of the set of iovec structs.
-     */
-    i = 0;
-    do {
-        if (++count > 10)
-            break;
-
-        /* Skip any leading data that has been written out. */
-        for (; offset >= (size_t) tmpiov[i].iov_len && iovleft > 0; i++) {
-            offset -= tmpiov[i].iov_len;
-            iovleft--;
-        }
-        tmpiov[i].iov_base = (char *) tmpiov[i].iov_base + offset;
-        tmpiov[i].iov_len -= offset;
-
-        /* Write out what's left and return success if it's all written. */
-        status = writev(fd, tmpiov + i, iovleft);
-        if (status <= 0)
-            offset = 0;
-        else {
-            offset = status;
-            left -= offset;
-            count = 0;
-        }
-    } while (left > 0 && (status >= 0 || errno == EINTR));
-
-    /* We're either done or got an error; if we're done, left is now 0. */
-    free(tmpiov);
-    return (left == 0) ? total : -1;
+/**
+ * EINTR-ready version of sendv().
+ *
+ * @param[in] fd     A file descriptor to send to.
+ * @param[in] iov    An array of iovec buffers to wtite.
+ * @param[in] iovcnt A number of iovec buffers to write.
+ * @param[in] flags  A send(3) flags.
+ * @return Number of bytes which were written on success, -1 on failure.
+ **/
+ssize_t
+safe_sendv (int fd, struct iovec iov[], int iovcnt, int flags)
+{
+    SAFE_GENERIC_VOP (sendv, fd, iov, iovcnt, flags);
 }
 
 /**

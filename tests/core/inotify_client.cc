@@ -60,7 +60,11 @@ void inotify_client::cancel (int watch_id)
     }
 }
 
+#ifdef IN_DEF_SOCKBUFSIZE
+#define IE_BUFSIZE IN_DEF_SOCKBUFSIZE
+#else
 #define IE_BUFSIZE (((sizeof (struct inotify_event) + FILENAME_MAX)) * 20)
+#endif
 
 events inotify_client::receive_during (int timeout) const
 {

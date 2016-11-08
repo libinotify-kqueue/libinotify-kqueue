@@ -371,45 +371,4 @@ if test "$ac_cv_func_fdopendir" = "yes" -a "$have_o_evtonly" = "no" -a \
 fi
 
 
-CFLAGS="${CFLAGS} ${PTHREAD_CFLAGS}"
-LIBS="${LIBS} ${PTHREAD_LIBS}"
-AC_MSG_CHECKING(for SIGPIPE recipient)
-AC_RUN_IFELSE(
-[
-    AC_LANG_PROGRAM(
-    [[
-        #include <pthread.h>
-        #include <signal.h>
-        #include <unistd.h>
-
-        static volatile int catched = 0;
-        void sigpipe_handler(int sig) { catched = 1; }
-        void *test(void *args) {
-            sigset_t set;
-            int io[2];
-            sigemptyset(&set);
-            sigaddset(&set, SIGPIPE);
-            pthread_sigmask(SIG_BLOCK, &set, NULL);
-            pipe(io);
-            close(io[0]);
-            write(io[1], io, 1);
-            return NULL;
-        }
-    ]],
-    [[
-        pthread_t thread;
-        signal(SIGPIPE, sigpipe_handler);
-        if (pthread_create(&thread, NULL, test, NULL) == -1) return 1;
-        if (pthread_join(thread, NULL) != 0) return 1;
-        return catched;
-    ]])
-],
-    AC_MSG_RESULT(thread)
-,[
-    AC_DEFINE([SIGPIPE_RECIPIENT_IS_PROCESS],[1],[Define to 1 if SIGPIPE is process-wide signal])
-    AC_MSG_RESULT(process)
-]
-)
-
-
 AC_OUTPUT

@@ -32,19 +32,10 @@
 /* linux`s /proc/sys/fs/inotify/max_queued_events counterpart */
 #define MAX_QUEUED_EVENTS	16384
 
-#if defined (SIGPIPE_RECIPIENT_IS_PROCESS) && \
-    (defined (MSG_NOSIGNAL) || defined (SO_NOSIGPIPE))
-#define	AVOID_SIGPIPE_WITH_SEND	1
-#endif
-
 typedef struct event_queue {
     struct iovec *iov; /* inotify events to send */
     int count;         /* number of events enqueued */
     int allocated;     /* number of iovs allocated */
-#ifdef AVOID_SIGPIPE_WITH_SEND
-    char *msgbuf;      /* flat version of iov */
-    size_t msgalloc;   /* size of msgbuf */
-#endif
 } event_queue;
 
 void event_queue_init (event_queue *eq);

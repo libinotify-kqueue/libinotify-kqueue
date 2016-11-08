@@ -47,10 +47,6 @@ event_queue_init (event_queue *eq)
     eq->allocated = 0;
     eq->count = 0;
     eq->iov = NULL;
-#ifdef AVOID_SIGPIPE_WITH_SEND
-    eq->msgalloc = 0;
-    eq->msgbuf = NULL;
-#endif
 }
 
 /**
@@ -67,9 +63,6 @@ event_queue_free (event_queue *eq)
         free (eq->iov[i].iov_base);
     }
     free (eq->iov);
-#ifdef AVOID_SIGPIPE_WITH_SEND
-    free (eq->msgbuf);
-#endif
 }
 
 /**
@@ -141,61 +134,6 @@ event_queue_enqueue (event_queue *eq,
     return retval;
 }
 
-#ifdef AVOID_SIGPIPE_WITH_SEND
-/**
- * Extend inotify event queue message buffer to iovlen bytes.
- *
- * @param[in] eq     A pointer to #event_queue.
- * @param[in] iovlen New size of buffer
- **/
-static int
-event_queue_extend_msgbuf (event_queue *eq, size_t iovlen)
-{
-
-    if (iovlen > eq->msgalloc) {
-        void *ptr = realloc(eq->msgbuf, iovlen);
-        if (ptr == NULL) {
-            perror_msg ("Failed to extend eq->msgbuf to %d bytes", iovlen);
-            return -1;
-        }
-        eq->msgbuf = ptr;
-        eq->msgalloc = iovlen;
-    }
-
-    return 0;
-}
-
-/**
- * Sendv implementation. Uses #event_queue as temporary buffer.
- *
- * @param[in] eq     A pointer to #event_queue.
- * @param[in] fd     A file descriptor to send to.
- * @param[in] iov    An array of iovec buffers to send.
- * @param[in] iovcnt A number of iovec buffers to send.
- * @param[in] flags  A send(3) flags.
- * @return Number of bytes which were sent on success, -1 on failure.
- **/
-static ssize_t
-event_queue_sendv(event_queue        *eq,
-                  int                 fd,
-                  const struct iovec *iov,
-                  int                 iovcnt,
-                  int                 flags)
-{
-    int i;
-    size_t offset = 0;
-
-    /* Fill msgbuf with iov data */
-    for (i = 0; i < iovcnt; i++) {
-         memcpy (eq->msgbuf + offset, eq->iov[i].iov_base, eq->iov[i].iov_len);
-         offset += eq->iov[i].iov_len;
-         assert (offset <= eq->msgalloc);
-    }
-
-    return safe_send (fd, eq->msgbuf, offset, flags);
-}
-#endif
-
 /**
  * Flush inotify events queue to socket
  *
@@ -210,11 +148,9 @@ void event_queue_flush (event_queue *eq, int fd, size_t sbspace)
     size_t iovlen = 0;
 
     iovmax = eq->count;
-#ifndef AVOID_SIGPIPE_WITH_SEND
     if (iovmax > IOV_MAX) {
         iovmax = IOV_MAX;
     }
-#endif
 
     for (iovcnt = 0; iovcnt < iovmax; iovcnt++) {
         if (iovlen + eq->iov[iovcnt].iov_len > sbspace) {
@@ -227,29 +163,12 @@ void event_queue_flush (event_queue *eq, int fd, size_t sbspace)
         return;
     }
 
-#ifdef AVOID_SIGPIPE_WITH_SEND
-    /*
-     * Most OSes (Linux, Solaris and FreeBSD) delivers SIGPIPE to thread which
-     * issued write (worker thread) as it is syncronous signal. At least some
-     * versions of NetBSD, OpenBSD and MacOSX delivers it to any thread in process
-     * making blocking SIGPIPE in worker thread useless. As closing of opposite
-     * end of the pipe is a legal method of closing inotify we try to prevent
-     * SIGPIPE with using a send(3) with MSG_NOSIGNAL flag set and creating
-     * the socket pair with SO_NOSIGPIPE option.
-     */
-    if (event_queue_extend_msgbuf (eq, iovlen) == -1) {
-        return;
-    }
-
     int send_flags = 0;
 #if defined (MSG_NOSIGNAL)
     send_flags |= MSG_NOSIGNAL;
 #endif
 
-    if (event_queue_sendv(eq, fd, eq->iov, iovcnt, send_flags) == -1) {
-#else /* ! AVOID_SIGPIPE_WITH_SEND */
-    if (safe_writev (fd, eq->iov, iovcnt) == -1) {
-#endif
+    if (safe_sendv (fd, eq->iov, iovcnt, send_flags) == -1) {
         perror_msg ("Sending of inotify events to socket failed");
     }
 
