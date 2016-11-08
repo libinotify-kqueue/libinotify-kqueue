@@ -93,33 +93,31 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
  * Process a worker command.
  *
  * @param[in] wrk A pointer to #worker.
+ * @param[in] cmd A pointer to #worker_cmd.
  **/
 void
-process_command (worker *wrk)
+process_command (worker *wrk, worker_cmd *cmd)
 {
     assert (wrk != NULL);
 
-#ifndef EVFILT_USER
-    /* read a byte */
-    char unused;
-    safe_read (wrk->io[KQUEUE_FD], &unused, 1);
-#endif
-
-    if (wrk->cmd.type == WCMD_ADD) {
-        wrk->cmd.retval = worker_add_or_modify (wrk,
-                                                wrk->cmd.add.filename,
-                                                wrk->cmd.add.mask);
-        wrk->cmd.error = errno;
-    } else if (wrk->cmd.type == WCMD_REMOVE) {
-        wrk->cmd.retval = worker_remove (wrk, wrk->cmd.rm_id);
-        wrk->cmd.error = errno;
-    } else {
+    switch (cmd->type) {
+    case WCMD_ADD:
+        cmd->retval = worker_add_or_modify (wrk,
+                                            cmd->add.filename,
+                                            cmd->add.mask);
+        cmd->error = errno;
+        break;
+    case WCMD_REMOVE:
+        cmd->retval = worker_remove (wrk, cmd->rm_id);
+        cmd->error = errno;
+    default:
         perror_msg ("Worker processing a command without a command - "
                     "something went wrong.");
-        return;
+        cmd->retval = -1;
+        cmd->error = EINVAL;
     }
 
-    worker_cmd_post (&wrk->cmd);
+    worker_post (wrk);
 }
 
 /** 
@@ -415,6 +413,7 @@ worker_thread (void *arg)
 {
     assert (arg != NULL);
     worker* wrk = (worker *) arg;
+    worker_cmd *cmd;
     size_t sbspace = 0;
 
     for (;;) {
@@ -436,17 +435,22 @@ worker_thread (void *arg)
                 worker_erase (wrk);
 
                 /* Notify user threads waiting for add/rm_watch of grim news */
-                wrk->cmd.retval = -1;
-                wrk->cmd.error = EBADF;
-                worker_cmd_post (&wrk->cmd);
+                worker_post (wrk);
 
                 worker_free (wrk);
 
                 return NULL;
             } else if (received.filter == EVFILT_WRITE) {
                 sbspace = received.data;
-            } else {
-                process_command (wrk);
+#ifdef EVFILT_USER
+            } else if (received.filter == EVFILT_USER) {
+                cmd = received.udata;
+                process_command (wrk, cmd);
+#else
+            } else if (received.filter == EVFILT_READ) {
+                safe_read (wrk->io[KQUEUE_FD], &cmd, sizeof (cmd));
+                process_command (wrk, cmd);
+#endif
             }
         } else {
             produce_notifications (wrk, &received);

@@ -56,7 +56,7 @@ static worker dummy_wrk = {
 #define WORKERSET_WLOCK()  pthread_rwlock_wrlock (&workers_rwlock)
 #define WORKERSET_UNLOCK() pthread_rwlock_unlock (&workers_rwlock)
 
-static worker *worker_find (int fd);
+static int     worker_exec (int fd, worker_cmd *cmd);
 static void    workers_init (void);
 
 /**
@@ -164,7 +164,7 @@ inotify_add_watch (int         fd,
                    uint32_t    mask) __THROW
 {
     struct stat st;
-    int retval, error;
+    worker_cmd cmd;
 
     if (!is_opened (fd)) {
         return -1;	/* errno = EBADF */
@@ -187,33 +187,8 @@ inotify_add_watch (int         fd,
         return -1;
     }
 
-    /* look up for an appropriate worker */
-    worker *wrk = worker_find (fd);
-    if (wrk == NULL) {
-        return -1;
-    }
-
-    worker_cmd_add (&wrk->cmd, name, mask);
-    wrk->cmd.retval = -1;
-    wrk->cmd.error = EBADF;
-#ifdef EVFILT_USER
-    struct kevent ke;
-    EV_SET (&ke, wrk->io[KQUEUE_FD], EVFILT_USER, 0, NOTE_TRIGGER, 0, 0);
-    if (kevent (wrk->kq, &ke, 1, NULL, 0, NULL) != -1) {
-#else
-    if (safe_write (wrk->io[INOTIFY_FD], "*", 1) != -1) {
-#endif
-        worker_cmd_wait (&wrk->cmd);
-    }
-    retval = wrk->cmd.retval;
-    error = wrk->cmd.error;
-
-    WORKER_UNLOCK (wrk);
-    WORKERSET_UNLOCK ();
-    if (retval == -1) {
-        errno = error;
-    }
-    return retval;
+    worker_cmd_add (&cmd, name, mask);
+    return worker_exec (fd, &cmd);
 }
 
 /**
@@ -231,39 +206,14 @@ int
 inotify_rm_watch (int fd,
                   int wd) __THROW
 {
-    int retval, error;
+    worker_cmd cmd;
 
     if (!is_opened (fd)) {
         return -1;	/* errno = EBADF */
     }
 
-    /* look up for an appropriate worker */
-    worker *wrk = worker_find (fd);
-    if (wrk == NULL) {
-        return -1;
-    }
-
-    worker_cmd_remove (&wrk->cmd, wd);
-    wrk->cmd.retval = -1;
-    wrk->cmd.error = EBADF;
-#ifdef EVFILT_USER
-    struct kevent ke;
-    EV_SET (&ke, wrk->io[KQUEUE_FD], EVFILT_USER, 0, NOTE_TRIGGER, 0, 0);
-    if (kevent (wrk->kq, &ke, 1, NULL, 0, NULL) != -1) {
-#else
-    if (safe_write (wrk->io[INOTIFY_FD], "*", 1) != -1) {
-#endif
-        worker_cmd_wait (&wrk->cmd);
-    }
-    retval = wrk->cmd.retval;
-    error = wrk->cmd.error;
-
-    WORKER_UNLOCK (wrk);
-    WORKERSET_UNLOCK ();
-    if (retval == -1) {
-        errno = error;
-    }
-    return retval;
+    worker_cmd_remove (&cmd, wd);
+    return worker_exec (fd, &cmd);
 }
 
 /**
@@ -290,21 +240,23 @@ worker_erase (worker *wrk)
 }
 
 /**
- * Find a worker in a list of workers by Inotify instance file descriptor
+ * Execute command in context of working thread.
  *
- * @param[in] fd Inotify instance file descriptor.
- * @return pointer on locked worker on success, NULL on failure with errno set.
+ * @param[in] fd  Inotify instance file descriptor.
+ * @param[in] cmd Pointer to #worker_cmd
+ * @return 0 on success, -1 on failure with errno set.
  **/
-static worker *
-worker_find (int fd)
+static int
+worker_exec (int fd, worker_cmd *cmd)
 {
     if (!initialized) {
         errno = EINVAL;
-        return NULL;
+        return -1;
     }
 
     WORKERSET_RLOCK ();
 
+    /* look up for an appropriate worker */
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
         worker *wrk = workers[i];
@@ -317,16 +269,33 @@ worker_find (int fd)
                 WORKER_UNLOCK (wrk);
                 WORKERSET_UNLOCK ();
                 errno = EBADF;
-                return NULL;
+                return -1;
             }
 
-            return wrk;
+            cmd->retval = -1;
+            cmd->error = EBADF;
+#ifdef EVFILT_USER
+            struct kevent ke;
+            EV_SET (&ke, wrk->io[KQUEUE_FD], EVFILT_USER, 0, NOTE_TRIGGER, 0, cmd);
+            if (kevent (wrk->kq, &ke, 1, NULL, 0, NULL) != -1) {
+#else
+            if (safe_write (wrk->io[INOTIFY_FD], &cmd, sizeof (cmd)) != -1) {
+#endif
+                worker_wait (wrk);
+            }
+
+            WORKER_UNLOCK (wrk);
+            WORKERSET_UNLOCK ();
+            if (cmd->retval == -1) {
+                errno = cmd->error;
+            }
+            return cmd->retval;
         }
     }
 
     WORKERSET_UNLOCK ();
     errno = EINVAL;
-    return NULL;
+    return -1;
 }
 
 /**

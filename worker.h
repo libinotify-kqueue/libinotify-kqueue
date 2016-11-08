@@ -63,15 +63,10 @@ typedef struct worker_cmd {
         int rm_id;
     };
 
-    sem_t sync_sem;
 } worker_cmd;
 
-void worker_cmd_init    (worker_cmd *cmd);
 void worker_cmd_add     (worker_cmd *cmd, const char *filename, uint32_t mask);
 void worker_cmd_remove  (worker_cmd *cmd, int watch_id);
-void worker_cmd_post    (worker_cmd *cmd);
-void worker_cmd_wait    (worker_cmd *cmd);
-void worker_cmd_release (worker_cmd *cmd);
 
 struct worker {
     int kq;                /* kqueue descriptor */
@@ -81,7 +76,7 @@ struct worker {
 
     pthread_mutex_t mutex; /* worker mutex */
     _Atomic(uint) mutex_rc;/* worker mutex sleepers/holders refcount */
-    worker_cmd cmd;        /* operation to perform on a worker */
+    sem_t sync_sem;        /* worker <-> user syncronization semaphore */
     event_queue eq;        /* inotify events queue */
 };
 
@@ -97,6 +92,8 @@ struct worker {
 
 worker* worker_create         (int flags);
 void    worker_free           (worker *wrk);
+void    worker_post           (worker *wrk);
+void    worker_wait           (worker *wrk);
 
 int     worker_add_or_modify  (worker *wrk, const char *path, uint32_t flags);
 int     worker_remove         (worker *wrk, int id);

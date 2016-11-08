@@ -50,18 +50,6 @@ worker_cmd_reset (worker_cmd *cmd);
 
 
 /**
- * Initialize resources associated with worker command.
- *
- * @param[in] cmd A pointer to #worker_cmd.
- **/
-void worker_cmd_init (worker_cmd *cmd)
-{
-    assert (cmd != NULL);
-    memset (cmd, 0, sizeof (worker_cmd));
-    sem_init (&cmd->sync_sem, 0, 0);
-}
-
-/**
  * Prepare a command with the data of the inotify_add_watch() call.
  *
  * @param[in] cmd      A pointer to #worker_cmd.
@@ -119,10 +107,10 @@ worker_cmd_reset (worker_cmd *cmd)
  * @param[in] cmd A pointer to #worker_cmd.
  **/
 void
-worker_cmd_post (worker_cmd *cmd)
+worker_post (worker *wrk)
 {
-    assert (cmd != NULL);
-    sem_post(&cmd->sync_sem);
+    assert (wrk != NULL);
+    sem_post(&wrk->sync_sem);
 }
 
 /**
@@ -131,25 +119,11 @@ worker_cmd_post (worker_cmd *cmd)
  * @param[in] cmd A pointer to #worker_cmd.
  **/
 void
-worker_cmd_wait (worker_cmd *cmd)
+worker_wait (worker *wrk)
 {
-    assert (cmd != NULL);
+    assert (wrk != NULL);
     do { /* NOTHING */
-    } while (sem_wait(&cmd->sync_sem) == -1 && errno == EINTR);
-}
-
-/**
- * Release a worker command.
- *
- * This function releases resources associated with worker command.
- *
- * @param[in] cmd A pointer to #worker_cmd.
- **/
-void
-worker_cmd_release (worker_cmd *cmd)
-{
-    assert (cmd != NULL);
-    sem_destroy (&cmd->sync_sem);
+    } while (sem_wait(&wrk->sync_sem) == -1 && errno == EINTR);
 }
 
 /**
@@ -271,8 +245,7 @@ worker_create (int flags)
 
     pthread_mutex_init (&wrk->mutex, NULL);
     atomic_init (&wrk->mutex_rc, 0);
-
-    worker_cmd_init (&wrk->cmd);
+    sem_init (&wrk->sync_sem, 0, 0);
     event_queue_init (&wrk->eq);
 
     /* create a run a worker thread */
@@ -336,7 +309,7 @@ worker_free (worker *wrk)
     }
     pthread_mutex_destroy (&wrk->mutex);
     /* And only after that destroy worker_cmd sync primitives */
-    worker_cmd_release (&wrk->cmd);
+    sem_destroy (&wrk->sync_sem);
     event_queue_free (&wrk->eq);
     free (wrk);
 }
