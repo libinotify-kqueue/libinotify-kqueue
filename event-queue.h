@@ -29,17 +29,17 @@
 
 #include "config.h"
 
-/* linux`s /proc/sys/fs/inotify/max_queued_events counterpart */
-#define MAX_QUEUED_EVENTS	16384
-
 typedef struct event_queue {
     struct iovec *iov; /* inotify events to send */
     int count;         /* number of events enqueued */
     int allocated;     /* number of iovs allocated */
+    int max_events;    /* max_queued_events */
 } event_queue;
 
 void event_queue_init (event_queue *eq);
 void event_queue_free (event_queue *eq);
+
+int event_queue_set_max_events (event_queue *eq, int max_events);
 
 int  event_queue_enqueue (event_queue *eq,
                           int          wd,

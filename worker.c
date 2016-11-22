@@ -454,6 +454,8 @@ worker_set_param (worker *wrk, int param, intptr_t value)
     switch (param) {
     case IN_SOCKBUFSIZE:
         return worker_set_sockbufsize (wrk, value);
+    case IN_MAX_QUEUED_EVENTS:
+        return event_queue_set_max_events (&wrk->eq, value);
     default:
         errno = EINVAL;
     }

@@ -47,6 +47,7 @@ event_queue_init (event_queue *eq)
     eq->allocated = 0;
     eq->count = 0;
     eq->iov = NULL;
+    event_queue_set_max_events (eq, IN_DEF_MAX_QUEUED_EVENTS);
 }
 
 /**
@@ -63,6 +64,25 @@ event_queue_free (event_queue *eq)
         free (eq->iov[i].iov_base);
     }
     free (eq->iov);
+}
+
+/**
+ * Set maximum length for inotify event queue
+ *
+ * @param[in] eq         A pointer to #event_queue.
+ * @param[in] max_events A maximal length of queue (in events)
+ * @return 0 on success, -1 otherwise.
+ **/
+int
+event_queue_set_max_events (event_queue *eq, int max_events)
+{
+    if (max_events <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    /* TODO: Implement event queue truncation */
+    eq->max_events = max_events;
+    return 0;
 }
 
 /**
@@ -106,7 +126,7 @@ event_queue_enqueue (event_queue *eq,
 {
     int retval = 0;
 
-    if (eq->count > MAX_QUEUED_EVENTS) {
+    if (eq->count > eq->max_events) {
         return -1;
     }
 
@@ -114,7 +134,7 @@ event_queue_enqueue (event_queue *eq,
         return -1;
     }
 
-    if (eq->count == MAX_QUEUED_EVENTS) {
+    if (eq->count == eq->max_events) {
         wd = -1;
         mask = IN_Q_OVERFLOW;
         cookie = 0;
