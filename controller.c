@@ -217,6 +217,27 @@ inotify_rm_watch (int fd,
 }
 
 /**
+ * Prepare a command with the data of the inotify_set_param() call.
+ *
+ * @param[in] fd    Inotify instance file descriptor.
+ * @param[in] param Worker-thread parameter name to set.
+ * @param[in] value Worker-thread parameter value to set.
+ * @return 0 on success, -1 on failure.
+ **/
+int
+inotify_set_param (int fd, int param, intptr_t value)
+{
+    worker_cmd cmd;
+
+    if (!is_opened (fd)) {
+        return -1;	/* errno = EBADF */
+    }
+
+    worker_cmd_param (&cmd, param, value);
+    return worker_exec (fd, &cmd);
+}
+
+/**
  * Erase a worker from a list of workers.
  * 
  * This function does not lock the global array of workers (I assume that

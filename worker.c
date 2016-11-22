@@ -85,6 +85,24 @@ worker_cmd_remove (worker_cmd *cmd, int watch_id)
 }
 
 /**
+ * Prepare a command with the data of the inotify_set_param() call.
+ *
+ * @param[in] cmd    A pointer to #worker_cmd
+ * @param[in] param  Worker-thread parameter name to set.
+ * @param[in] value  Worker-thread parameter value to set.
+ **/
+void
+worker_cmd_param (worker_cmd *cmd, int param, intptr_t value)
+{
+    assert (cmd != NULL);
+    worker_cmd_reset (cmd);
+
+    cmd->type = WCMD_PARAM;
+    cmd->param.param = param;
+    cmd->param.value = value;
+}
+
+/**
  * Reset the worker command.
  *
  * @param[in] cmd A pointer to #worker_cmd.
@@ -99,6 +117,8 @@ worker_cmd_reset (worker_cmd *cmd)
     cmd->add.filename = NULL;
     cmd->add.mask = 0;
     cmd->rm_id = 0;
+    cmd->param.param = 0;
+    cmd->param.value = 0;
 }
 
 /**
@@ -124,6 +144,35 @@ worker_wait (worker *wrk)
     assert (wrk != NULL);
     do { /* NOTHING */
     } while (sem_wait(&wrk->sync_sem) == -1 && errno == EINTR);
+}
+
+/**
+ * Set communication pipe buffer size
+ * @param[in] wrk     A pointer to #worker.
+ * @param[in] bufsize A buffer size allocated for communication pipe
+ * @return 0 on success, -1 otherwise
+ **/
+int
+worker_set_sockbufsize (worker *wrk, int bufsize)
+{
+    assert (wrk != NULL);
+
+    if (bufsize <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (setsockopt(wrk->io[KQUEUE_FD],
+                   SOL_SOCKET,
+                   SO_SNDBUF,
+                   &bufsize,
+                   sizeof(bufsize))) {
+        perror_msg ("Failed to set send buffer size for socket");
+        return -1;
+    }
+    wrk->sockbufsize = bufsize;
+
+    return 0;
 }
 
 /**
@@ -169,16 +218,6 @@ pipe_init (int fildes[2], int flags)
         return -1;
     }
 
-    int bufsize = IN_DEF_SOCKBUFSIZE;
-    if (setsockopt(fildes[INOTIFY_FD],
-                   SOL_SOCKET,
-                   SO_SNDBUF,
-                   &bufsize,
-                   sizeof(bufsize))) {
-        perror_msg ("Failed to set send buffer size for socket");
-        return -1;
-    }
-
     return 0;
 }
 
@@ -213,6 +252,11 @@ worker_create (int flags)
 
     if (pipe_init ((int *) wrk->io, flags) == -1) {
         perror_msg ("Failed to create a pipe");
+        goto failure;
+    }
+
+    /* Set socket buffer size to IN_DEF_SOCKBUFSIZE bytes */
+    if (worker_set_sockbufsize(wrk, IN_DEF_SOCKBUFSIZE) == -1) {
         goto failure;
     }
 
@@ -391,5 +435,27 @@ worker_remove (worker *wrk,
         }
     }
     errno = EINVAL;
+    return -1;
+}
+
+/**
+ * Prepare a command with the data of the inotify_set_param() call.
+ *
+ * @param[in] wrk   A pointer to #worker.
+ * @param[in] param Worker-thread parameter name to set.
+ * @param[in] value Worker-thread parameter value to set.
+ * @return 0 on success, -1 on failure.
+ **/
+int
+worker_set_param (worker *wrk, int param, intptr_t value)
+{
+    assert (wrk != NULL);
+
+    switch (param) {
+    case IN_SOCKBUFSIZE:
+        return worker_set_sockbufsize (wrk, value);
+    default:
+        errno = EINVAL;
+    }
     return -1;
 }

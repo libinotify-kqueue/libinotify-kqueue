@@ -43,6 +43,7 @@ typedef enum {
     WCMD_NONE = 0,   /* uninitialized state */
     WCMD_ADD,        /* add or modify a watch */
     WCMD_REMOVE,     /* remove a watch */
+    WCMD_PARAM,      /* set worker thread parameter */
 } worker_cmd_type_t;
 
 /**
@@ -61,16 +62,23 @@ typedef struct worker_cmd {
         } add;
 
         int rm_id;
+
+        struct {
+            int param;
+            intptr_t value;
+        } param;
     };
 
 } worker_cmd;
 
 void worker_cmd_add     (worker_cmd *cmd, const char *filename, uint32_t mask);
 void worker_cmd_remove  (worker_cmd *cmd, int watch_id);
+void worker_cmd_param   (worker_cmd *cmd, int param, intptr_t value);
 
 struct worker {
     int kq;                /* kqueue descriptor */
     volatile int io[2];    /* a socket pair */
+    int sockbufsize;       /* socket buffer size */
     pthread_t thread;      /* worker thread */
     SLIST_HEAD(, i_watch) head; /* linked list of inotify watches */
 
@@ -97,5 +105,6 @@ void    worker_wait           (worker *wrk);
 
 int     worker_add_or_modify  (worker *wrk, const char *path, uint32_t flags);
 int     worker_remove         (worker *wrk, int id);
+int     worker_set_param      (worker *wrk, int param, intptr_t value);
 
 #endif /* __WORKER_H__ */

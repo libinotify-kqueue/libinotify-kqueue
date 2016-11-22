@@ -110,6 +110,11 @@ process_command (worker *wrk, worker_cmd *cmd)
     case WCMD_REMOVE:
         cmd->retval = worker_remove (wrk, cmd->rm_id);
         cmd->error = errno;
+    case WCMD_PARAM:
+        cmd->retval = worker_set_param (wrk,
+                                        cmd->param.param,
+                                        cmd->param.value);
+        cmd->error = errno;
     default:
         perror_msg ("Worker processing a command without a command - "
                     "something went wrong.");

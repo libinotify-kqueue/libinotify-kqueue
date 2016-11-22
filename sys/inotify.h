@@ -19,6 +19,7 @@
  * The value is arbitrary, has been acquired from code sample in linux
  * inotify(7) man page and seems to be very common among the inotify clients.
  */
+#define IN_SOCKBUFSIZE			0
 #define	IN_DEF_SOCKBUFSIZE		4096
 
 /* Flags for the parameter of inotify_init1. */
@@ -94,6 +95,9 @@ int inotify_add_watch (int fd, const char *name, uint32_t mask) __THROW;
 
 /* Remove the watch specified by WD from the inotify instance FD. */
 int inotify_rm_watch (int fd, int wd) __THROW;
+
+/* Libinotify specific. Set inotify instance parameter. */
+int inotify_set_param (int fd, int param, intptr_t value) __THROW;
 
 __END_DECLS
 
