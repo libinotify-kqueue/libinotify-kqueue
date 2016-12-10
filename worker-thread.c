@@ -314,7 +314,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
 
     dep_list *was = NULL, *now = NULL;
     was = iw->deps;
-    now = dl_listing (iw->wd);
+    now = dl_listing (iw->fd);
     if (now == NULL) {
         perror_msg ("Failed to create a listing for watch %d", iw->wd);
         return;
