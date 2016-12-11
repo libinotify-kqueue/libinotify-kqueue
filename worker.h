@@ -85,7 +85,7 @@ struct worker {
     int wd_overflow;       /* if watch descriptor have been overflown */
 
     pthread_mutex_t mutex; /* worker mutex */
-    _Atomic(uint) mutex_rc;/* worker mutex sleepers/holders refcount */
+    atomic_uint mutex_rc;  /* worker mutex sleepers/holders refcount */
     sem_t sync_sem;        /* worker <-> user syncronization semaphore */
     event_queue eq;        /* inotify events queue */
 };
