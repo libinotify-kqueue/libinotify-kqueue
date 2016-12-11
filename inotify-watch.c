@@ -87,7 +87,6 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
 
     iw->deps = NULL;
     iw->wrk = wrk;
-    iw->wd = fd;
     iw->fd = fd;
     iw->flags = flags;
     iw->inode = st.st_ino;

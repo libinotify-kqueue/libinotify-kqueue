@@ -81,6 +81,8 @@ struct worker {
     int sockbufsize;       /* socket buffer size */
     pthread_t thread;      /* worker thread */
     SLIST_HEAD(, i_watch) head; /* linked list of inotify watches */
+    int wd_last;           /* last allocated inotify watch descriptor */
+    int wd_overflow;       /* if watch descriptor have been overflown */
 
     pthread_mutex_t mutex; /* worker mutex */
     _Atomic(uint) mutex_rc;/* worker mutex sleepers/holders refcount */

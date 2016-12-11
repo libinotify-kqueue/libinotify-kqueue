@@ -287,6 +287,9 @@ worker_create (int flags)
         goto failure;
     }
 
+    wrk->wd_last = 0;
+    wrk->wd_overflow = 0;
+
     pthread_mutex_init (&wrk->mutex, NULL);
     atomic_init (&wrk->mutex_rc, 0);
     sem_init (&wrk->sync_sem, 0, 0);
@@ -403,6 +406,26 @@ worker_add_or_modify (worker     *wrk,
         close (fd);
         return -1;
     }
+
+    /* Allocate watch descriptor */
+    int allocated;
+    do {
+        if (wrk->wd_last == INT_MAX) {
+            wrk->wd_last = 0;
+            wrk->wd_overflow = 1;
+        }
+        allocated = 1;
+        ++wrk->wd_last;
+        if (wrk->wd_overflow) {
+            SLIST_FOREACH (iw, &wrk->head, next) {
+                if (iw->wd == wrk->wd_last) {
+                    allocated = 0;
+                    break;
+                }
+            }
+        }
+    } while (!allocated);
+    iw->wd = wrk->wd_last;
 
     /* add inotify watch to worker`s watchlist */
     SLIST_INSERT_HEAD (&wrk->head, iw, next);
