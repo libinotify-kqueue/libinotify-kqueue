@@ -60,8 +60,14 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
     worker *wrk = iw->wrk;
     assert (wrk != NULL);
 
-    mask &= (~IN_ALL_EVENTS | iw->flags);
-    if (!((mask & IN_ALL_EVENTS && !iw->is_closed) || mask & ~IN_ALL_EVENTS)) {
+    /*
+     * Only IN_ALL_EVENTS, IN_UNMOUNT and IN_ISDIR events are allowed to be
+     * reported here. IN_Q_OVERFLOW and IN_IGNORED are directly inserted into
+     * event queue from other pieces of code
+     */
+    mask &= (IN_ALL_EVENTS & iw->flags) | IN_UNMOUNT | IN_ISDIR;
+    /* Skip empty IN_ISDIR events and events from closed watches */
+    if (!(mask & (IN_ALL_EVENTS | IN_UNMOUNT)) || iw->is_closed) {
         return 0;
     }
 
