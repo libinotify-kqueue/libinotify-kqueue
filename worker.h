@@ -100,6 +100,9 @@ struct worker {
     atomic_fetch_sub (&(wrk)->mutex_rc, 1); \
 } while (0)
 
+#define container_of(p, s, f) ((s *)(((uint8_t *)(p)) - offsetof(s, f)))
+#define EQ_TO_WRK(eqp) container_of((eqp), struct worker, eq)
+
 worker* worker_create         (int flags);
 void    worker_free           (worker *wrk);
 void    worker_post           (worker *wrk);

@@ -27,6 +27,7 @@
 #include <sys/uio.h>   /* iovec */
 
 #include <assert.h>    /* assert */
+#include <stddef.h>    /* offsetof */
 #include <stdlib.h>    /* realloc */
 #include <string.h>    /* memmove */
 
@@ -158,11 +159,10 @@ event_queue_enqueue (event_queue *eq,
  * Flush inotify events queue to socket
  *
  * @param[in] eq      A pointer to #event_queue.
- * @param[in] fd      A file descriptor to write events
  * @param[in] sbspace Amount of space in socket buffer available to write
  *                    w/o blocking
  **/
-void event_queue_flush (event_queue *eq, int fd, size_t sbspace)
+void event_queue_flush (event_queue *eq, size_t sbspace)
 {
     int iovcnt, iovmax;
     size_t iovlen = 0;
@@ -188,6 +188,7 @@ void event_queue_flush (event_queue *eq, int fd, size_t sbspace)
     send_flags |= MSG_NOSIGNAL;
 #endif
 
+    int fd = EQ_TO_WRK(eq)->io[KQUEUE_FD];
     if (safe_sendv (fd, eq->iov, iovcnt, send_flags) == -1) {
         perror_msg ("Sending of inotify events to socket failed");
     }

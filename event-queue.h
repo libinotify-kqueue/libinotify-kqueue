@@ -46,6 +46,6 @@ int  event_queue_enqueue (event_queue *eq,
                           uint32_t     mask,
                           uint32_t     cookie,
                           const char  *name);
-void event_queue_flush   (event_queue *eq, int fd, size_t sbspace);
+void event_queue_flush   (event_queue *eq, size_t sbspace);
 
 #endif /* __EVENT_QUEUE_H__ */
