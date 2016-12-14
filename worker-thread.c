@@ -349,6 +349,27 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
 void
 produce_notifications (worker *wrk, struct kevent *event)
 {
+    /* Heuristic order of dearrgegated inotify events */
+    static uint32_t ie_order[] = {
+#ifdef NOTE_OPEN
+        IN_OPEN,
+#endif
+#ifdef NOTE_READ
+        IN_ACCESS,
+#endif
+        IN_MODIFY,
+#ifdef NOTE_CLOSE
+        IN_CLOSE_NOWRITE,
+#endif
+#ifdef NOTE_CLOSE_WRITE
+        IN_CLOSE_WRITE,
+#endif
+        IN_ATTRIB,
+        IN_MOVE_SELF,
+        IN_DELETE_SELF,
+        IN_UNMOUNT
+    };
+
     assert (wrk != NULL);
     assert (event != NULL);
 
@@ -386,24 +407,46 @@ produce_notifications (worker *wrk, struct kevent *event)
             w->flags &= ~WF_SKIP_NEXT;
         }
 
-        if (flags & NOTE_WRITE && S_ISDIR (w->flags)) {
-            produce_directory_diff (iw, event);
-            w->flags |= WF_SKIP_NEXT;
-        }
+        uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
 
-        enqueue_event (iw, kqueue_to_inotify (flags, w->flags), NULL);
+        size_t i;
+        /* Deaggregate inotify events (most of) */
+        for (i = 0; i < nitems (ie_order); i++) {
+            if (i_flags & ie_order[i]) {
+                /* Report deaggregated items */
+                enqueue_event (iw,
+                               ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
+                               NULL);
+            } else
+            /* Report subfiles(dependency) list changes */
+            if (ie_order[i] == IN_MODIFY &&
+                flags & NOTE_WRITE && S_ISDIR (w->flags)) {
+                produce_directory_diff (iw, event);
+                w->flags |= WF_SKIP_NEXT;
+            }
+        }
 
         if (w->flags & WF_DELETED || flags & NOTE_REVOKE) {
             iw->is_closed = 1;
         }
     } else {
         uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
-        dep_node *iter = NULL;
-        SLIST_FOREACH (iter, &iw->deps->head, next) {
-            dep_item *di = iter->item;
 
-            if (di->inode == w->inode) {
-                enqueue_event (iw, i_flags, di);
+        size_t i;
+        /* Deaggregate inotify events */
+        for (i = 0; i < nitems (ie_order); i++) {
+            if (i_flags & ie_order[i]) {
+                dep_node *iter = NULL;
+                /* Report deaggregated items */
+                SLIST_FOREACH (iter, &iw->deps->head, next) {
+                    dep_item *di = iter->item;
+
+                    if (di->inode == w->inode) {
+                        enqueue_event (iw,
+                                       ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
+                                       di);
+                    }
+                }
             }
         }
     }

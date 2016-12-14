@@ -26,6 +26,7 @@
 
 #include "config.h"
 
+#include <sys/param.h>
 #include <sys/types.h>
 
 #ifdef HAVE_SYS_QUEUE_H
@@ -88,6 +89,10 @@
 
 #ifndef SIZE_MAX
 #define SIZE_MAX SIZE_T_MAX
+#endif
+
+#ifndef nitems
+#define nitems(x) (sizeof((x)) / sizeof((x)[0]))
 #endif
 
 /* FreeBSD 4.x doesn't have IOV_MAX exposed. */
