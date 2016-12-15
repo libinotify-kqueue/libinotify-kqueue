@@ -34,6 +34,7 @@ typedef struct event_queue {
     int count;         /* number of events enqueued */
     int allocated;     /* number of iovs allocated */
     int max_events;    /* max_queued_events */
+    struct inotify_event *last; /* Last event sent to socket */
 } event_queue;
 
 void event_queue_init (event_queue *eq);
@@ -47,5 +48,6 @@ int  event_queue_enqueue (event_queue *eq,
                           uint32_t     cookie,
                           const char  *name);
 void event_queue_flush   (event_queue *eq, size_t sbspace);
+void event_queue_reset_last (event_queue *eq);
 
 #endif /* __EVENT_QUEUE_H__ */

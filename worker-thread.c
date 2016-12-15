@@ -496,6 +496,10 @@ worker_thread (void *arg)
                 return NULL;
             } else if (received.filter == EVFILT_WRITE) {
                 sbspace = received.data;
+                if (sbspace >= wrk->sockbufsize) {
+                    /* Tell event queue about empty communication pipe */
+                    event_queue_reset_last(&wrk->eq);
+                }
 #ifdef EVFILT_USER
             } else if (received.filter == EVFILT_USER) {
                 cmd = received.udata;

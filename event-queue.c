@@ -23,6 +23,7 @@
 #include "compat.h"
 
 #include <sys/types.h> /* uint32_t */
+#include <sys/ioctl.h> /* ioctl */
 #include <sys/socket.h>/* SO_NOSIGPIPE */
 #include <sys/uio.h>   /* iovec */
 
@@ -48,6 +49,7 @@ event_queue_init (event_queue *eq)
     eq->allocated = 0;
     eq->count = 0;
     eq->iov = NULL;
+    eq->last = NULL;
     event_queue_set_max_events (eq, IN_DEF_MAX_QUEUED_EVENTS);
 }
 
@@ -65,6 +67,7 @@ event_queue_free (event_queue *eq)
         free (eq->iov[i].iov_base);
     }
     free (eq->iov);
+    free (eq->last);
 }
 
 /**
@@ -125,6 +128,7 @@ event_queue_enqueue (event_queue *eq,
                      uint32_t     cookie,
                      const char  *name)
 {
+    struct inotify_event *prev_ie;
     int retval = 0;
 
     if (eq->count > eq->max_events) {
@@ -141,6 +145,31 @@ event_queue_enqueue (event_queue *eq,
         cookie = 0;
         name = NULL;
         retval = -1;
+    }
+
+    /*
+     * Find previous reported event. If event queue is not empty, get last
+     * event from tail. Otherwise get last event sent to communication pipe.
+     */
+    prev_ie = (eq->count > 0) ? eq->iov[eq->count - 1].iov_base : eq->last;
+
+    /* Compare current event with previous to decide if it can be coalesced */
+    if (prev_ie != NULL &&
+        prev_ie->wd == wd &&
+        prev_ie->mask == mask &&
+        prev_ie->cookie == cookie &&
+      ((prev_ie->len == 0 && name == NULL) ||
+       (prev_ie->len > 0 && name != NULL && !strcmp (prev_ie->name, name)))) {
+            /* Events are identical and queue is not empty. Skip current. */
+            if (eq->count > 0) {
+                return retval;
+            }
+            /* Event queue is empty. Check if any events remain in the pipe */
+            int fd = EQ_TO_WRK(eq)->io[INOTIFY_FD];
+            int buffered;
+            if (ioctl (fd, FIONREAD, &buffered) == 0 && buffered > 0) {
+                return retval;
+            }
     }
 
     eq->iov[eq->count].iov_base = create_inotify_event (
@@ -193,8 +222,12 @@ void event_queue_flush (event_queue *eq, size_t sbspace)
         perror_msg ("Sending of inotify events to socket failed");
     }
 
+    /* Save last event sent to communication pipe for coalecsing checks */
+    free (eq->last);
+    eq->last = eq->iov[iovcnt - 1].iov_base;
+
     int i;
-    for (i = 0; i < iovcnt; i++) {
+    for (i = 0; i < iovcnt - 1; i++) {
         free (eq->iov[i].iov_base);
     }
 
@@ -202,4 +235,18 @@ void event_queue_flush (event_queue *eq, size_t sbspace)
              &eq->iov[iovcnt],
              sizeof(struct iovec) * (eq->count - iovcnt));
     eq->count -= iovcnt;
+}
+
+/**
+ * Remove last event sent to communication pipe from internal buffer
+ *
+ * @param[in] eq A pointer to #event_queue.
+ **/
+void
+event_queue_reset_last (event_queue *eq)
+{
+    assert (eq != NULL);
+
+    free (eq->last);
+    eq->last = NULL;
 }
