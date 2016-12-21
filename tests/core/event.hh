@@ -36,7 +36,7 @@ struct event {
     bool operator< (const event &ev) const;
 };
 
-typedef std::set<event> events;
+typedef std::multiset<event> events;
 
 class event_matcher {
     event ev;
