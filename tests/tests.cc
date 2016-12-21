@@ -31,6 +31,7 @@
 #include "open_close_test.hh"
 #include "symlink_test.hh"
 #include "bugs_test.hh"
+#include "event_queue_test.hh"
 
 #define CONCURRENT
 
@@ -48,6 +49,7 @@ int main (int argc, char *argv[]) {
         new symlink_test (j),
         new fail_test (j),
         new bugs_test (j),
+        new event_queue_test (j),
     };
     const int num_tests = sizeof(tests)/sizeof(tests[0]);
 

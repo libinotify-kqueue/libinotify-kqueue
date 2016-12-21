@@ -76,6 +76,7 @@ check_libinotify_SOURCES = \
     tests/open_close_test.cc \
     tests/symlink_test.cc \
     tests/bugs_test.cc \
+    tests/event_queue_test.cc \
     tests/tests.cc
 
 check_libinotify_CXXFLAGS = @PTHREAD_CFLAGS@
