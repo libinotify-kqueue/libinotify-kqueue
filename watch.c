@@ -133,7 +133,7 @@ kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
         /* Treat deletes as link number changes if links still exist */
         if (wf & WF_DELETED || !S_ISREG (wf))
             result |= IN_DELETE_SELF;
-        else
+        if (S_ISREG (wf))
             result |= IN_ATTRIB;
     }
 
