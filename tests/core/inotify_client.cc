@@ -76,13 +76,13 @@ events inotify_client::receive_during (int timeout) const
 
     LOG ("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
 
-    while ((elapsed = timems () - start) < timeout * 1000) {
+    while ((elapsed = timems () - start) < timeout) {
         memset (&pfd, 0, sizeof (struct pollfd));
         pfd.fd = fd;
         pfd.events = POLLIN;
 
-        LOG ("INO: Polling with " << VAR (timeout));
-        int pollretval = poll (&pfd, 1, timeout * 1000);
+        LOG ("INO: Polling with " << VAR (timeout) << " ms");
+        int pollretval = poll (&pfd, 1, timeout);
         LOG ("INO: Poll returned " << VAR (pollretval) << ", " << VAR(pfd.revents));
         if (pollretval == -1) {
             return events();
