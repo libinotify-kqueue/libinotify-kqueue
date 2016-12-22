@@ -22,6 +22,7 @@
 *******************************************************************************/
 
 #include <algorithm>
+#include <unistd.h>
 #include "bugs_test.hh"
 
 bugs_test::bugs_test (journal &j)
@@ -124,8 +125,9 @@ void bugs_test::run ()
     cons.input.receive ();
 
     system ("touch bugst-workdir/2");
+    usleep (20000); /* Gives some time for readdir() to complete */
     system ("touch bugst-workdir/2");
-    system ("echo test > bugst-workdir/2");
+    system ("echo test >> bugst-workdir/2");
 
     cons.output.wait ();
     received = cons.output.registered ();
