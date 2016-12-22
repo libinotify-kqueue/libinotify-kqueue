@@ -21,7 +21,14 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#ifndef __linux__
+#include <sys/types.h>
+#include <sys/event.h>
+#include <sys/time.h>
+#endif
+
 #include <algorithm>
+#include "config.h"
 #include "notifications_dir_test.hh"
 
 notifications_dir_test::notifications_dir_test (journal &j)
@@ -81,6 +88,7 @@ void notifications_dir_test::run ()
             iter != received.end() && iter->flags & IN_ISDIR);
 
 
+#if defined(__linux__) || defined(NOTE_READ)
     cons.output.reset ();
     cons.input.receive ();
 
@@ -90,6 +98,10 @@ void notifications_dir_test::run ()
     received = cons.output.registered ();
     should ("receive IN_ACCESS event on reading of directory contents",
             contains (received, event ("", wid, IN_ACCESS)));
+#else
+    skip ("receive IN_ACCESS event on reading of directory contents"
+          " (NOTE_READ kqueue event missed)");
+#endif
 
 
     cons.output.reset ();
@@ -159,6 +171,7 @@ void notifications_dir_test::run ()
             contains (received, event ("one", wid, IN_MODIFY)));
 
 
+#if defined(__linux__) || defined(HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME)
     cons.output.reset ();
     cons.input.receive ();
 
@@ -169,8 +182,14 @@ void notifications_dir_test::run ()
     should ("receive IN_MOVED_FROM event on moving file from directory "
             "to another location within the same mount point",
             contains (received, event ("one", wid, IN_MOVED_FROM)));
+#else
+    skip ("receive IN_MOVED_FROM event on moving file from directory "
+          "to another location within the same mount point "
+          "(parent NOTE_EXTEND kqueue event missed on rename)");
+#endif
 
 
+#if defined(__linux__) || defined(HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME)
     cons.output.reset ();
     cons.input.receive ();
 
@@ -181,6 +200,11 @@ void notifications_dir_test::run ()
     should ("receive IN_MOVED_TO event on moving file to directory "
             "from another location within the same mount point",
             contains (received, event ("one", wid, IN_MOVED_TO)));
+#else
+    skip ("receive IN_MOVED_TO event on moving file to directory "
+          "from another location within the same mount point "
+          "(parent NOTE_EXTEND kqueue event missed on rename)");
+#endif
 
 
     cons.output.reset ();
@@ -267,6 +291,7 @@ void notifications_dir_test::run ()
             iter != received.end() && iter->flags & IN_ISDIR);
 
     
+#if defined(__linux__) || defined(NOTE_READ)
     cons.output.reset ();
     cons.input.receive ();
 
@@ -280,6 +305,10 @@ void notifications_dir_test::run ()
                          event_matcher (event ("dir", wid, IN_ACCESS)));
     should ("receive IN_ACCESS with IN_ISDIR on reading of subdirectory contents",
             iter != received.end() && iter->flags & IN_ISDIR);
+#else
+    skip ("receive IN_ACCESS with IN_ISDIR on reading of subdirectory contents"
+          " (NOTE_READ kqueue event missed)");
+#endif
 
 
     cons.output.reset ();
