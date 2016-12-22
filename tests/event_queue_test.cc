@@ -119,7 +119,7 @@ void event_queue_test::run ()
         usleep (EVENT_INTERVAL);
     }
 
-    cons.input.receive ();
+    cons.input.receive (1000);
     cons.output.wait ();
     received = cons.output.registered ();
     should ("receive IN_Q_OVERFLOW on many consecutive touches",

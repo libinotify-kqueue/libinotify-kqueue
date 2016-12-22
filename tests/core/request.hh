@@ -60,7 +60,7 @@ private:
 
 public:
     request ();
-    void receive (unsigned int timeout = 1000);
+    void receive (unsigned int timeout = 100);
     void setup (const std::string &path, uint32_t mask);
     void setup (int rm_id);
 
