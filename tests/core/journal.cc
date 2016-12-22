@@ -44,10 +44,16 @@ void journal::channel::fail (const std::string &test_name)
     results.push_back (entry (test_name, entry::FAILED));
 }
 
-void journal::channel::summarize (int &passed, int &failed) const
+void journal::channel::skip (const std::string &test_name)
+{
+    results.push_back (entry (test_name, entry::SKIPPED));
+}
+
+void journal::channel::summarize (int &passed, int &failed, int &skipped) const
 {
     passed = 0;
     failed = 0;
+    skipped = 0;
 
     bool header_printed = false;
 
@@ -58,13 +64,17 @@ void journal::channel::summarize (int &passed, int &failed) const
         if (iter->status == entry::PASSED) {
             ++passed;
         } else {
-            ++failed;
-
             if (!header_printed) {
                 header_printed = true;
                 std::cout << std::endl << "In test \"" << name << "\":" << std::endl;
             }
-            std::cout << "    failed: " << iter->name << std::endl;
+            if (iter->status == entry::FAILED) {
+                ++failed;
+                std::cout << "    failed: " << iter->name << std::endl;
+            } else {
+                ++skipped;
+                std::cout << "   skipped: " << iter->name << std::endl;
+            }
         }
     }
 
@@ -96,27 +106,29 @@ void journal::summarize () const
 {
     pthread_mutex_lock (&channels_mutex);
 
-    int total_passed = 0, total_failed = 0;
+    int total_passed = 0, total_failed = 0, total_skipped = 0;
 
     std::cout << std::endl;
 
     for (channel_list::const_iterator iter = channels.begin();
          iter != channels.end();
          ++iter) {
-        int passed = 0, failed = 0;
-        iter->summarize (passed, failed);
+        int passed = 0, failed = 0, skipped = 0;
+        iter->summarize (passed, failed, skipped);
         total_passed += passed;
         total_failed += failed;
+        total_skipped += skipped;
     }
 
-    int total = total_passed + total_failed;
-    if (total_failed) {
+    int total = total_passed + total_failed + total_skipped;
+    if (total_failed || total_skipped) {
         std::cout << std::endl;
     }
     std::cout << "--------------------" << std::endl
               << "     Run: " << total << std::endl
               << "  Passed: " << total_passed << std::endl
-              << "  Failed: " << total_failed << std::endl;
+              << "  Failed: " << total_failed << std::endl
+              << " Skipped: " << total_skipped << std::endl;
 
     pthread_mutex_unlock (&channels_mutex);
 }

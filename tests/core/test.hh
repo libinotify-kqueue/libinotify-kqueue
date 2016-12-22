@@ -48,6 +48,7 @@ public:
     bool should (const std::string &test_name, bool exp);
     void pass (const std::string &test_name);
     void fail (const std::string &test_name);
+    void skip (const std::string &test_name);
 };
 
 

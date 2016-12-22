@@ -78,3 +78,10 @@ void test::fail (const std::string &test_name)
     std::cout.flush ();
     jc.fail (test_name);
 }
+
+void test::skip (const std::string &test_name)
+{
+    std::cout << "!";
+    std::cout.flush ();
+    jc.skip (test_name);
+}
