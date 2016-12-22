@@ -192,6 +192,7 @@ void symlink_test::run ()
         cons.input.interrupt ();
     }
     /* Test IN_DONT_FOLLOW */
+#if defined(__linux__) || defined(O_SYMLINK)
     {   consumer cons;
         events received;
         events::iterator iter;
@@ -264,6 +265,20 @@ void symlink_test::run ()
 
         cons.input.interrupt ();
     }
+#else
+    skip ("Start watch successfully on a symlink file with IN_DONT_FOLLOW"
+          " (O_SYMLINK open() flag missed)");
+    skip ("Receive IN_ATTRIB after touching symlink itself"
+          " (O_SYMLINK open() flag missed)");
+    skip ("No IN_MODIFY after modifying symlink source file"
+          " (O_SYMLINK open() flag missed)");
+    skip ("No IN_MODIFY after modifying file via symlink"
+          " (O_SYMLINK open() flag missed)");
+    skip ("Receive IN_MOVE_SELF after moving the symlink"
+          " (O_SYMLINK open() flag missed)");
+    skip ("Receive IN_DELETE_SELF after removing the symlink"
+          " (O_SYMLINK open() flag missed)");
+#endif
 }
 
 void symlink_test::cleanup ()
