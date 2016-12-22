@@ -71,12 +71,12 @@ events inotify_client::receive_during (int timeout) const
     events received;
     struct pollfd pfd;
 
-    time_t start = time (NULL);
+    time_t start = timems ();
     time_t elapsed = 0;
 
     LOG ("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
 
-    while ((elapsed = time (NULL) - start) < timeout) {
+    while ((elapsed = timems () - start) < timeout * 1000) {
         memset (&pfd, 0, sizeof (struct pollfd));
         pfd.fd = fd;
         pfd.events = POLLIN;
@@ -134,4 +134,15 @@ long inotify_client::bytes_available (int fd)
 int inotify_client::get_fd ()
 {
     return fd;
+}
+
+time_t inotify_client::timems ()
+{
+    struct timespec ts;
+
+    if (clock_gettime (CLOCK_MONOTONIC, &ts) < 0) {
+        return time(NULL) * 1000;
+    }
+
+    return ts.tv_sec * 1000 + (time_t)(ts.tv_nsec / 1000000L);
 }
