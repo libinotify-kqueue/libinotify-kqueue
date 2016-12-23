@@ -44,6 +44,10 @@ libinotify_la_CFLAGS = -I. -DNDEBUG @PTHREAD_CFLAGS@
 libinotify_la_LDFLAGS = @PTHREAD_LIBS@ -export-symbols libinotify.sym
 endif
 
+inotify_test_SOURCES = inotify-test.c
+inotify_test_LDADD = libinotify.la
+noinst_PROGRAMS = inotify-test
+
 ############################################################
 #	Test suite
 #-----------------------------------------------------------
