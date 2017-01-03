@@ -371,4 +371,13 @@ if test "$ac_cv_func_fdopendir" = "yes" -a "$have_o_evtonly" = "no" -a \
 fi
 
 
+# Replace semaphores with condition variables to not hang being run under valgrind
+AC_ARG_ENABLE([native-semaphores],
+    AS_HELP_STRING([--disable-native-semaphores], [Emulate semaphores with condvars]))
+
+AS_IF([test "x$enable_native_semaphores" != "xno"], [
+    AC_DEFINE([NATIVE_SEMAPHORES],[1],[Define to 1 to use native semaphores])
+])
+
+
 AC_OUTPUT

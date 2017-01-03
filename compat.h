@@ -57,6 +57,7 @@
 #endif
 #endif
 
+#ifdef NATIVE_SEMAPHORES
 #ifdef __APPLE__
 #include <dispatch/dispatch.h>
 #define sem_t dispatch_semaphore_t
@@ -76,6 +77,39 @@
 #else
 #include <semaphore.h>
 #endif
+#else /* !NATIVE_SEMAPHORES */
+typedef struct {
+    int val;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+} sem_t;
+#define sem_init(sem, pshared, value) ({ \
+    pthread_mutex_init(&(sem)->mutex, NULL); \
+    pthread_cond_init(&(sem)->cond, NULL); \
+    (sem)->val = value; \
+    0; \
+})
+#define sem_wait(sem) ({ \
+    pthread_mutex_lock(&(sem)->mutex); \
+    while ((sem)->val == 0) { \
+        pthread_cond_wait(&(sem)->cond, &(sem)->mutex); \
+    } \
+    --(sem)->val; \
+    pthread_mutex_unlock(&(sem)->mutex); \
+    0; \
+})
+#define sem_post(sem) ({ \
+    pthread_mutex_lock(&(sem)->mutex); \
+    ++(sem)->val; \
+    pthread_cond_broadcast(&(sem)->cond); \
+    pthread_mutex_unlock(&(sem)->mutex); \
+    0; \
+})
+#define sem_destroy(sem) ({ \
+    pthread_cond_destroy(&(sem)->cond); \
+    pthread_mutex_destroy(&(sem)->mutex); \
+})
+#endif /* !NATIVE_SEMAPHORES */
 
 #include <sys/stat.h>
 #include <dirent.h>
