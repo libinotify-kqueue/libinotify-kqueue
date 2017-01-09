@@ -192,13 +192,10 @@ AM_CONDITIONAL(NO_STDATOMIC, [test "$have_stdatomic_h" = "no" -a "$have_compat_s
 
 
 AC_ARG_ENABLE([unsafe_fchdir],
-    AS_HELP_STRING([--enable-unsafe-fchdir], [allow unsafe use of fchdir to track of watched directory path changes on its renaming]),
-[
+    AS_HELP_STRING([--enable-unsafe-fchdir], [allow unsafe use of fchdir to track of watched directory path changes on its renaming]))
+AS_IF([test "x$enable_unsafe_fchdir" = "xyes"], [
     AC_DEFINE([ENABLE_UNSAFE_FCHDIR],[1],[Allow to use of fchdir to track of watched directory path changes])
-    enable_unsafe_fchdir=yes
-],
-    enable_unsafe_fchdir=no
-)
+])
 
 atfuncs_support=yes
 AC_CHECK_FUNCS(openat fdopendir fstatat,,atfuncs_support=no)
