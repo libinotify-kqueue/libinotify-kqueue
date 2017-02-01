@@ -120,22 +120,18 @@ kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
         result |= IN_ACCESS;
 #endif
 
-    if (flags & NOTE_ATTRIB)
-        result |= IN_ATTRIB;
-
-    if (flags & NOTE_LINK && S_ISREG (wf) && !(wf & WF_ISSUBWATCH))
+    if (flags & NOTE_ATTRIB ||                /* attribute changes */
+        (flags & (NOTE_LINK | NOTE_DELETE) && /* link number changes */
+         S_ISREG (wf) && !(wf & WF_ISSUBWATCH)))
         result |= IN_ATTRIB;
 
     if (flags & NOTE_WRITE && S_ISREG (wf))
         result |= IN_MODIFY;
 
-    if (flags & NOTE_DELETE && !(wf & WF_ISSUBWATCH)) {
-        /* Treat deletes as link number changes if links still exist */
-        if (wf & WF_DELETED || !S_ISREG (wf))
-            result |= IN_DELETE_SELF;
-        else
-            result |= IN_ATTRIB;
-    }
+    /* Do not issue IN_DELETE_SELF if links still exist */
+    if (flags & NOTE_DELETE && !(wf & WF_ISSUBWATCH) &&
+        (wf & WF_DELETED || !S_ISREG (wf)))
+        result |= IN_DELETE_SELF;
 
     if (flags & NOTE_RENAME && !(wf & WF_ISSUBWATCH))
         result |= IN_MOVE_SELF;

@@ -192,13 +192,10 @@ AM_CONDITIONAL(NO_STDATOMIC, [test "$have_stdatomic_h" = "no" -a "$have_compat_s
 
 
 AC_ARG_ENABLE([unsafe_fchdir],
-    AS_HELP_STRING([--enable-unsafe-fchdir], [allow unsafe use of fchdir to track of watched directory path changes on its renaming]),
-[
+    AS_HELP_STRING([--enable-unsafe-fchdir], [allow unsafe use of fchdir to track of watched directory path changes on its renaming]))
+AS_IF([test "x$enable_unsafe_fchdir" = "xyes"], [
     AC_DEFINE([ENABLE_UNSAFE_FCHDIR],[1],[Allow to use of fchdir to track of watched directory path changes])
-    enable_unsafe_fchdir=yes
-],
-    enable_unsafe_fchdir=no
-)
+])
 
 atfuncs_support=yes
 AC_CHECK_FUNCS(openat fdopendir fstatat,,atfuncs_support=no)
@@ -371,45 +368,13 @@ if test "$ac_cv_func_fdopendir" = "yes" -a "$have_o_evtonly" = "no" -a \
 fi
 
 
-CFLAGS="${CFLAGS} ${PTHREAD_CFLAGS}"
-LIBS="${LIBS} ${PTHREAD_LIBS}"
-AC_MSG_CHECKING(for SIGPIPE recipient)
-AC_RUN_IFELSE(
-[
-    AC_LANG_PROGRAM(
-    [[
-        #include <pthread.h>
-        #include <signal.h>
-        #include <unistd.h>
+# Replace semaphores with condition variables to not hang being run under valgrind
+AC_ARG_ENABLE([native-semaphores],
+    AS_HELP_STRING([--disable-native-semaphores], [Emulate semaphores with condvars]))
 
-        static volatile int catched = 0;
-        void sigpipe_handler(int sig) { catched = 1; }
-        void *test(void *args) {
-            sigset_t set;
-            int io[2];
-            sigemptyset(&set);
-            sigaddset(&set, SIGPIPE);
-            pthread_sigmask(SIG_BLOCK, &set, NULL);
-            pipe(io);
-            close(io[0]);
-            write(io[1], io, 1);
-            return NULL;
-        }
-    ]],
-    [[
-        pthread_t thread;
-        signal(SIGPIPE, sigpipe_handler);
-        if (pthread_create(&thread, NULL, test, NULL) == -1) return 1;
-        if (pthread_join(thread, NULL) != 0) return 1;
-        return catched;
-    ]])
-],
-    AC_MSG_RESULT(thread)
-,[
-    AC_DEFINE([SIGPIPE_RECIPIENT_IS_PROCESS],[1],[Define to 1 if SIGPIPE is process-wide signal])
-    AC_MSG_RESULT(process)
-]
-)
+AS_IF([test "x$enable_native_semaphores" != "xno"], [
+    AC_DEFINE([NATIVE_SEMAPHORES],[1],[Define to 1 to use native semaphores])
+])
 
 
 AC_OUTPUT

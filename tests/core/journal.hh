@@ -33,7 +33,8 @@ public:
         std::string name;
         enum status_e {
             PASSED,
-            FAILED
+            FAILED,
+            SKIPPED
         } status;
 
         explicit entry (const std::string &name_ = "", status_e status_ = PASSED);
@@ -49,8 +50,9 @@ public:
 
         void pass (const std::string &test_name);
         void fail (const std::string &test_name);
+        void skip (const std::string &test_name);
 
-        void summarize (int &passed, int &failed) const;
+        void summarize (int &passed, int &failed, int &skipped) const;
     };
 
     journal ();

@@ -50,18 +50,6 @@ worker_cmd_reset (worker_cmd *cmd);
 
 
 /**
- * Initialize resources associated with worker command.
- *
- * @param[in] cmd A pointer to #worker_cmd.
- **/
-void worker_cmd_init (worker_cmd *cmd)
-{
-    assert (cmd != NULL);
-    memset (cmd, 0, sizeof (worker_cmd));
-    sem_init (&cmd->sync_sem, 0, 0);
-}
-
-/**
  * Prepare a command with the data of the inotify_add_watch() call.
  *
  * @param[in] cmd      A pointer to #worker_cmd.
@@ -97,6 +85,24 @@ worker_cmd_remove (worker_cmd *cmd, int watch_id)
 }
 
 /**
+ * Prepare a command with the data of the inotify_set_param() call.
+ *
+ * @param[in] cmd    A pointer to #worker_cmd
+ * @param[in] param  Worker-thread parameter name to set.
+ * @param[in] value  Worker-thread parameter value to set.
+ **/
+void
+worker_cmd_param (worker_cmd *cmd, int param, intptr_t value)
+{
+    assert (cmd != NULL);
+    worker_cmd_reset (cmd);
+
+    cmd->type = WCMD_PARAM;
+    cmd->param.param = param;
+    cmd->param.value = value;
+}
+
+/**
  * Reset the worker command.
  *
  * @param[in] cmd A pointer to #worker_cmd.
@@ -111,6 +117,8 @@ worker_cmd_reset (worker_cmd *cmd)
     cmd->add.filename = NULL;
     cmd->add.mask = 0;
     cmd->rm_id = 0;
+    cmd->param.param = 0;
+    cmd->param.value = 0;
 }
 
 /**
@@ -119,10 +127,10 @@ worker_cmd_reset (worker_cmd *cmd)
  * @param[in] cmd A pointer to #worker_cmd.
  **/
 void
-worker_cmd_post (worker_cmd *cmd)
+worker_post (worker *wrk)
 {
-    assert (cmd != NULL);
-    sem_post(&cmd->sync_sem);
+    assert (wrk != NULL);
+    sem_post(&wrk->sync_sem);
 }
 
 /**
@@ -131,25 +139,40 @@ worker_cmd_post (worker_cmd *cmd)
  * @param[in] cmd A pointer to #worker_cmd.
  **/
 void
-worker_cmd_wait (worker_cmd *cmd)
+worker_wait (worker *wrk)
 {
-    assert (cmd != NULL);
+    assert (wrk != NULL);
     do { /* NOTHING */
-    } while (sem_wait(&cmd->sync_sem) == -1 && errno == EINTR);
+    } while (sem_wait(&wrk->sync_sem) == -1 && errno == EINTR);
 }
 
 /**
- * Release a worker command.
- *
- * This function releases resources associated with worker command.
- *
- * @param[in] cmd A pointer to #worker_cmd.
+ * Set communication pipe buffer size
+ * @param[in] wrk     A pointer to #worker.
+ * @param[in] bufsize A buffer size allocated for communication pipe
+ * @return 0 on success, -1 otherwise
  **/
-void
-worker_cmd_release (worker_cmd *cmd)
+int
+worker_set_sockbufsize (worker *wrk, int bufsize)
 {
-    assert (cmd != NULL);
-    sem_destroy (&cmd->sync_sem);
+    assert (wrk != NULL);
+
+    if (bufsize <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (setsockopt(wrk->io[KQUEUE_FD],
+                   SOL_SOCKET,
+                   SO_SNDBUF,
+                   &bufsize,
+                   sizeof(bufsize))) {
+        perror_msg ("Failed to set send buffer size for socket");
+        return -1;
+    }
+    wrk->sockbufsize = bufsize;
+
+    return 0;
 }
 
 /**
@@ -232,6 +255,11 @@ worker_create (int flags)
         goto failure;
     }
 
+    /* Set socket buffer size to IN_DEF_SOCKBUFSIZE bytes */
+    if (worker_set_sockbufsize(wrk, IN_DEF_SOCKBUFSIZE) == -1) {
+        goto failure;
+    }
+
     SLIST_INIT (&wrk->head);
 
 #ifdef EVFILT_USER
@@ -259,10 +287,12 @@ worker_create (int flags)
         goto failure;
     }
 
+    wrk->wd_last = 0;
+    wrk->wd_overflow = 0;
+
     pthread_mutex_init (&wrk->mutex, NULL);
     atomic_init (&wrk->mutex_rc, 0);
-
-    worker_cmd_init (&wrk->cmd);
+    sem_init (&wrk->sync_sem, 0, 0);
     event_queue_init (&wrk->eq);
 
     /* create a run a worker thread */
@@ -326,7 +356,7 @@ worker_free (worker *wrk)
     }
     pthread_mutex_destroy (&wrk->mutex);
     /* And only after that destroy worker_cmd sync primitives */
-    worker_cmd_release (&wrk->cmd);
+    sem_destroy (&wrk->sync_sem);
     event_queue_free (&wrk->eq);
     free (wrk);
 }
@@ -377,6 +407,26 @@ worker_add_or_modify (worker     *wrk,
         return -1;
     }
 
+    /* Allocate watch descriptor */
+    int allocated;
+    do {
+        if (wrk->wd_last == INT_MAX) {
+            wrk->wd_last = 0;
+            wrk->wd_overflow = 1;
+        }
+        allocated = 1;
+        ++wrk->wd_last;
+        if (wrk->wd_overflow) {
+            SLIST_FOREACH (iw, &wrk->head, next) {
+                if (iw->wd == wrk->wd_last) {
+                    allocated = 0;
+                    break;
+                }
+            }
+        }
+    } while (!allocated);
+    iw->wd = wrk->wd_last;
+
     /* add inotify watch to worker`s watchlist */
     SLIST_INSERT_HEAD (&wrk->head, iw, next);
 
@@ -408,5 +458,29 @@ worker_remove (worker *wrk,
         }
     }
     errno = EINVAL;
+    return -1;
+}
+
+/**
+ * Prepare a command with the data of the inotify_set_param() call.
+ *
+ * @param[in] wrk   A pointer to #worker.
+ * @param[in] param Worker-thread parameter name to set.
+ * @param[in] value Worker-thread parameter value to set.
+ * @return 0 on success, -1 on failure.
+ **/
+int
+worker_set_param (worker *wrk, int param, intptr_t value)
+{
+    assert (wrk != NULL);
+
+    switch (param) {
+    case IN_SOCKBUFSIZE:
+        return worker_set_sockbufsize (wrk, value);
+    case IN_MAX_QUEUED_EVENTS:
+        return event_queue_set_max_events (&wrk->eq, value);
+    default:
+        errno = EINVAL;
+    }
     return -1;
 }

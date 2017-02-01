@@ -20,6 +20,11 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#ifndef __linux__
+#include <sys/types.h>
+#include <sys/event.h>
+#include <sys/time.h>
+#endif
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -45,7 +50,6 @@ void open_close_test::run ()
     consumer cons;
     int file_wid = 0;
     int dir_wid = 0;
-    int fd, dup_fd;
     events received;
 
     cons.input.setup ("oct-file-working", IN_OPEN | IN_CLOSE_WRITE | IN_CLOSE_NOWRITE);
@@ -55,6 +59,7 @@ void open_close_test::run ()
     should ("start watching on a file", file_wid != -1);
 
 
+#if defined(__linux__) || defined(NOTE_OPEN)
     cons.output.reset ();
     cons.input.setup ("oct-dir-working", IN_OPEN | IN_CLOSE_WRITE | IN_CLOSE_NOWRITE);
     cons.output.wait ();
@@ -73,8 +78,13 @@ void open_close_test::run ()
             contains (received, event ("", file_wid, IN_OPEN)));
     should ("receive IN_CLOSE_NOWRITE on cat",
             contains (received, event ("", file_wid, IN_CLOSE_NOWRITE)));
+#else
+    skip ("receive IN_OPEN on cat (NOTE_OPEN kqueue event missed)");
+    skip ("receive IN_CLOSE_NOWRITE on cat (NOTE_CLOSE kqueue event missed)");
+#endif
 
 
+#if defined(__linux__) || defined(NOTE_OPEN)
     cons.output.reset ();
     cons.input.receive ();
 
@@ -86,8 +96,13 @@ void open_close_test::run ()
             contains (received, event ("", dir_wid, IN_OPEN)));
     should ("receive IN_CLOSE_NOWRITE on ls",
             contains (received, event ("", dir_wid, IN_CLOSE_NOWRITE)));
+#else
+    skip ("receive IN_OPEN on ls (NOTE_OPEN kqueue event missed)");
+    skip ("receive IN_CLOSE_NOWRITE on ls (NOTE_CLOSE kqueue event missed)");
+#endif
 
 
+#if defined(__linux__) || defined(NOTE_OPEN)
     cons.output.reset ();
     cons.input.receive ();
 
@@ -99,58 +114,10 @@ void open_close_test::run ()
             contains (received, event ("", file_wid, IN_OPEN)));
     should ("receive IN_CLOSE_WRITE on modify",
             contains (received, event ("", file_wid, IN_CLOSE_WRITE)));
-
-
-    cons.output.reset ();
-    cons.input.receive ();
-
-    fd = open ("oct-file-working", O_RDONLY);
-    dup_fd = dup (fd);
-    close (fd);
-
-    cons.output.wait ();
-    received = cons.output.registered ();
-    should ("not receive IN_CLOSE_NOWRITE on close() "
-            "of non last dup()-ed fd opened for read",
-            !contains (received, event ("", file_wid, IN_CLOSE_NOWRITE)));
-
-
-    cons.output.reset ();
-    cons.input.receive ();
-
-    close (dup_fd);
-
-    cons.output.wait ();
-    received = cons.output.registered ();
-    should ("receive IN_CLOSE_NOWRITE on close() "
-            "of last dup()-ed fd opened for read",
-            contains (received, event ("", file_wid, IN_CLOSE_NOWRITE)));
-
-
-    cons.output.reset ();
-    cons.input.receive ();
-
-    fd = open ("oct-file-working", O_WRONLY);
-    dup_fd = dup (fd);
-    close (fd);
-
-    cons.output.wait ();
-    received = cons.output.registered ();
-    should ("not receive IN_CLOSE_WRITE on close() "
-            "of non last dup()-ed fd opened for write",
-            !contains (received, event ("", file_wid, IN_CLOSE_WRITE)));
-
-
-    cons.output.reset ();
-    cons.input.receive ();
-
-    close (dup_fd);
-
-    cons.output.wait ();
-    received = cons.output.registered ();
-    should ("receive IN_CLOSE_WRITE on close() "
-            "of last dup()-ed fd opened for write",
-            contains (received, event ("", file_wid, IN_CLOSE_WRITE)));
+#else
+    skip ("receive IN_OPEN on modify (NOTE_OPEN kqueue event missed)");
+    skip ("receive IN_CLOSE_WRITE on modify (NOTE_CLOSE_WRITE kqueue event missed)");
+#endif
 
     cons.input.interrupt ();
 }

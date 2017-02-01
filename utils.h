@@ -67,6 +67,8 @@ ssize_t safe_read   (int fd, void *data, size_t size);
 ssize_t safe_write  (int fd, const void *data, size_t size);
 ssize_t safe_send   (int fd, const void *data, size_t size, int flags);
 ssize_t safe_writev (int fd, const struct iovec iov[], int iovcnt);
+ssize_t safe_sendv (int fd, struct iovec iov[], int iovcnt, int flags);
+ssize_t sendv (int fd, struct iovec iov[], int iovcnt, int flags);
 
 int is_opened (int fd);
 int is_deleted (int fd);

@@ -87,7 +87,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
 
     iw->deps = NULL;
     iw->wrk = wrk;
-    iw->wd = fd;
+    iw->fd = fd;
     iw->flags = flags;
     iw->inode = st.st_ino;
     iw->dev = st.st_dev;
@@ -169,7 +169,7 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
         return NULL;
     }
 
-    int fd = watch_open (iw->wd, di->path, IN_DONT_FOLLOW);
+    int fd = watch_open (iw->fd, di->path, IN_DONT_FOLLOW);
     if (fd == -1) {
         perror_msg ("Failed to open file %s", di->path);
         goto lstat;
@@ -215,7 +215,7 @@ hold:
 
 lstat:
     if (S_ISUNK (di->type)) {
-        if (fstatat (iw->wd, di->path, &st, AT_SYMLINK_NOFOLLOW) != -1) {
+        if (fstatat (iw->fd, di->path, &st, AT_SYMLINK_NOFOLLOW) != -1) {
             di->type = st.st_mode & S_IFMT;
         } else {
             perror_msg ("Failed to lstat subwatch %s", di->path);

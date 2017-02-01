@@ -60,8 +60,14 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
     worker *wrk = iw->wrk;
     assert (wrk != NULL);
 
-    mask &= (~IN_ALL_EVENTS | iw->flags);
-    if (!((mask & IN_ALL_EVENTS && !iw->is_closed) || mask & ~IN_ALL_EVENTS)) {
+    /*
+     * Only IN_ALL_EVENTS, IN_UNMOUNT and IN_ISDIR events are allowed to be
+     * reported here. IN_Q_OVERFLOW and IN_IGNORED are directly inserted into
+     * event queue from other pieces of code
+     */
+    mask &= (IN_ALL_EVENTS & iw->flags) | IN_UNMOUNT | IN_ISDIR;
+    /* Skip empty IN_ISDIR events and events from closed watches */
+    if (!(mask & (IN_ALL_EVENTS | IN_UNMOUNT)) || iw->is_closed) {
         return 0;
     }
 
@@ -93,33 +99,36 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
  * Process a worker command.
  *
  * @param[in] wrk A pointer to #worker.
+ * @param[in] cmd A pointer to #worker_cmd.
  **/
 void
-process_command (worker *wrk)
+process_command (worker *wrk, worker_cmd *cmd)
 {
     assert (wrk != NULL);
 
-#ifndef EVFILT_USER
-    /* read a byte */
-    char unused;
-    safe_read (wrk->io[KQUEUE_FD], &unused, 1);
-#endif
-
-    if (wrk->cmd.type == WCMD_ADD) {
-        wrk->cmd.retval = worker_add_or_modify (wrk,
-                                                wrk->cmd.add.filename,
-                                                wrk->cmd.add.mask);
-        wrk->cmd.error = errno;
-    } else if (wrk->cmd.type == WCMD_REMOVE) {
-        wrk->cmd.retval = worker_remove (wrk, wrk->cmd.rm_id);
-        wrk->cmd.error = errno;
-    } else {
+    switch (cmd->type) {
+    case WCMD_ADD:
+        cmd->retval = worker_add_or_modify (wrk,
+                                            cmd->add.filename,
+                                            cmd->add.mask);
+        cmd->error = errno;
+        break;
+    case WCMD_REMOVE:
+        cmd->retval = worker_remove (wrk, cmd->rm_id);
+        cmd->error = errno;
+    case WCMD_PARAM:
+        cmd->retval = worker_set_param (wrk,
+                                        cmd->param.param,
+                                        cmd->param.value);
+        cmd->error = errno;
+    default:
         perror_msg ("Worker processing a command without a command - "
                     "something went wrong.");
-        return;
+        cmd->retval = -1;
+        cmd->error = EINVAL;
     }
 
-    worker_cmd_post (&wrk->cmd);
+    worker_post (wrk);
 }
 
 /** 
@@ -311,7 +320,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
 
     dep_list *was = NULL, *now = NULL;
     was = iw->deps;
-    now = dl_listing (iw->wd);
+    now = dl_listing (iw->fd);
     if (now == NULL) {
         perror_msg ("Failed to create a listing for watch %d", iw->wd);
         return;
@@ -340,6 +349,27 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
 void
 produce_notifications (worker *wrk, struct kevent *event)
 {
+    /* Heuristic order of dearrgegated inotify events */
+    static uint32_t ie_order[] = {
+#ifdef NOTE_OPEN
+        IN_OPEN,
+#endif
+#ifdef NOTE_READ
+        IN_ACCESS,
+#endif
+        IN_MODIFY,
+#ifdef NOTE_CLOSE
+        IN_CLOSE_NOWRITE,
+#endif
+#ifdef NOTE_CLOSE_WRITE
+        IN_CLOSE_WRITE,
+#endif
+        IN_ATTRIB,
+        IN_MOVE_SELF,
+        IN_DELETE_SELF,
+        IN_UNMOUNT
+    };
+
     assert (wrk != NULL);
     assert (event != NULL);
 
@@ -377,24 +407,46 @@ produce_notifications (worker *wrk, struct kevent *event)
             w->flags &= ~WF_SKIP_NEXT;
         }
 
-        if (flags & NOTE_WRITE && S_ISDIR (w->flags)) {
-            produce_directory_diff (iw, event);
-            w->flags |= WF_SKIP_NEXT;
-        }
+        uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
 
-        enqueue_event (iw, kqueue_to_inotify (flags, w->flags), NULL);
+        size_t i;
+        /* Deaggregate inotify events (most of) */
+        for (i = 0; i < nitems (ie_order); i++) {
+            if (i_flags & ie_order[i]) {
+                /* Report deaggregated items */
+                enqueue_event (iw,
+                               ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
+                               NULL);
+            } else
+            /* Report subfiles(dependency) list changes */
+            if (ie_order[i] == IN_MODIFY &&
+                flags & NOTE_WRITE && S_ISDIR (w->flags)) {
+                produce_directory_diff (iw, event);
+                w->flags |= WF_SKIP_NEXT;
+            }
+        }
 
         if (w->flags & WF_DELETED || flags & NOTE_REVOKE) {
             iw->is_closed = 1;
         }
     } else {
         uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
-        dep_node *iter = NULL;
-        SLIST_FOREACH (iter, &iw->deps->head, next) {
-            dep_item *di = iter->item;
 
-            if (di->inode == w->inode) {
-                enqueue_event (iw, i_flags, di);
+        size_t i;
+        /* Deaggregate inotify events */
+        for (i = 0; i < nitems (ie_order); i++) {
+            if (i_flags & ie_order[i]) {
+                dep_node *iter = NULL;
+                /* Report deaggregated items */
+                SLIST_FOREACH (iter, &iw->deps->head, next) {
+                    dep_item *di = iter->item;
+
+                    if (di->inode == w->inode) {
+                        enqueue_event (iw,
+                                       ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
+                                       di);
+                    }
+                }
             }
         }
     }
@@ -415,13 +467,14 @@ worker_thread (void *arg)
 {
     assert (arg != NULL);
     worker* wrk = (worker *) arg;
+    worker_cmd *cmd;
     size_t sbspace = 0;
 
     for (;;) {
         struct kevent received;
 
         if (sbspace > 0 && wrk->eq.count > 0) {
-            event_queue_flush (&wrk->eq, wrk->io[KQUEUE_FD], sbspace);
+            event_queue_flush (&wrk->eq, sbspace);
             sbspace = 0;
         }
 
@@ -436,17 +489,26 @@ worker_thread (void *arg)
                 worker_erase (wrk);
 
                 /* Notify user threads waiting for add/rm_watch of grim news */
-                wrk->cmd.retval = -1;
-                wrk->cmd.error = EBADF;
-                worker_cmd_post (&wrk->cmd);
+                worker_post (wrk);
 
                 worker_free (wrk);
 
                 return NULL;
             } else if (received.filter == EVFILT_WRITE) {
                 sbspace = received.data;
-            } else {
-                process_command (wrk);
+                if (sbspace >= wrk->sockbufsize) {
+                    /* Tell event queue about empty communication pipe */
+                    event_queue_reset_last(&wrk->eq);
+                }
+#ifdef EVFILT_USER
+            } else if (received.filter == EVFILT_USER) {
+                cmd = received.udata;
+                process_command (wrk, cmd);
+#else
+            } else if (received.filter == EVFILT_READ) {
+                safe_read (wrk->io[KQUEUE_FD], &cmd, sizeof (cmd));
+                process_command (wrk, cmd);
+#endif
             }
         } else {
             produce_notifications (wrk, &received);

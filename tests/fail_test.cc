@@ -25,6 +25,7 @@
 #include <csetjmp>
 #include <csignal>
 #include <cstdlib>
+#include <unistd.h>
 #include "fail_test.hh"
 
 #define INVALID_FILENO		10000
@@ -114,15 +115,20 @@ void fail_test::run ()
     should ("watch id is -1, errno set to EINVAL when starting watching a "
             "file with no event flags set", wid == -1 && error == EINVAL);
 
-    cons.output.reset ();
-    chmod ("fail-working", 0);
-    cons.input.setup ("fail-working", IN_ALL_EVENTS);
-    cons.output.wait ();
+    if (geteuid() > 0) {
+        cons.output.reset ();
+        chmod ("fail-working", 0);
+        cons.input.setup ("fail-working", IN_ALL_EVENTS);
+        cons.output.wait ();
 
-    wid = cons.output.added_watch_id ();
-    error = cons.output.added_watch_error ();
-    should ("watch id is -1, errno set to EACCES when starting watching a "
-            "file without read access", wid == -1 && error == EACCES);
+        wid = cons.output.added_watch_id ();
+        error = cons.output.added_watch_error ();
+        should ("watch id is -1, errno set to EACCES when starting watching a "
+                "file without read access", wid == -1 && error == EACCES);
+    } else {
+        skip ("watch id is -1, errno set to EACCES when starting watching a "
+              "file without read access (test is run with effective uid = 0)");
+    }
 
     cons.output.reset ();
     oldsegvhandler = std::signal (SIGSEGV, catch_segv);

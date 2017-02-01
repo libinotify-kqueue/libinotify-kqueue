@@ -23,10 +23,12 @@
 #include "compat.h"
 
 #include <sys/types.h> /* uint32_t */
+#include <sys/ioctl.h> /* ioctl */
 #include <sys/socket.h>/* SO_NOSIGPIPE */
 #include <sys/uio.h>   /* iovec */
 
 #include <assert.h>    /* assert */
+#include <stddef.h>    /* offsetof */
 #include <stdlib.h>    /* realloc */
 #include <string.h>    /* memmove */
 
@@ -47,10 +49,8 @@ event_queue_init (event_queue *eq)
     eq->allocated = 0;
     eq->count = 0;
     eq->iov = NULL;
-#ifdef AVOID_SIGPIPE_WITH_SEND
-    eq->msgalloc = 0;
-    eq->msgbuf = NULL;
-#endif
+    eq->last = NULL;
+    event_queue_set_max_events (eq, IN_DEF_MAX_QUEUED_EVENTS);
 }
 
 /**
@@ -67,9 +67,26 @@ event_queue_free (event_queue *eq)
         free (eq->iov[i].iov_base);
     }
     free (eq->iov);
-#ifdef AVOID_SIGPIPE_WITH_SEND
-    free (eq->msgbuf);
-#endif
+    free (eq->last);
+}
+
+/**
+ * Set maximum length for inotify event queue
+ *
+ * @param[in] eq         A pointer to #event_queue.
+ * @param[in] max_events A maximal length of queue (in events)
+ * @return 0 on success, -1 otherwise.
+ **/
+int
+event_queue_set_max_events (event_queue *eq, int max_events)
+{
+    if (max_events <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    /* TODO: Implement event queue truncation */
+    eq->max_events = max_events;
+    return 0;
 }
 
 /**
@@ -111,9 +128,10 @@ event_queue_enqueue (event_queue *eq,
                      uint32_t     cookie,
                      const char  *name)
 {
+    struct inotify_event *prev_ie;
     int retval = 0;
 
-    if (eq->count > MAX_QUEUED_EVENTS) {
+    if (eq->count > eq->max_events) {
         return -1;
     }
 
@@ -121,12 +139,37 @@ event_queue_enqueue (event_queue *eq,
         return -1;
     }
 
-    if (eq->count == MAX_QUEUED_EVENTS) {
+    if (eq->count == eq->max_events) {
         wd = -1;
         mask = IN_Q_OVERFLOW;
         cookie = 0;
         name = NULL;
         retval = -1;
+    }
+
+    /*
+     * Find previous reported event. If event queue is not empty, get last
+     * event from tail. Otherwise get last event sent to communication pipe.
+     */
+    prev_ie = (eq->count > 0) ? eq->iov[eq->count - 1].iov_base : eq->last;
+
+    /* Compare current event with previous to decide if it can be coalesced */
+    if (prev_ie != NULL &&
+        prev_ie->wd == wd &&
+        prev_ie->mask == mask &&
+        prev_ie->cookie == cookie &&
+      ((prev_ie->len == 0 && name == NULL) ||
+       (prev_ie->len > 0 && name != NULL && !strcmp (prev_ie->name, name)))) {
+            /* Events are identical and queue is not empty. Skip current. */
+            if (eq->count > 0) {
+                return retval;
+            }
+            /* Event queue is empty. Check if any events remain in the pipe */
+            int fd = EQ_TO_WRK(eq)->io[INOTIFY_FD];
+            int buffered;
+            if (ioctl (fd, FIONREAD, &buffered) == 0 && buffered > 0) {
+                return retval;
+            }
     }
 
     eq->iov[eq->count].iov_base = create_inotify_event (
@@ -141,80 +184,22 @@ event_queue_enqueue (event_queue *eq,
     return retval;
 }
 
-#ifdef AVOID_SIGPIPE_WITH_SEND
-/**
- * Extend inotify event queue message buffer to iovlen bytes.
- *
- * @param[in] eq     A pointer to #event_queue.
- * @param[in] iovlen New size of buffer
- **/
-static int
-event_queue_extend_msgbuf (event_queue *eq, size_t iovlen)
-{
-
-    if (iovlen > eq->msgalloc) {
-        void *ptr = realloc(eq->msgbuf, iovlen);
-        if (ptr == NULL) {
-            perror_msg ("Failed to extend eq->msgbuf to %d bytes", iovlen);
-            return -1;
-        }
-        eq->msgbuf = ptr;
-        eq->msgalloc = iovlen;
-    }
-
-    return 0;
-}
-
-/**
- * Sendv implementation. Uses #event_queue as temporary buffer.
- *
- * @param[in] eq     A pointer to #event_queue.
- * @param[in] fd     A file descriptor to send to.
- * @param[in] iov    An array of iovec buffers to send.
- * @param[in] iovcnt A number of iovec buffers to send.
- * @param[in] flags  A send(3) flags.
- * @return Number of bytes which were sent on success, -1 on failure.
- **/
-static ssize_t
-event_queue_sendv(event_queue        *eq,
-                  int                 fd,
-                  const struct iovec *iov,
-                  int                 iovcnt,
-                  int                 flags)
-{
-    int i;
-    size_t offset = 0;
-
-    /* Fill msgbuf with iov data */
-    for (i = 0; i < iovcnt; i++) {
-         memcpy (eq->msgbuf + offset, eq->iov[i].iov_base, eq->iov[i].iov_len);
-         offset += eq->iov[i].iov_len;
-         assert (offset <= eq->msgalloc);
-    }
-
-    return safe_send (fd, eq->msgbuf, offset, flags);
-}
-#endif
-
 /**
  * Flush inotify events queue to socket
  *
  * @param[in] eq      A pointer to #event_queue.
- * @param[in] fd      A file descriptor to write events
  * @param[in] sbspace Amount of space in socket buffer available to write
  *                    w/o blocking
  **/
-void event_queue_flush (event_queue *eq, int fd, size_t sbspace)
+void event_queue_flush (event_queue *eq, size_t sbspace)
 {
     int iovcnt, iovmax;
     size_t iovlen = 0;
 
     iovmax = eq->count;
-#ifndef AVOID_SIGPIPE_WITH_SEND
     if (iovmax > IOV_MAX) {
         iovmax = IOV_MAX;
     }
-#endif
 
     for (iovcnt = 0; iovcnt < iovmax; iovcnt++) {
         if (iovlen + eq->iov[iovcnt].iov_len > sbspace) {
@@ -227,34 +212,22 @@ void event_queue_flush (event_queue *eq, int fd, size_t sbspace)
         return;
     }
 
-#ifdef AVOID_SIGPIPE_WITH_SEND
-    /*
-     * Most OSes (Linux, Solaris and FreeBSD) delivers SIGPIPE to thread which
-     * issued write (worker thread) as it is syncronous signal. At least some
-     * versions of NetBSD, OpenBSD and MacOSX delivers it to any thread in process
-     * making blocking SIGPIPE in worker thread useless. As closing of opposite
-     * end of the pipe is a legal method of closing inotify we try to prevent
-     * SIGPIPE with using a send(3) with MSG_NOSIGNAL flag set and creating
-     * the socket pair with SO_NOSIGPIPE option.
-     */
-    if (event_queue_extend_msgbuf (eq, iovlen) == -1) {
-        return;
-    }
-
     int send_flags = 0;
 #if defined (MSG_NOSIGNAL)
     send_flags |= MSG_NOSIGNAL;
 #endif
 
-    if (event_queue_sendv(eq, fd, eq->iov, iovcnt, send_flags) == -1) {
-#else /* ! AVOID_SIGPIPE_WITH_SEND */
-    if (safe_writev (fd, eq->iov, iovcnt) == -1) {
-#endif
+    int fd = EQ_TO_WRK(eq)->io[KQUEUE_FD];
+    if (safe_sendv (fd, eq->iov, iovcnt, send_flags) == -1) {
         perror_msg ("Sending of inotify events to socket failed");
     }
 
+    /* Save last event sent to communication pipe for coalecsing checks */
+    free (eq->last);
+    eq->last = eq->iov[iovcnt - 1].iov_base;
+
     int i;
-    for (i = 0; i < iovcnt; i++) {
+    for (i = 0; i < iovcnt - 1; i++) {
         free (eq->iov[i].iov_base);
     }
 
@@ -262,4 +235,18 @@ void event_queue_flush (event_queue *eq, int fd, size_t sbspace)
              &eq->iov[iovcnt],
              sizeof(struct iovec) * (eq->count - iovcnt));
     eq->count -= iovcnt;
+}
+
+/**
+ * Remove last event sent to communication pipe from internal buffer
+ *
+ * @param[in] eq A pointer to #event_queue.
+ **/
+void
+event_queue_reset_last (event_queue *eq)
+{
+    assert (eq != NULL);
+
+    free (eq->last);
+    eq->last = NULL;
 }

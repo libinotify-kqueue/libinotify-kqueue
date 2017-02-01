@@ -60,25 +60,29 @@ void inotify_client::cancel (int watch_id)
     }
 }
 
+#ifdef IN_DEF_SOCKBUFSIZE
+#define IE_BUFSIZE IN_DEF_SOCKBUFSIZE
+#else
 #define IE_BUFSIZE (((sizeof (struct inotify_event) + FILENAME_MAX)) * 20)
+#endif
 
 events inotify_client::receive_during (int timeout) const
 {
     events received;
     struct pollfd pfd;
 
-    time_t start = time (NULL);
+    time_t start = timems ();
     time_t elapsed = 0;
 
     LOG ("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
 
-    while ((elapsed = time (NULL) - start) < timeout) {
+    while ((elapsed = timems () - start) < timeout) {
         memset (&pfd, 0, sizeof (struct pollfd));
         pfd.fd = fd;
         pfd.events = POLLIN;
 
-        LOG ("INO: Polling with " << VAR (timeout));
-        int pollretval = poll (&pfd, 1, timeout * 1000);
+        LOG ("INO: Polling with " << VAR (timeout) << " ms");
+        int pollretval = poll (&pfd, 1, timeout);
         LOG ("INO: Poll returned " << VAR (pollretval) << ", " << VAR(pfd.revents));
         if (pollretval == -1) {
             return events();
@@ -130,4 +134,15 @@ long inotify_client::bytes_available (int fd)
 int inotify_client::get_fd ()
 {
     return fd;
+}
+
+time_t inotify_client::timems ()
+{
+    struct timespec ts;
+
+    if (clock_gettime (CLOCK_MONOTONIC, &ts) < 0) {
+        return time(NULL) * 1000;
+    }
+
+    return ts.tv_sec * 1000 + (time_t)(ts.tv_nsec / 1000000L);
 }

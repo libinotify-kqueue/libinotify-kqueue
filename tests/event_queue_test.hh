@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2015 Vladimir Kondratiev <wulf@cicgroup.ru>
+  Copyright (c) 2016 Vladimir Kondratyev <wulf@cicgroup.ru>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,19 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include <pthread.h>
+#ifndef __EVENT_QUEUE_TEST_HH__
+#define __EVENT_QUEUE_TEST_HH__
 
-extern pthread_mutex_t ik_atomic_mutex;
+#include "core/core.hh"
 
-#define	_Atomic(T)		T volatile
-typedef	_Atomic(unsigned int)		atomic_uint;
-#define	atomic_init(object, value)	(*(object) = (value))
-#define atomic_load(object) ({ \
-    pthread_mutex_lock (&ik_atomic_mutex); \
-    typeof (*(object)) ret_ = *(object); \
-    pthread_mutex_unlock (&ik_atomic_mutex); \
-    ret_; \
-})
-#define atomic_fetch_add(object, operand) ({ \
-    pthread_mutex_lock (&ik_atomic_mutex); \
-    typeof (*(object)) ret_ = *(object); \
-    *(object) += (operand); \
-    pthread_mutex_unlock (&ik_atomic_mutex); \
-    ret_; \
-})
-#define atomic_fetch_sub(object, operand) ({ \
-    pthread_mutex_lock (&ik_atomic_mutex); \
-    typeof (*(object)) ret_ = *(object); \
-    *(object) -= (operand); \
-    pthread_mutex_unlock (&ik_atomic_mutex); \
-    ret_; \
-})
+class event_queue_test: public test {
+protected:
+    virtual void setup ();
+    virtual void run ();
+    virtual void cleanup ();
+
+public:
+    event_queue_test (journal &j);
+};
+
+#endif // __EVENT_QUEUE_TEST_HH__

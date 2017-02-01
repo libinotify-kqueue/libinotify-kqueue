@@ -29,6 +29,9 @@
 class inotify_client {
     int fd;
 
+private:
+    static time_t timems ();
+
 public:
     inotify_client ();
     ~inotify_client ();

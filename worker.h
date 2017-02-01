@@ -43,6 +43,7 @@ typedef enum {
     WCMD_NONE = 0,   /* uninitialized state */
     WCMD_ADD,        /* add or modify a watch */
     WCMD_REMOVE,     /* remove a watch */
+    WCMD_PARAM,      /* set worker thread parameter */
 } worker_cmd_type_t;
 
 /**
@@ -61,27 +62,31 @@ typedef struct worker_cmd {
         } add;
 
         int rm_id;
+
+        struct {
+            int param;
+            intptr_t value;
+        } param;
     };
 
-    sem_t sync_sem;
 } worker_cmd;
 
-void worker_cmd_init    (worker_cmd *cmd);
 void worker_cmd_add     (worker_cmd *cmd, const char *filename, uint32_t mask);
 void worker_cmd_remove  (worker_cmd *cmd, int watch_id);
-void worker_cmd_post    (worker_cmd *cmd);
-void worker_cmd_wait    (worker_cmd *cmd);
-void worker_cmd_release (worker_cmd *cmd);
+void worker_cmd_param   (worker_cmd *cmd, int param, intptr_t value);
 
 struct worker {
     int kq;                /* kqueue descriptor */
     volatile int io[2];    /* a socket pair */
+    int sockbufsize;       /* socket buffer size */
     pthread_t thread;      /* worker thread */
     SLIST_HEAD(, i_watch) head; /* linked list of inotify watches */
+    int wd_last;           /* last allocated inotify watch descriptor */
+    int wd_overflow;       /* if watch descriptor have been overflown */
 
     pthread_mutex_t mutex; /* worker mutex */
-    _Atomic(uint) mutex_rc;/* worker mutex sleepers/holders refcount */
-    worker_cmd cmd;        /* operation to perform on a worker */
+    atomic_uint mutex_rc;  /* worker mutex sleepers/holders refcount */
+    sem_t sync_sem;        /* worker <-> user syncronization semaphore */
     event_queue eq;        /* inotify events queue */
 };
 
@@ -95,10 +100,16 @@ struct worker {
     atomic_fetch_sub (&(wrk)->mutex_rc, 1); \
 } while (0)
 
+#define container_of(p, s, f) ((s *)(((uint8_t *)(p)) - offsetof(s, f)))
+#define EQ_TO_WRK(eqp) container_of((eqp), struct worker, eq)
+
 worker* worker_create         (int flags);
 void    worker_free           (worker *wrk);
+void    worker_post           (worker *wrk);
+void    worker_wait           (worker *wrk);
 
 int     worker_add_or_modify  (worker *wrk, const char *path, uint32_t flags);
 int     worker_remove         (worker *wrk, int id);
+int     worker_set_param      (worker *wrk, int param, intptr_t value);
 
 #endif /* __WORKER_H__ */

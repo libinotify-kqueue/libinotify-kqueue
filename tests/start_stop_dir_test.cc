@@ -72,7 +72,7 @@ void start_stop_dir_test::run ()
 
     /* Watch should also signal us about activity on files at the watched directory. */
     cons.output.reset ();
-    cons.input.receive (1);
+    cons.input.receive ();
 
     /* This events should be registered */
     system ("touch ssdt-working/1");

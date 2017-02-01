@@ -86,6 +86,7 @@ void notifications_test::run ()
 
     cons.output.wait ();
     received = cons.output.registered ();
+    should ("receive IN_ATTRIB on remove", contains (received, event ("", wid, IN_ATTRIB)));
     should ("receive IN_DELETE_SELF on remove", contains (received, event ("", wid, IN_DELETE_SELF)));
     should ("receive IN_IGNORED on remove", contains (received, event ("", wid, IN_IGNORED)));
 
