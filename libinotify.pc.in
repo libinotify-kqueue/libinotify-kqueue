@@ -1,0 +1,10 @@
+prefix=@prefix@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: @PACKAGE_NAME@
+Description: Kqueue based inotify shim library
+Version: @PACKAGE_VERSION@
+Libs: -L${libdir} -linotify
+Cflags: -I${includedir}

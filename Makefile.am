@@ -48,6 +48,9 @@ inotify_test_SOURCES = inotify-test.c
 inotify_test_LDADD = libinotify.la
 noinst_PROGRAMS = inotify-test
 
+pkgconfigdir = $(libdir)/pkgconfig
+nodist_pkgconfig_DATA = libinotify.pc
+
 ############################################################
 #	Test suite
 #-----------------------------------------------------------

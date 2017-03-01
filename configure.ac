@@ -1,11 +1,11 @@
-AC_INIT([package], [version])
+AC_INIT([libinotify],[20170302],[https://github.com/libinotify-kqueue/libinotify-kqueue/],[libinotify])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 AC_PROG_LIBTOOL
 AC_PROG_CXX
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile libinotify.pc])
 
 case "$host_os" in
 *linux*)
