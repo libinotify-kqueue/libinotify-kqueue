@@ -87,6 +87,7 @@ AC_COMPILE_IFELSE(
     have_sys_queue_h=no
 ],
 )
+AM_CONDITIONAL(HAVE_SYS_QUEUE_H, [test "$have_sys_queue_h" = "yes"])
 if test "$have_sys_queue_h" = "yes"; then
     AC_DEFINE([HAVE_SYS_QUEUE_H],[1],[Define to 1 if the system has useable sys/queue.h])
 fi
@@ -110,6 +111,7 @@ AC_COMPILE_IFELSE(
     have_sys_tree_h=no
 )
 AC_MSG_RESULT($have_sys_tree_h)
+AM_CONDITIONAL(HAVE_SYS_TREE_H, [test "$have_sys_tree_h" = "yes"])
 if test "$have_sys_tree_h" = "yes"; then
     AC_DEFINE([HAVE_SYS_TREE_H],[1],[Define to 1 if the system has useable sys/tree.h])
 fi
@@ -188,7 +190,8 @@ if test "$have_stdatomic_h" = "no"; then
     )
     AC_MSG_RESULT($have_compat_stdatomic_h)
 fi
-AM_CONDITIONAL(NO_STDATOMIC, [test "$have_stdatomic_h" = "no" -a "$have_compat_stdatomic_h" = "no"])
+AM_CONDITIONAL(NO_STDATOMIC, [test "$have_stdatomic_h" = "no" ])
+AM_CONDITIONAL(HAVE_COMPAT_STDATOMIC_H, [test "$have_compat_stdatomic_h" = "yes"])
 
 
 AC_ARG_ENABLE([unsafe_fchdir],
