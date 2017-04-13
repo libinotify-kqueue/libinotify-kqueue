@@ -76,6 +76,21 @@ EXTRA_DIST = \
     libinotify.sym \
     patches/freebsd11-O_SYMLINK.patch
 
+dist_man_MANS = libinotify.3
+MAN_LINKS = \
+	inotify_init.3 \
+	inotify_init1.3 \
+	inotify_add_watch.3 \
+	inotify_rm_watch.3 \
+	inotify_set_param.3 \
+	inotify_event.3
+
+install-data-hook: $(MAN_LINKS)
+
+$(MAN_LINKS):
+	(cd $(DESTDIR)$(man3dir) && rm -f $@ && $(LN_S) libinotify.3 $@)
+
+
 ############################################################
 #	Test suite
 #-----------------------------------------------------------
