@@ -1,4 +1,5 @@
 .\" Copyright (c) 2012 Vishesh Yadav
+.\" Copyright (c) 2017 Vladimr Kondratyev
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -24,15 +25,16 @@
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\"
-.Dd August 15, 2012
-.Dt INOTIFY 2
+.Dd April 13, 2017
+.Dt LIBINOTIFY 3
 .Os
 .Sh NAME
-.Nm inotify ,
+.Nm libinotify ,
 .Nm inotify_init ,
 .Nm inotify_init1 ,
 .Nm inotify_add_watch ,
 .Nm inotify_rm_watch ,
+.Nm inotify_set_param ,
 .Nm inotify_event ,
 .Nd monitor file system events
 .Sh SYNOPSIS
@@ -45,6 +47,8 @@
 .Fn inotify_add_watch "int fd" "const char *pathname" "uint32_t mask"
 .Ft int
 .Fn inotify_rm_watch "int fd" "int wd"
+.Ft int
+.Fn inotify_set_param "int fd" "int param" "intptr_t value"
 .Sh DESCRIPTION
 The
 .Fn inotify_init
@@ -55,8 +59,7 @@ referring to the instance.
 .Fn inotify_init1
 function is similar to
 .Fn inotify_init
-except that it takes 
-additional flags parameter whose values can be:
+except that it takes additional flags parameter whose values can be:
 .Bl -tag -width Er
 .It IN_NONBLOCK
 Set I_NONBLOCK file status flag on the inotify file descriptor.
@@ -66,7 +69,7 @@ Set FD_CLOEXEC flag on the new file descriptor. See O_CLOEXEC flag in
 .Pp
 .El
 The function returns the file descritor to the inotify handle if successful
-otherwise return -1. Possible errorno values are - 
+otherwise return -1. Possible errorno values are -
 .Bl -tag -width Er
 .It EINVAL
 Invalid flag value passed.
@@ -79,13 +82,12 @@ Insufficient kernel memory.
 .El
 .Pp
 .Fn inotify_add_watch
-function adds news watch to the inotify instance. List of
-possible masks are described below. If the watch for given 
-filename already exists, it it updated with the new mask value
-passed. The function returns an integer called watch descriptor if 
-successful otherwise -1.
+function adds news watch to the inotify instance. List of possible masks are
+described below. If the watch for given filename already exists, it it updated
+with the new mask value passed. The function returns an integer called watch
+descriptor if successful otherwise -1.
 .Pp
-Possible values for errorno are - 
+Possible values for errorno are -
 .Bl -tag -width Er
 .It EACCES
 Permission for read access is denied for given file.
@@ -105,9 +107,9 @@ allocate a needed resource.
 .El
 .Pp
 .Fn inotify_rm_watch
-function removes watch wd from the instance described by
-file descriptor fd. The function returns zero on sucess and -1 on error.
-Possible errorno values are - 
+function removes watch wd from the instance described by file descriptor fd.
+The function returns zero on sucess and -1 on error. Possible errorno values
+are -
 .Bl -tag -width Er
 .It EBADF
 Invalid file descriptor fd.
@@ -115,8 +117,28 @@ Invalid file descriptor fd.
 Invalid watch descriptor wd.
 .El
 .Pp
+.Fn inotify_set_param
+Libinotify specific. Replacement for Linux procfs interface.
+Set inotify instance parameter. Possible param values are -
+.Bl -tag -width Er
+.It IN_SOCKBUFSIZE
+Size of communication socket buffer in bytes. Should match
+.Xr read 2
+buffer size for libinotify event consumers.
+Lower values can cause partial event reads.
+Bigger values is just a wasting of memory.
+Default value is arbitrary, has been acquired from code sample in linux
+.Xr inotify 7
+man page and seems to be very common among the inotify clients.
+Default value 4096 (exported as IN_DEF_SOCKBUFSIZE)
+.It IN_MAX_QUEUED_EVENTS
+Upper limit on the queue length per inotify handle.
+linux`s /proc/sys/fs/inotify/max_queued_events counterpart.
+Default value 16384 (exported as IN_DEF_MAX_QUEUED_EVENTS)
+.El
+.Pp
 .Sh inotify_event structure 
-.Bd -litral
+.Bd -literal
 struct inotify_event {
     int         wd;       /* Watch descriptor */
     uint32_t    mask;     /* Mask of events */
@@ -126,8 +148,8 @@ struct inotify_event {
 };
 .Ed
 .Sh inotify events - 
-Following are the masks supported by DragonFly BSD inotify implementation.
-.Bd -literal -offset indent -compact                  
+Following are the masks supported by libinotify implementation.
+.Bd -literal -offset indent -compact
 IN_OPEN             File was opened.
 IN_ACCESS           File was accessed (read).
 IN_ATTRIB           Metadata changed.
@@ -145,9 +167,9 @@ IN_MOVE             Equal to IN_MOVED_FROM|IN_MOVED_TO
 IN_CLOSE            Equal to IN_CLOSE_WRITE|IN_CLOSE_NOWRITE
 .Ed
 .Pp
-IN_DELETE_SELF and IN_MOVE_SELF can occur only for watched file/directory. 
+IN_DELETE_SELF and IN_MOVE_SELF can occur only for watched file/directory.
 Other events can be marked for a file/directory in a watched direcotry. In that
-case the name of the file for which event is generated can be read by 'name' 
+case the name of the file for which event is generated can be read by 'name'
 field in inotify_event structure.
 .Pp
 Following are additional bits that can be set in mask when calling
@@ -176,15 +198,6 @@ Subject of this event is a directory.
 Event queue has overflowed.
 .It IN_UNMOUNT
 File system containing watched file/directory was unmounted.
-.El
-.Nm sysctl interface
-.Bl -tag -width Er
-.It kern.inotify.max_user_watches
-Limit for maximum watches per user.
-.It kern.inotify.max_user_instances
-Maximum inotify handle per user.
-.It kern.inotify.max_queued_events
-Upper limit on the queue length per inotify handle.
 .El
 .Sh SEE ALSO
 .Xr read 3
