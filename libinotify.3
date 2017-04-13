@@ -1,0 +1,192 @@
+.\" Copyright (c) 2012 Vishesh Yadav
+.\" All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\" 3. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+.\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+.\" OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+.\" IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+.\" INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+.\" NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+.\" DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+.\" THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+.\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+.\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+.\"
+.\"
+.Dd August 15, 2012
+.Dt INOTIFY 2
+.Os
+.Sh NAME
+.Nm inotify ,
+.Nm inotify_init ,
+.Nm inotify_init1 ,
+.Nm inotify_add_watch ,
+.Nm inotify_rm_watch ,
+.Nm inotify_event ,
+.Nd monitor file system events
+.Sh SYNOPSIS
+.In sys/inotify.h
+.Ft int
+.Fn inotify_init ""
+.Ft int
+.Fn inotify_init1 "int flags"
+.Ft int
+.Fn inotify_add_watch "int fd" "const char *pathname" "uint32_t mask"
+.Ft int
+.Fn inotify_rm_watch "int fd" "int wd"
+.Sh DESCRIPTION
+The
+.Fn inotify_init
+and
+.Fn inotify_init1
+functions create an inotify instance and returns a file descriptor
+referring to the instance.
+.Fn inotify_init1
+function is similar to
+.Fn inotify_init
+except that it takes 
+additional flags parameter whose values can be:
+.Bl -tag -width Er
+.It IN_NONBLOCK
+Set I_NONBLOCK file status flag on the inotify file descriptor.
+.It IN_CLOSEXEC
+Set FD_CLOEXEC flag on the new file descriptor. See O_CLOEXEC flag in
+.Xr open(2)
+.Pp
+.El
+The function returns the file descritor to the inotify handle if successful
+otherwise return -1. Possible errorno values are - 
+.Bl -tag -width Er
+.It EINVAL
+Invalid flag value passed.
+.It EMFILE
+System wide limit of inotify instances reached.
+.It ENFILE
+System limit on total number of fd's reached.
+.It ENOMEM
+Insufficient kernel memory.
+.El
+.Pp
+.Fn inotify_add_watch
+function adds news watch to the inotify instance. List of
+possible masks are described below. If the watch for given 
+filename already exists, it it updated with the new mask value
+passed. The function returns an integer called watch descriptor if 
+successful otherwise -1.
+.Pp
+Possible values for errorno are - 
+.Bl -tag -width Er
+.It EACCES
+Permission for read access is denied for given file.
+.It EBADF
+Invalid file descriptor.
+.It EFAULT
+Pathname points outside process's allocated address space.
+.It EINVAL
+Invalid event mask passed.
+.It ENOENT
+A component of path that must exist does not exist.
+.It ENOMEM
+Insufficient kernel memory available.
+.It ENOSPC
+User limit on total number of inotify watches has crossed or kernel failed to 
+allocate a needed resource.
+.El
+.Pp
+.Fn inotify_rm_watch
+function removes watch wd from the instance described by
+file descriptor fd. The function returns zero on sucess and -1 on error.
+Possible errorno values are - 
+.Bl -tag -width Er
+.It EBADF
+Invalid file descriptor fd.
+.It EINVAL
+Invalid watch descriptor wd.
+.El
+.Pp
+.Sh inotify_event structure 
+.Bd -litral
+struct inotify_event {
+    int         wd;       /* Watch descriptor */
+    uint32_t    mask;     /* Mask of events */
+    uint32_t    cookie;   /* Unique integer associating related events */
+    uint32_t    len;      /* Size of name field */
+    char        name[];   /* Optional null-terminated name */
+};
+.Ed
+.Sh inotify events - 
+Following are the masks supported by DragonFly BSD inotify implementation.
+.Bd -literal -offset indent -compact                  
+IN_OPEN             File was opened.
+IN_ACCESS           File was accessed (read).
+IN_ATTRIB           Metadata changed.
+IN_CREATE           File/directory was created in watched directory.
+IN_CLOSE_WRITE      File opened for writing was closed.
+IN_CLOSE_NOWRITE    File not opened for writing was closed.
+IN_DELETE           File/directory in watched directory was deleted.
+IN_DELETE_SELF      Watched file/directory was deleted.
+IN_MODIFY           File/Directory was modified.
+IN_MOVE_SELF        Watched file/directory was moved.
+IN_MOVED_FROM       A file in watched directory was moved out.
+IN_MOVED_TO         A file was moved into watched directory.
+IN_ALL_EVENTS       Bit mask of all the above events.
+IN_MOVE             Equal to IN_MOVED_FROM|IN_MOVED_TO
+IN_CLOSE            Equal to IN_CLOSE_WRITE|IN_CLOSE_NOWRITE
+.Ed
+.Pp
+IN_DELETE_SELF and IN_MOVE_SELF can occur only for watched file/directory. 
+Other events can be marked for a file/directory in a watched direcotry. In that
+case the name of the file for which event is generated can be read by 'name' 
+field in inotify_event structure.
+.Pp
+Following are additional bits that can be set in mask when calling
+.Nm inotify_add_watch() -
+.Bl -tag -width Er
+.It IN_DONT_FOLLOW
+Don't derefernce path name if its symlink. (Currently not supported).
+.It IN_EXCL_UNLINK
+Do not generate events for unlinked childrens.
+.It IN_MASK_ADD
+Add event mask for watch for given pathname.
+.It IN_ONESHOT
+Remove watch after retrieving one event.
+.It IN_ONLYDIR
+Only watch the pathname if it is a directory.
+.El
+.Pp
+Following bits may be set by mask field returned by
+.Xr read 3
+.Bl -tag -width Er
+.It IN_IGNORED
+Watch for removed (explicitely, revoked or unmounted).
+.It IN_ISDIR
+Subject of this event is a directory.
+.It IN_Q_OVERFLOW
+Event queue has overflowed.
+.It IN_UNMOUNT
+File system containing watched file/directory was unmounted.
+.El
+.Nm sysctl interface
+.Bl -tag -width Er
+.It kern.inotify.max_user_watches
+Limit for maximum watches per user.
+.It kern.inotify.max_user_instances
+Maximum inotify handle per user.
+.It kern.inotify.max_queued_events
+Upper limit on the queue length per inotify handle.
+.El
+.Sh SEE ALSO
+.Xr read 3
+.Sh HISTORY
+inotify first appeared in Linux 2.6.13
