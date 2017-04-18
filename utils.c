@@ -401,3 +401,32 @@ dup_cloexec (int oldd)
 #endif
     return newd;
 }
+
+/**
+ * Open directory one more time by realtive path "."
+ *
+ * @param[in] fd A file descriptor to inherit
+ * @return A new file descriptor on success, or -1 if an error occured.
+ **/
+int
+reopendir (int oldd)
+{
+    int openflags = O_RDONLY | O_NONBLOCK;
+#ifdef O_CLOEXEC
+        openflags |= O_CLOEXEC;
+#endif
+
+    int fd = openat (oldd, ".", openflags);
+    if (fd == -1) {
+        return -1;
+    }
+
+#ifndef O_CLOEXEC
+    if (set_cloexec_flag (fd, 1) == -1) {
+        close (fd);
+        return -1;
+    }
+#endif
+
+    return fd;
+}

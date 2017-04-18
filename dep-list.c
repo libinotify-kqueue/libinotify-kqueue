@@ -270,36 +270,6 @@ dl_free (dep_list *dl)
 }
 
 /**
- * Open directory one more time by realtive path "."
- *
- * @param[in] fd A file descriptor to inherit
- * @return A new file descriptor on success, or -1 if an error occured.
- **/
-static int
-reopendir (int oldd)
-{
-    int openflags = O_RDONLY | O_NONBLOCK;
-#ifdef O_CLOEXEC
-        openflags |= O_CLOEXEC;
-#endif
-
-    int fd = openat (oldd, ".", openflags);
-    if (fd == -1) {
-        perror_msg ("Failed to reopen parent filedes on dep_list reopen");
-        return -1;
-    }
-
-#ifndef O_CLOEXEC
-    if (set_cloexec_flag (fd, 1) == -1) {
-        close (fd);
-        return -1;
-    }
-#endif
-
-    return fd;
-}
-
-/**
  * Create a directory listing from directory stream and return it as a list.
  *
  * @param[in] dir A pointer to valid directory stream created with opendir().
