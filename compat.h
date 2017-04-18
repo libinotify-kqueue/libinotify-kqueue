@@ -57,6 +57,12 @@
 #endif
 #endif
 
+#include <sys/stat.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <pthread.h>
+
 #ifdef NATIVE_SEMAPHORES
 #ifdef __APPLE__
 #include <dispatch/dispatch.h>
@@ -110,12 +116,6 @@ typedef struct {
     pthread_mutex_destroy(&(sem)->mutex); \
 })
 #endif /* !NATIVE_SEMAPHORES */
-
-#include <sys/stat.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <limits.h>
-#include <pthread.h>
 
 #ifndef DTTOIF
 #define DTTOIF(dirtype) ((dirtype) << 12)
