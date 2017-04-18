@@ -300,6 +300,60 @@ reopendir (int oldd)
 }
 
 /**
+ * Create a directory listing from directory stream and return it as a list.
+ *
+ * @param[in] dir A pointer to valid directory stream created with opendir().
+ * @return A pointer to a list. May return NULL, check errno in this case.
+ **/
+dep_list*
+dl_readdir (DIR *dir)
+{
+    assert (dir != NULL);
+
+    struct dirent *ent;
+    dep_item *item;
+    dep_node *node;
+    mode_t type;
+
+    dep_list *head = dl_create ();
+    if (head == NULL) {
+        perror_msg ("Failed to allocate list during directory listing");
+        return NULL;
+    }
+
+    while ((ent = readdir (dir)) != NULL) {
+        if (!strcmp (ent->d_name, ".") || !strcmp (ent->d_name, "..")) {
+            continue;
+        }
+
+#ifdef DIRENT_HAVE_D_TYPE
+        if (ent->d_type != DT_UNKNOWN)
+            type = DTTOIF (ent->d_type);
+        else
+#endif
+            type = S_IFUNK;
+
+        item = di_create (ent->d_name, ent->d_ino, type);
+        if (item == NULL) {
+            perror_msg ("Failed to allocate a new item during listing");
+            goto error;
+        }
+
+        node = dl_insert (head, item);
+        if (node == NULL) {
+            di_free (item);
+            perror_msg ("Failed to allocate a new node during listing");
+            goto error;
+        }
+    }
+    return head;
+
+error:
+    dl_free (head);
+    return NULL;
+}
+
+/**
  * Create a directory listing and return it as a list.
  *
  * @return A pointer to a list. May return NULL, check errno in this case.
@@ -310,12 +364,7 @@ dl_listing (int fd)
     assert (fd != -1);
 
     DIR *dir = NULL;
-
-    dep_list *head = dl_create ();
-    if (head == NULL) {
-        perror_msg ("Failed to allocate list during directory listing");
-        return NULL;
-    }
+    dep_list *head;
 
 #if defined (HAVE_FDOPENDIR) && !defined (DIRECTORY_LISTING_REWINDS)
     /*
@@ -327,6 +376,10 @@ dl_listing (int fd)
     if (newfd == -1 && errno == ENOENT) {
         /* Why do I skip ENOENT? Because the directory could be deleted at this
          * point */
+        head = dl_create ();
+        if (head == NULL) {
+            perror_msg ("Failed to allocate list during directory listing");
+        }
         return head;
     }
 #else
@@ -334,66 +387,31 @@ dl_listing (int fd)
 #endif
     if (newfd == -1) {
         perror_msg ("Failed to reopen directory for listing");
-        goto error;
+        return NULL;
     }
 
     dir = fdopendir (newfd);
     if (dir == NULL) {
         close (newfd);
-        if (errno != ENOENT) {
+        if (errno == ENOENT) {
             /* Why do I skip ENOENT? Because the directory could be deleted at
              * this point */
             perror_msg ("Failed to opendir for listing");
-            goto error;
+            head = dl_create ();
+            if (head == NULL) {
+                perror_msg ("Failed to allocate list during directory listing");
+            }
+            return head;
         }
-    } else {
-        struct dirent *ent;
-        dep_item *item;
-        dep_node *node;
-        mode_t type;
-
-        while ((ent = readdir (dir)) != NULL) {
-            if (!strcmp (ent->d_name, ".") || !strcmp (ent->d_name, "..")) {
-                continue;
-            }
-
-#ifdef DIRENT_HAVE_D_TYPE
-            if (ent->d_type != DT_UNKNOWN)
-                type = DTTOIF (ent->d_type);
-            else
-#endif
-                type = S_IFUNK;
-
-            item = di_create (ent->d_name, ent->d_ino, type);
-            if (item == NULL) {
-                perror_msg ("Failed to allocate a new item during listing");
-                goto error;
-            }
-
-            node = dl_insert (head, item);
-            if (node == NULL) {
-                free (item);
-                perror_msg ("Failed to allocate a new node during listing");
-                goto error;
-            }
-        }
-
-#ifdef DIRECTORY_LISTING_REWINDS
-        rewinddir (dir);
-#endif
-        closedir (dir);
+        return NULL;
     }
+
+    head = dl_readdir (dir);
+#ifdef DIRECTORY_LISTING_REWINDS
+    rewinddir (dir);
+#endif
+    closedir (dir);
     return head;
-
-error:
-    if (dir != NULL) {
-#ifdef DIRECTORY_LISTING_REWINDS
-        rewinddir (dir);
-#endif
-        closedir (dir);
-    }
-    dl_free (head);
-    return NULL;
 }
 
 
