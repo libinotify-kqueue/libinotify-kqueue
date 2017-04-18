@@ -205,6 +205,16 @@ AC_CHECK_FUNCS(openat fdopendir fstatat,,atfuncs_support=no)
 if test "$atfuncs_support" = "yes"; then
     AC_DEFINE([HAVE_ATFUNCS],[1],[Define to 1 if relative pathname functions detected])
 fi
+if test "$ac_cv_func_fdopendir" = "no"; then
+    AC_CHECK_MEMBER([DIR.dd_fd],
+    [
+        AC_DEFINE([DIR_HAVE_DD_FD],[1],[Define to 1 if DIR have dd_fd field])
+    ],
+    [],
+    [
+        [@%:@include <dirent.h>]
+    ])
+fi
 AM_CONDITIONAL(HAVE_ATFUNCS, [test "$atfuncs_support" = "yes"])
 AM_CONDITIONAL(HAVE_OPENAT, [test "$ac_cv_func_openat" = "yes"])
 AM_CONDITIONAL(HAVE_FDOPENDIR, [test "$ac_cv_func_fdopendir" = "yes"])
