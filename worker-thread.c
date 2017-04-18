@@ -318,9 +318,34 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     assert (iw != NULL);
     assert (event != NULL);
 
+    DIR *dir;
     dep_list *was = NULL, *now = NULL;
     was = iw->deps;
-    now = dl_listing (iw->fd);
+
+#if READDIR_DOES_OPENDIR > 0
+    dir = fdreopendir (iw->fd);
+    if (dir == NULL) {
+        if (errno == ENOENT) {
+            /* Why do I skip ENOENT? Because the directory could be deleted
+             * at this point */
+            now = dl_create ();
+            goto do_diff;
+        }
+        perror_msg ("Failed to reopen directory for listing");
+        return;
+    }
+#else
+    dir = iw->dir;
+    rewinddir(dir);
+#endif
+
+    now = dl_readdir (dir);
+
+#if READDIR_DOES_OPENDIR > 0
+    closedir (dir);
+
+do_diff:
+#endif
     if (now == NULL) {
         perror_msg ("Failed to create a listing for watch %d", iw->wd);
         return;
@@ -389,7 +414,7 @@ produce_notifications (worker *wrk, struct kevent *event)
                 w->flags |= WF_DELETED;
         }
 
-#if ! defined (DIRECTORY_LISTING_REWINDS) && \
+#if (READDIR_DOES_OPENDIR == 2) && \
     defined (NOTE_OPEN) && defined (NOTE_CLOSE)
         /* Mask events produced by open/closedir calls while directory diffing.
          * Kqueue coalesces both events as kevent is not called that time */

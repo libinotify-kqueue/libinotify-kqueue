@@ -408,25 +408,44 @@ dup_cloexec (int oldd)
  * @param[in] fd A file descriptor to inherit
  * @return A new file descriptor on success, or -1 if an error occured.
  **/
-int
-reopendir (int oldd)
+DIR *
+fdreopendir (int oldd)
 {
+    DIR *dir;
+
+#if (READDIR_DOES_OPENDIR == 2)
     int openflags = O_RDONLY | O_NONBLOCK;
 #ifdef O_CLOEXEC
         openflags |= O_CLOEXEC;
 #endif
-
+#ifdef O_DIRECTORY
+        openflags |= O_DIRECTORY;
+#endif
     int fd = openat (oldd, ".", openflags);
+#else
+    int fd = dup_cloexec (oldd);
+    /*
+     * Rewind directory content as fdopendir() does not do it for us.
+     * Note: rewinddir() right after fdopendir() is not working here
+     * due to rewinddir() bug in some versions of FreeBSD and Darwin libc.
+     */
+    lseek (fd, 0, SEEK_SET);
+#endif
     if (fd == -1) {
-        return -1;
+        return NULL;
     }
 
-#ifndef O_CLOEXEC
+#if (READDIR_DOES_OPENDIR == 2) && !defined(O_CLOEXEC)
     if (set_cloexec_flag (fd, 1) == -1) {
         close (fd);
-        return -1;
+        return NULL;
     }
 #endif
 
-    return fd;
+    dir = fdopendir (fd);
+    if (dir == NULL) {
+        close (fd);
+    }
+
+    return dir;
 }

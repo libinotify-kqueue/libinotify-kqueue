@@ -78,7 +78,6 @@ dep_list* dl_shallow_copy (const dep_list *dl);
 void      dl_shallow_free (dep_list *dl);
 void      dl_free         (dep_list *dl);
 dep_list* dl_readdir      (DIR *dir);
-dep_list* dl_listing      (int fd);
 
 int
 dl_calculate (dep_list            *before,

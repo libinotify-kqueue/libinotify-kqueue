@@ -365,20 +365,39 @@ AC_CHECK_MEMBER([struct dirent.d_type],
 ])
 
 
-# There are two ways we can reread directory opened already. Namely:
-# 1. Open directory by realtive path "." to file descriptor than read & close
-# 2. Rewind directory than read it one more time and leave opened
+# There are three ways we can reread directory opened already. Namely:
+# 1. Copy fd with fopenat() directory by realtive path "." to file descriptor
+#    than issue fdopendir, readddir and closedir
+# 2. Copy fd with dup() than do rewinddir, fdopendir, readddir and closedir
+#    dup() is not necessary if fdclosedir() is supported
+# 3. Rewind directory than read it one more time and leave opened
 # Former one is more reliable but latter is prefered when system has NOTE_OPEN
 # or NOTE_CLOSE events and we dont want that kqueue catches open and closedirs
 # issued by directory diffing routines.
-#
-# Define this if we can reuse filedes opened once before or leave undefined if
-# we have to execute open/close pair on every directory read.
 
-if test "$ac_cv_func_fdopendir" = "yes" -a "$have_o_evtonly" = "no" -a \
-    \( "$have_note_open" = "yes" -o "$have_note_close" = "yes" \) ; then
-    AC_DEFINE([DIRECTORY_LISTING_REWINDS], [1], [Define to 1 if reusing of watched dir filedes is necessary])
-fi
+AC_ARG_ENABLE([opendir],
+    AS_HELP_STRING([--enable-opendir=no|dup|open], [Do opendir on each directory read @<:@default=dup@:>@]),
+    ,
+    [enable_opendir=dup]
+)
+case $enable_opendir in
+no)
+    readdir_does_opendir=0
+    ;;
+dup)
+    readdir_does_opendir=1
+    ;;
+open)
+    readdir_does_opendir=2
+    ;;
+*)
+    AC_MSG_ERROR([Wrong --enable-opendir value: '$enable_opendir'])
+    ;;
+esac
+AC_DEFINE_UNQUOTED([READDIR_DOES_OPENDIR],
+    [$readdir_does_opendir],
+    [Define to 1/2 if opendir is necessary for each directory read]
+)
 
 
 # Replace semaphores with condition variables to not hang being run under valgrind

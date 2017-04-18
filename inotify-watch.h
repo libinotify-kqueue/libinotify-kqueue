@@ -35,6 +35,9 @@ typedef struct i_watch i_watch;
 struct i_watch {
     int wd;                    /* watch descriptor */
     int fd;                    /* file descriptor of parent kqueue watch */
+#if READDIR_DOES_OPENDIR == 0
+    DIR *dir;                  /* directory stream of parent kqueue watch */
+#endif
     worker *wrk;               /* pointer to a parent worker structure */
     int is_closed;             /* inotify watch is stopped but not freed yet */
     uint32_t flags;            /* flags in the inotify format */

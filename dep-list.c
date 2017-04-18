@@ -323,67 +323,6 @@ error:
     return NULL;
 }
 
-/**
- * Create a directory listing and return it as a list.
- *
- * @return A pointer to a list. May return NULL, check errno in this case.
- **/
-dep_list*
-dl_listing (int fd)
-{
-    assert (fd != -1);
-
-    DIR *dir = NULL;
-    dep_list *head;
-
-#if defined (HAVE_FDOPENDIR) && !defined (DIRECTORY_LISTING_REWINDS)
-    /*
-     * Make a fresh copy of fd so it wont be destroyed on closedir.
-     * I found out that openat(fd, ".", ...) works more reliable then
-     * dup/rewind pair so use former.
-     */
-    int newfd = reopendir (fd);
-    if (newfd == -1 && errno == ENOENT) {
-        /* Why do I skip ENOENT? Because the directory could be deleted at this
-         * point */
-        head = dl_create ();
-        if (head == NULL) {
-            perror_msg ("Failed to allocate list during directory listing");
-        }
-        return head;
-    }
-#else
-    int newfd = dup_cloexec (fd);
-#endif
-    if (newfd == -1) {
-        perror_msg ("Failed to reopen directory for listing");
-        return NULL;
-    }
-
-    dir = fdopendir (newfd);
-    if (dir == NULL) {
-        close (newfd);
-        if (errno == ENOENT) {
-            /* Why do I skip ENOENT? Because the directory could be deleted at
-             * this point */
-            perror_msg ("Failed to opendir for listing");
-            head = dl_create ();
-            if (head == NULL) {
-                perror_msg ("Failed to allocate list during directory listing");
-            }
-            return head;
-        }
-        return NULL;
-    }
-
-    head = dl_readdir (dir);
-#ifdef DIRECTORY_LISTING_REWINDS
-    rewinddir (dir);
-#endif
-    closedir (dir);
-    return head;
-}
-
 
 /**
  * Traverses two lists. Compares items with a supplied expression
