@@ -31,6 +31,7 @@
 #include <limits.h> /* PATH_MAX */
 #include <stdlib.h> /* malloc */
 #include <string.h> /* memset */
+#include <unistd.h> /* fchdir */
 
 #include "compat.h"
 #include "config.h"
@@ -80,7 +81,6 @@ fd_getpath (int fd)
     assert (fd != -1);
 
     char *path = NULL;
-    DIR *save;
     struct stat st;
 
     if (fstat (fd, &st) == -1) {
@@ -110,7 +110,7 @@ fd_getpath (int fd)
      * via fchdir call. Consider renaming of watched directory as relatively
      * rare operation so catching such a race is unlikely
      */
-    save = opendir(".");
+    DIR *save = opendir(".");
 
     if (fchdir (fd) == 0) {
         path = malloc (PATH_MAX);

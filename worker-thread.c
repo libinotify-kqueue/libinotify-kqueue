@@ -251,11 +251,10 @@ static void
 handle_overwritten (void *udata, dep_item *from_di, dep_item *to_di)
 {
     assert (udata != NULL);
-
-    handle_context *ctx = (handle_context *) udata;
-    assert (ctx->iw != NULL);
+    assert (((handle_context *) udata)->iw != NULL);
 
 #ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+    handle_context *ctx = udata;
     if (ctx->fflags & NOTE_EXTEND) {
         handle_replaced (udata, from_di);
     } else

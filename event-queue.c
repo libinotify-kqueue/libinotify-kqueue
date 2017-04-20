@@ -151,7 +151,8 @@ event_queue_enqueue (event_queue *eq,
      * Find previous reported event. If event queue is not empty, get last
      * event from tail. Otherwise get last event sent to communication pipe.
      */
-    prev_ie = (eq->count > 0) ? eq->iov[eq->count - 1].iov_base : eq->last;
+    prev_ie =
+        eq->count > 0 ? eq->iov[eq->count - 1].iov_base : (void *)eq->last;
 
     /* Compare current event with previous to decide if it can be coalesced */
     if (prev_ie != NULL &&
@@ -172,7 +173,7 @@ event_queue_enqueue (event_queue *eq,
             }
     }
 
-    eq->iov[eq->count].iov_base = create_inotify_event (
+    eq->iov[eq->count].iov_base = (void *)create_inotify_event (
         wd, mask, cookie, name, &eq->iov[eq->count].iov_len);
     if (eq->iov[eq->count].iov_base == NULL) {
         perror_msg ("Failed to create a inotify event %x", mask);
@@ -224,7 +225,7 @@ void event_queue_flush (event_queue *eq, size_t sbspace)
 
     /* Save last event sent to communication pipe for coalecsing checks */
     free (eq->last);
-    eq->last = eq->iov[iovcnt - 1].iov_base;
+    eq->last = (void *)eq->iov[iovcnt - 1].iov_base;
 
     int i;
     for (i = 0; i < iovcnt - 1; i++) {
