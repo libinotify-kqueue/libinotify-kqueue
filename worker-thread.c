@@ -445,6 +445,13 @@ produce_notifications (worker *wrk, struct kevent *event)
             /* Report subfiles(dependency) list changes */
             if (ie_order[i] == IN_MODIFY &&
                 flags & NOTE_WRITE && S_ISDIR (w->flags)) {
+#ifdef __OpenBSD__
+                /* OpenBSD notifies user with kevent about file moved in/out
+                 * watched directory slightly BEFORE change hits directory
+                 * content. Workaround it with adding a small delay. */
+                struct timespec timeout = { 0, 5 };
+                nanosleep (&timeout, NULL);
+#endif
                 produce_directory_diff (iw, event);
                 w->flags |= WF_SKIP_NEXT;
             }
