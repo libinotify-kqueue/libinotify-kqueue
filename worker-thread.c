@@ -492,50 +492,50 @@ worker_thread (void *arg)
     assert (arg != NULL);
     worker* wrk = (worker *) arg;
     worker_cmd *cmd;
-    size_t sbspace = 0;
+    size_t i, sbspace = 0;
+#define MAXEVENTS 32
+    struct kevent received[MAXEVENTS];
 
     for (;;) {
-        struct kevent received;
-
         if (sbspace > 0 && wrk->eq.count > 0) {
             event_queue_flush (&wrk->eq, sbspace);
             sbspace = 0;
         }
 
-        int ret = kevent (wrk->kq, NULL, 0, &received, 1, NULL);
-        if (ret == -1) {
+        int nevents = kevent (wrk->kq, NULL, 0, received, MAXEVENTS, NULL);
+        if (nevents == -1) {
             perror_msg ("kevent failed");
             continue;
         }
-        if (received.ident == wrk->io[KQUEUE_FD]) {
-            if (received.flags & EV_EOF) {
-                wrk->io[INOTIFY_FD] = -1;
-                worker_erase (wrk);
+        for (i = 0; i < nevents; i++) {
+            if (received[i].ident == wrk->io[KQUEUE_FD]) {
+                if (received[i].flags & EV_EOF) {
+                    wrk->io[INOTIFY_FD] = -1;
+                    worker_erase (wrk);
+                    /* Notify user threads waiting for cmd of grim news */
+                    worker_post (wrk);
+                    worker_free (wrk);
+                    return NULL;
 
-                /* Notify user threads waiting for add/rm_watch of grim news */
-                worker_post (wrk);
-
-                worker_free (wrk);
-
-                return NULL;
-            } else if (received.filter == EVFILT_WRITE) {
-                sbspace = received.data;
-                if (sbspace >= wrk->sockbufsize) {
-                    /* Tell event queue about empty communication pipe */
-                    event_queue_reset_last(&wrk->eq);
-                }
+                } else if (received[i].filter == EVFILT_WRITE) {
+                    sbspace = received[i].data;
+                    if (sbspace >= wrk->sockbufsize) {
+                        /* Tell event queue about empty communication pipe */
+                        event_queue_reset_last(&wrk->eq);
+                    }
 #ifdef EVFILT_USER
-            } else if (received.filter == EVFILT_USER) {
-                cmd = received.udata;
-                process_command (wrk, cmd);
+                } else if (received[i].filter == EVFILT_USER) {
+                    cmd = received[i].udata;
+                    process_command (wrk, cmd);
 #else
-            } else if (received.filter == EVFILT_READ) {
-                safe_read (wrk->io[KQUEUE_FD], &cmd, sizeof (cmd));
-                process_command (wrk, cmd);
+                } else if (received[i].filter == EVFILT_READ) {
+                    safe_read (wrk->io[KQUEUE_FD], &cmd, sizeof (cmd));
+                    process_command (wrk, cmd);
 #endif
+                }
+            } else {
+                produce_notifications (wrk, &received[i]);
             }
-        } else {
-            produce_notifications (wrk, &received);
         }
     }
     return NULL;
