@@ -307,13 +307,14 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
 
     if (iw->deps != NULL) {
         /* create list of unwatched subfiles */
-        dep_list *dl = dl_shallow_copy (iw->deps);
-        dep_node *iter, *prev = NULL;
-        DL_FOREACH_SAFE (iter, iw->deps) {
-            if (watch_set_find (&iw->watches, iter->item->inode)) {
-                dl_remove_after (dl, prev);
-            } else {
-                prev = iter;
+        dep_list *dl = dl_create ();
+        if (dl == NULL) {
+            return;
+        }
+        dep_node *iter;
+        DL_FOREACH (iter, iw->deps) {
+            if (watch_set_find (&iw->watches, iter->item->inode) == NULL) {
+                dl_insert (dl, iter->item);
             }
         }
 

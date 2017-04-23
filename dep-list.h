@@ -33,9 +33,6 @@
 #define S_ISUNK(m) (((m) & S_IFMT) == S_IFUNK)
 
 #define DL_FOREACH(dn, dl) SLIST_FOREACH ((dn), &(dl)->head, next)
-#define DL_FOREACH_SAFE(dn, dl) \
-    dep_node *tmpdn_; \
-    SLIST_FOREACH_SAFE ((dn), &(dl)->head, next, tmpdn_)
 
 typedef struct dep_item {
     ino_t inode;
