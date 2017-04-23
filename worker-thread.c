@@ -469,7 +469,7 @@ produce_notifications (worker *wrk, struct kevent *event)
             if (i_flags & ie_order[i]) {
                 dep_node *iter = NULL;
                 /* Report deaggregated items */
-                SLIST_FOREACH (iter, &iw->deps->head, next) {
+                DL_FOREACH (iter, iw->deps) {
                     dep_item *di = iter->item;
 
                     if (di->inode == w->inode) {

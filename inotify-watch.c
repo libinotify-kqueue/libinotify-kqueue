@@ -131,7 +131,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
     if (S_ISDIR (st.st_mode)) {
 
         dep_node *iter;
-        SLIST_FOREACH (iter, &iw->deps->head, next) {
+        DL_FOREACH (iter, iw->deps) {
             iwatch_add_subwatch (iw, iter->item);
         }
     }
@@ -308,8 +308,8 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
     if (iw->deps != NULL) {
         /* create list of unwatched subfiles */
         dep_list *dl = dl_shallow_copy (iw->deps);
-        dep_node *iter, *tmpdn, *prev = NULL;
-        SLIST_FOREACH_SAFE (iter, &iw->deps->head, next, tmpdn) {
+        dep_node *iter, *prev = NULL;
+        DL_FOREACH_SAFE (iter, iw->deps) {
             if (watch_set_find (&iw->watches, iter->item->inode)) {
                 dl_remove_after (dl, prev);
             } else {
@@ -318,7 +318,7 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
         }
 
         /* And finally try to watch that list */
-        SLIST_FOREACH (iter, &dl->head, next) {
+        DL_FOREACH (iter, dl) {
             iwatch_add_subwatch (iw, iter->item);
         }
         dl_shallow_free (dl);
