@@ -318,8 +318,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     assert (event != NULL);
 
     DIR *dir;
-    dep_list *was = NULL, *now = NULL;
-    was = iw->deps;
+    dep_list *now = NULL;
 
 #if READDIR_DOES_OPENDIR > 0
     dir = fdreopendir (iw->fd);
@@ -350,18 +349,17 @@ do_diff:
         return;
     }
 
-    iw->deps = now;
-
     handle_context ctx;
     memset (&ctx, 0, sizeof (ctx));
     ctx.iw = iw;
     ctx.fflags = event->fflags;
 
-    if (dl_calculate (was, now, &cbs, &ctx) == -1) {
-        iw->deps = was;
+    if (dl_calculate (iw->deps, now, &cbs, &ctx) == -1) {
         dl_free (now);
         perror_msg ("Failed to produce directory diff for watch %d", iw->wd);
-    }
+    } else {
+        iw->deps = now;
+   }
 }
 
 /**
