@@ -23,6 +23,12 @@
 #include "compat.h"
 
 #include <sys/types.h>
+#ifdef STATFS_HAVE_F_FSTYPENAME
+#include <sys/mount.h> /* fstatfs */
+#endif
+#ifdef STATVFS_HAVE_F_FSTYPENAME
+#include <sys/statvfs.h> /* fstatvfs */
+#endif
 #include <sys/stat.h>  /* fstat */
 
 #include <assert.h>    /* assert */
@@ -38,6 +44,48 @@
 #include "utils.h"
 #include "watch-set.h"
 #include "watch.h"
+
+#ifdef SKIP_SUBFILES
+static const char *skip_fs_types[] = { SKIP_SUBFILES };
+
+/**
+ * Check if watch descriptor belongs a filesystem
+ * where opening of subfiles is inwanted.
+ *
+ * @param[in] fd A file descriptor of a watched entry.
+ * @return 1 if watching for subfiles is unwanted, 0 otherwise.
+ **/
+static int
+iwatch_want_skip_subfiles (int fd)
+{
+#ifdef STATFS_HAVE_F_FSTYPENAME
+    struct statfs st;
+#else
+    struct statvfs st;
+#endif
+    size_t i;
+    int ret;
+
+    memset (&st, 0, sizeof (st));
+#ifdef STATFS_HAVE_F_FSTYPENAME
+    ret = fstatfs (fd, &st);
+#else
+    ret = fstatvfs (fd, &st);
+#endif
+    if (ret == -1) {
+        perror_msg ("fstatfs failed on %d");
+        return 0;
+    }
+
+    for (i = 0; i < nitems (skip_fs_types); i++) {
+        if (strcmp (st.f_fstypename, skip_fs_types[i]) == 0) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+#endif
 
 /**
  * Preform minimal initialization required for opening watch descriptor
@@ -118,6 +166,9 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
 #else
         iw->dir = dir;
 #endif
+#ifdef SKIP_SUBFILES
+        iw->skip_subfiles = iwatch_want_skip_subfiles (fd);
+#endif
     }
 
     watch *parent = watch_init (iw, WATCH_USER, fd, &st);
@@ -182,6 +233,12 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
     if (iw->is_closed) {
         return NULL;
     }
+
+#ifdef SKIP_SUBFILES
+    if (iw->skip_subfiles) {
+        goto lstat;
+    }
+#endif
 
     watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL) {

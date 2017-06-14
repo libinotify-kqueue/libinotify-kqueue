@@ -409,4 +409,33 @@ AS_IF([test "x$enable_native_semaphores" != "xno"], [
 ])
 
 
+AC_ARG_ENABLE([skip-subfiles],
+    AS_HELP_STRING([--enable-skip-subfiles=fstype@<:@,fstype@:>@], [List of filesystem types where opening of subfiles is not performed]),
+    [
+        AC_CHECK_MEMBER([struct statfs.f_fstypename],
+        [
+            AC_DEFINE([STATFS_HAVE_F_FSTYPENAME],[1],[Define to 1 if struct statfs have f_fstypename field])
+        ],
+        [
+            AC_CHECK_MEMBER([struct statvfs.f_fstypename],
+            [
+                AC_DEFINE([STATVFS_HAVE_F_FSTYPENAME],[1],[Define to 1 if struct statvfs have f_fstypename field])
+            ],
+            [
+                AC_MSG_ERROR(No means for detecting filesystem type found. Remove --enable-skip-subfiles option!)
+            ],
+            [
+                @%:@include <sys/statvfs.h>
+            ])
+        ],
+        [
+            @%:@include <sys/param.h>
+            @%:@include <sys/mount.h>
+        ])
+        subfiles_fs_list=`echo "\"$enable_skip_subfiles\"" | $SED -e 's/,/", "/g'`
+        AC_DEFINE_UNQUOTED([SKIP_SUBFILES],[$subfiles_fs_list],[List of filesystem types where opening of subfiles is not performed])
+    ]
+)
+
+
 AC_OUTPUT

@@ -40,6 +40,9 @@ struct i_watch {
 #endif
     worker *wrk;               /* pointer to a parent worker structure */
     int is_closed;             /* inotify watch is stopped but not freed yet */
+#ifdef SKIP_SUBFILES
+    int skip_subfiles;         /* Fs is not safe to start subwatches */
+#endif
     uint32_t flags;            /* flags in the inotify format */
     ino_t inode;               /* inode number of watched inode */
     dev_t dev;                 /* device number of watched inode */
