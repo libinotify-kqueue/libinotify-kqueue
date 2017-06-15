@@ -34,6 +34,7 @@ AC_CHECK_HEADERS([sys/event.h],
 [
     AC_CHECK_FUNCS(kqueue,,AC_MSG_ERROR(No kqueue detected in your system!))
     AC_CHECK_FUNCS(kevent,,AC_MSG_ERROR(No kevent detected in your system!))
+    AC_DEFINE([BUILD_LIBRARY],[1],[Define to 1 if libinotify is built])
     kqueue_support=yes
 ],
 [
@@ -45,52 +46,6 @@ AC_CHECK_HEADERS([sys/event.h],
     fi
 ])
 AM_CONDITIONAL(BUILD_LIBRARY, [test "$kqueue_support" = "yes"])
-
-
-AC_MSG_CHECKING(for SLIST_FOREACH_SAFE in sys/queue.h)
-AC_COMPILE_IFELSE(
-[
-    AC_LANG_PROGRAM(
-    [
-        @%:@include <sys/queue.h>
-    ],
-    [
-        @%:@ifndef SLIST_FOREACH_SAFE
-        @%:@error
-        @%:@endif
-        return 0;
-    ])
-],
-    have_sys_queue_h=yes,
-    have_sys_queue_h=no
-)
-AC_MSG_RESULT($have_sys_queue_h)
-
-
-AC_MSG_CHECKING(for SLIST_REMOVE_AFTER in sys/queue.h)
-AC_COMPILE_IFELSE(
-[
-    AC_LANG_PROGRAM(
-    [
-        @%:@include <sys/queue.h>
-    ],
-    [
-        @%:@ifndef SLIST_REMOVE_AFTER
-        @%:@error
-        @%:@endif
-        return 0;
-    ])
-],
-    AC_MSG_RESULT(yes),
-[
-    AC_MSG_RESULT(no)
-    have_sys_queue_h=no
-],
-)
-AM_CONDITIONAL(HAVE_SYS_QUEUE_H, [test "$have_sys_queue_h" = "yes"])
-if test "$have_sys_queue_h" = "yes"; then
-    AC_DEFINE([HAVE_SYS_QUEUE_H],[1],[Define to 1 if the system has useable sys/queue.h])
-fi
 
 
 AC_MSG_CHECKING(for RB_FOREACH_SAFE in sys/tree.h)

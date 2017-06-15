@@ -53,10 +53,6 @@ libinotify_la_SOURCES += compat/ik_atomic.c compat/ik_atomic.h
 endif
 endif
 
-if !HAVE_SYS_QUEUE_H
-libinotify_la_SOURCES += compat/queue.h
-endif
-
 if !HAVE_SYS_TREE_H
 libinotify_la_SOURCES += compat/tree.h
 endif

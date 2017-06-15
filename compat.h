@@ -29,10 +29,8 @@
 #include <sys/param.h>
 #include <sys/types.h>
 
-#ifdef HAVE_SYS_QUEUE_H
+#ifdef BUILD_LIBRARY
 #include <sys/queue.h>
-#else
-#include "compat/queue.h"
 #endif
 
 #ifdef HAVE_SYS_TREE_H
@@ -116,6 +114,19 @@ typedef struct {
     pthread_mutex_destroy(&(sem)->mutex); \
 })
 #endif /* !NATIVE_SEMAPHORES */
+
+#ifndef SLIST_FOREACH_SAFE
+#define SLIST_FOREACH_SAFE(var, head, field, tvar)			\
+	for ((var) = SLIST_FIRST((head));				\
+	     (var) && ((tvar) = SLIST_NEXT((var), field), 1);		\
+	     (var) = (tvar))
+#endif
+#ifndef SLIST_REMOVE_AFTER
+#define SLIST_REMOVE_AFTER(elm, field) do {				\
+	SLIST_NEXT(elm, field) =					\
+	    SLIST_NEXT(SLIST_NEXT(elm, field), field);			\
+} while (0)
+#endif
 
 #ifndef DTTOIF
 #define DTTOIF(dirtype) ((dirtype) << 12)
