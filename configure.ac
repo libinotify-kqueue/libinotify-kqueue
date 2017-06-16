@@ -355,15 +355,6 @@ AC_DEFINE_UNQUOTED([READDIR_DOES_OPENDIR],
 )
 
 
-# Replace semaphores with condition variables to not hang being run under valgrind
-AC_ARG_ENABLE([native-semaphores],
-    AS_HELP_STRING([--disable-native-semaphores], [Emulate semaphores with condvars]))
-
-AS_IF([test "x$enable_native_semaphores" != "xno"], [
-    AC_DEFINE([NATIVE_SEMAPHORES],[1],[Define to 1 to use native semaphores])
-])
-
-
 AC_ARG_ENABLE([skip-subfiles],
     AS_HELP_STRING([--enable-skip-subfiles=fstype@<:@,fstype@:>@], [List of filesystem types where opening of subfiles is not performed]),
     [
