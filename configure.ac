@@ -189,6 +189,7 @@ if test "$atfuncs_support" = "no" -a \
     AC_MSG_WARN([Neither POSIX.1-2008 relative pathname functions nor F_GETPATH fcntl have been found. Watched directory renamings are untracked. You can specify --enable-unsafe-fchdir to avoid this])
 fi
 
+AC_STRUCT_DIRENT_D_TYPE
 
 AC_MSG_CHECKING(for O_SYMLINK in fcntl.h)
 AC_COMPILE_IFELSE(
@@ -308,16 +309,6 @@ AC_RUN_IFELSE(
     AC_MSG_RESULT(no)
 )
 rm -rf iktestdir
-
-
-AC_CHECK_MEMBER([struct dirent.d_type],
-[
-    AC_DEFINE([DIRENT_HAVE_D_TYPE],[1],[Define to 1 if dirent have d_type field])
-],
-[],
-[
-    [@%:@include <dirent.h>]
-])
 
 
 # There are three ways we can reread directory opened already. Namely:

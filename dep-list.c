@@ -296,7 +296,7 @@ dl_readdir (DIR *dir)
             continue;
         }
 
-#ifdef DIRENT_HAVE_D_TYPE
+#ifdef HAVE_STRUCT_DIRENT_D_TYPE
         if (ent->d_type != DT_UNKNOWN)
             type = DTTOIF (ent->d_type);
         else
