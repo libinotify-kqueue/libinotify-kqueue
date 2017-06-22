@@ -175,13 +175,15 @@ AM_CONDITIONAL(HAVE_OPENAT, [test "$ac_cv_func_openat" = "yes"])
 AM_CONDITIONAL(HAVE_FDOPENDIR, [test "$ac_cv_func_fdopendir" = "yes"])
 AM_CONDITIONAL(HAVE_FSTATAT, [test "$ac_cv_func_fstatat" = "yes"])
 
-AC_MSG_CHECKING(for F_GETPATH in fcntl.h)
-AC_COMPILE_IFELSE(
-    [AC_LANG_PROGRAM([@%:@include <fcntl.h>], [int a = F_GETPATH;])],
-    f_getpath_support=yes,
-    f_getpath_support=no
-)
-AC_MSG_RESULT($f_getpath_support)
+f_getpath_support=no
+if test "$atfuncs_support" = "no"; then
+    AC_MSG_CHECKING(for F_GETPATH in fcntl.h)
+    AC_COMPILE_IFELSE(
+        [AC_LANG_PROGRAM([@%:@include <fcntl.h>], [int a = F_GETPATH;])],
+        f_getpath_support=yes
+    )
+    AC_MSG_RESULT($f_getpath_support)
+fi
 
 if test "$atfuncs_support" = "no" -a \
         "$f_getpath_support" = "no" -a \
