@@ -335,7 +335,7 @@ error:
                                                                         \
     int productive = 0;                                                 \
                                                                         \
-    SLIST_FOREACH_SAFE (removed_list##_iter, &removed_list->head, next, tmp) { \
+    DL_FOREACH_SAFE (removed_list##_iter, removed_list, tmp) {          \
         dep_node *added_list##_iter;                                    \
         dep_node *added_list##_prev = NULL;                             \
                                                                         \
