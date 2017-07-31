@@ -1,11 +1,11 @@
-AC_INIT([package], [version])
+AC_INIT([libinotify],[20170711],[https://github.com/libinotify-kqueue/libinotify-kqueue/],[libinotify])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 AC_PROG_LIBTOOL
 AC_PROG_CXX
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile libinotify.pc])
 
 case "$host_os" in
 *linux*)
@@ -34,6 +34,7 @@ AC_CHECK_HEADERS([sys/event.h],
 [
     AC_CHECK_FUNCS(kqueue,,AC_MSG_ERROR(No kqueue detected in your system!))
     AC_CHECK_FUNCS(kevent,,AC_MSG_ERROR(No kevent detected in your system!))
+    AC_DEFINE([BUILD_LIBRARY],[1],[Define to 1 if libinotify is built])
     kqueue_support=yes
 ],
 [
@@ -45,51 +46,6 @@ AC_CHECK_HEADERS([sys/event.h],
     fi
 ])
 AM_CONDITIONAL(BUILD_LIBRARY, [test "$kqueue_support" = "yes"])
-
-
-AC_MSG_CHECKING(for SLIST_FOREACH_SAFE in sys/queue.h)
-AC_COMPILE_IFELSE(
-[
-    AC_LANG_PROGRAM(
-    [
-        @%:@include <sys/queue.h>
-    ],
-    [
-        @%:@ifndef SLIST_FOREACH_SAFE
-        @%:@error
-        @%:@endif
-        return 0;
-    ])
-],
-    have_sys_queue_h=yes,
-    have_sys_queue_h=no
-)
-AC_MSG_RESULT($have_sys_queue_h)
-
-
-AC_MSG_CHECKING(for SLIST_REMOVE_AFTER in sys/queue.h)
-AC_COMPILE_IFELSE(
-[
-    AC_LANG_PROGRAM(
-    [
-        @%:@include <sys/queue.h>
-    ],
-    [
-        @%:@ifndef SLIST_REMOVE_AFTER
-        @%:@error
-        @%:@endif
-        return 0;
-    ])
-],
-    AC_MSG_RESULT(yes),
-[
-    AC_MSG_RESULT(no)
-    have_sys_queue_h=no
-],
-)
-if test "$have_sys_queue_h" = "yes"; then
-    AC_DEFINE([HAVE_SYS_QUEUE_H],[1],[Define to 1 if the system has useable sys/queue.h])
-fi
 
 
 AC_MSG_CHECKING(for RB_FOREACH_SAFE in sys/tree.h)
@@ -110,6 +66,7 @@ AC_COMPILE_IFELSE(
     have_sys_tree_h=no
 )
 AC_MSG_RESULT($have_sys_tree_h)
+AM_CONDITIONAL(HAVE_SYS_TREE_H, [test "$have_sys_tree_h" = "yes"])
 if test "$have_sys_tree_h" = "yes"; then
     AC_DEFINE([HAVE_SYS_TREE_H],[1],[Define to 1 if the system has useable sys/tree.h])
 fi
@@ -188,7 +145,8 @@ if test "$have_stdatomic_h" = "no"; then
     )
     AC_MSG_RESULT($have_compat_stdatomic_h)
 fi
-AM_CONDITIONAL(NO_STDATOMIC, [test "$have_stdatomic_h" = "no" -a "$have_compat_stdatomic_h" = "no"])
+AM_CONDITIONAL(NO_STDATOMIC, [test "$have_stdatomic_h" = "no" ])
+AM_CONDITIONAL(HAVE_COMPAT_STDATOMIC_H, [test "$have_compat_stdatomic_h" = "yes"])
 
 
 AC_ARG_ENABLE([unsafe_fchdir],
@@ -202,18 +160,30 @@ AC_CHECK_FUNCS(openat fdopendir fstatat,,atfuncs_support=no)
 if test "$atfuncs_support" = "yes"; then
     AC_DEFINE([HAVE_ATFUNCS],[1],[Define to 1 if relative pathname functions detected])
 fi
+if test "$ac_cv_func_fdopendir" = "no"; then
+    AC_CHECK_MEMBER([DIR.dd_fd],
+    [
+        AC_DEFINE([DIR_HAVE_DD_FD],[1],[Define to 1 if DIR have dd_fd field])
+    ],
+    [],
+    [
+        [@%:@include <dirent.h>]
+    ])
+fi
 AM_CONDITIONAL(HAVE_ATFUNCS, [test "$atfuncs_support" = "yes"])
 AM_CONDITIONAL(HAVE_OPENAT, [test "$ac_cv_func_openat" = "yes"])
 AM_CONDITIONAL(HAVE_FDOPENDIR, [test "$ac_cv_func_fdopendir" = "yes"])
 AM_CONDITIONAL(HAVE_FSTATAT, [test "$ac_cv_func_fstatat" = "yes"])
 
-AC_MSG_CHECKING(for F_GETPATH in fcntl.h)
-AC_COMPILE_IFELSE(
-    [AC_LANG_PROGRAM([@%:@include <fcntl.h>], [int a = F_GETPATH;])],
-    f_getpath_support=yes,
-    f_getpath_support=no
-)
-AC_MSG_RESULT($f_getpath_support)
+f_getpath_support=no
+if test "$atfuncs_support" = "no"; then
+    AC_MSG_CHECKING(for F_GETPATH in fcntl.h)
+    AC_COMPILE_IFELSE(
+        [AC_LANG_PROGRAM([@%:@include <fcntl.h>], [int a = F_GETPATH;])],
+        f_getpath_support=yes
+    )
+    AC_MSG_RESULT($f_getpath_support)
+fi
 
 if test "$atfuncs_support" = "no" -a \
         "$f_getpath_support" = "no" -a \
@@ -221,6 +191,7 @@ if test "$atfuncs_support" = "no" -a \
     AC_MSG_WARN([Neither POSIX.1-2008 relative pathname functions nor F_GETPATH fcntl have been found. Watched directory renamings are untracked. You can specify --enable-unsafe-fchdir to avoid this])
 fi
 
+AC_STRUCT_DIRENT_D_TYPE
 
 AC_MSG_CHECKING(for O_SYMLINK in fcntl.h)
 AC_COMPILE_IFELSE(
@@ -342,39 +313,68 @@ AC_RUN_IFELSE(
 rm -rf iktestdir
 
 
-AC_CHECK_MEMBER([struct dirent.d_type],
-[
-    AC_DEFINE([DIRENT_HAVE_D_TYPE],[1],[Define to 1 if dirent have d_type field])
-],
-[],
-[
-    [@%:@include <dirent.h>]
-])
-
-
-# There are two ways we can reread directory opened already. Namely:
-# 1. Open directory by realtive path "." to file descriptor than read & close
-# 2. Rewind directory than read it one more time and leave opened
+# There are three ways we can reread directory opened already. Namely:
+# 1. Copy fd with fopenat() directory by realtive path "." to file descriptor
+#    than issue fdopendir, readddir and closedir
+# 2. Copy fd with dup() than do rewinddir, fdopendir, readddir and closedir
+#    dup() is not necessary if fdclosedir() is supported
+# 3. Rewind directory than read it one more time and leave opened
 # Former one is more reliable but latter is prefered when system has NOTE_OPEN
 # or NOTE_CLOSE events and we dont want that kqueue catches open and closedirs
 # issued by directory diffing routines.
-#
-# Define this if we can reuse filedes opened once before or leave undefined if
-# we have to execute open/close pair on every directory read.
 
-if test "$ac_cv_func_fdopendir" = "yes" -a "$have_o_evtonly" = "no" -a \
-    \( "$have_note_open" = "yes" -o "$have_note_close" = "yes" \) ; then
-    AC_DEFINE([DIRECTORY_LISTING_REWINDS], [1], [Define to 1 if reusing of watched dir filedes is necessary])
-fi
+AC_ARG_ENABLE([opendir],
+    AS_HELP_STRING([--enable-opendir=no|dup|open], [Do opendir on each directory read @<:@default=dup@:>@]),
+    ,
+    [enable_opendir=dup]
+)
+case $enable_opendir in
+no)
+    readdir_does_opendir=0
+    ;;
+dup)
+    readdir_does_opendir=1
+    ;;
+open)
+    readdir_does_opendir=2
+    ;;
+*)
+    AC_MSG_ERROR([Wrong --enable-opendir value: '$enable_opendir'])
+    ;;
+esac
+AC_DEFINE_UNQUOTED([READDIR_DOES_OPENDIR],
+    [$readdir_does_opendir],
+    [Define to 1/2 if opendir is necessary for each directory read]
+)
 
 
-# Replace semaphores with condition variables to not hang being run under valgrind
-AC_ARG_ENABLE([native-semaphores],
-    AS_HELP_STRING([--disable-native-semaphores], [Emulate semaphores with condvars]))
-
-AS_IF([test "x$enable_native_semaphores" != "xno"], [
-    AC_DEFINE([NATIVE_SEMAPHORES],[1],[Define to 1 to use native semaphores])
-])
+AC_ARG_ENABLE([skip-subfiles],
+    AS_HELP_STRING([--enable-skip-subfiles=fstype@<:@,fstype@:>@], [List of filesystem types where opening of subfiles is not performed]),
+    [
+        AC_CHECK_MEMBER([struct statfs.f_fstypename],
+        [
+            AC_DEFINE([STATFS_HAVE_F_FSTYPENAME],[1],[Define to 1 if struct statfs have f_fstypename field])
+        ],
+        [
+            AC_CHECK_MEMBER([struct statvfs.f_fstypename],
+            [
+                AC_DEFINE([STATVFS_HAVE_F_FSTYPENAME],[1],[Define to 1 if struct statvfs have f_fstypename field])
+            ],
+            [
+                AC_MSG_ERROR(No means for detecting filesystem type found. Remove --enable-skip-subfiles option!)
+            ],
+            [
+                @%:@include <sys/statvfs.h>
+            ])
+        ],
+        [
+            @%:@include <sys/param.h>
+            @%:@include <sys/mount.h>
+        ])
+        subfiles_fs_list=`echo "\"$enable_skip_subfiles\"" | $SED -e 's/,/", "/g'`
+        AC_DEFINE_UNQUOTED([SKIP_SUBFILES],[$subfiles_fs_list],[List of filesystem types where opening of subfiles is not performed])
+    ]
+)
 
 
 AC_OUTPUT

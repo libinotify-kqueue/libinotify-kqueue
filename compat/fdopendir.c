@@ -21,7 +21,10 @@
 *******************************************************************************/
 
 #include <sys/types.h>
+#include <assert.h> /* assert */
 #include <dirent.h> /* opendir */
+#include <fcntl.h>  /* fcntl */
+#include <unistd.h> /* close */
 
 #include "compat.h"
 
@@ -35,9 +38,25 @@ fdopendir (int fd)
     }
 
     dir = opendir (dirpath);
-    /* close fd just now as it will not be closed on closedir */
+
+    /*
+     * Dirty hack!!! Following code depends on libc private internals!!!
+     * Historicaly directory file descriptor is first member of struct _dirdesc
+     * (aka DIR) and named dd_fd. We can use this fact to overwrite newly
+     * allocated file descriptor with user provided one. This allows fd get
+     * closed on closedir() and do not be leaked than.
+     */
     if (dir != NULL) {
-        close (fd);
+        int oldfd = dirfd (dir);
+        /* Ignore error as CLOEXEC is not strictly required by POSIX */
+        fcntl (fd, F_SETFD, FD_CLOEXEC);
+#ifdef DIR_HAVE_DD_FD
+        dir->dd_fd = fd;
+#else
+        assert (oldfd == *(int *)dir);
+        *(int *)dir = fd;
+#endif
+        close (oldfd);
     }
 
     return dir;

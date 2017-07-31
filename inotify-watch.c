@@ -23,6 +23,12 @@
 #include "compat.h"
 
 #include <sys/types.h>
+#ifdef STATFS_HAVE_F_FSTYPENAME
+#include <sys/mount.h> /* fstatfs */
+#endif
+#ifdef STATVFS_HAVE_F_FSTYPENAME
+#include <sys/statvfs.h> /* fstatvfs */
+#endif
 #include <sys/stat.h>  /* fstat */
 
 #include <assert.h>    /* assert */
@@ -38,6 +44,48 @@
 #include "utils.h"
 #include "watch-set.h"
 #include "watch.h"
+
+#ifdef SKIP_SUBFILES
+static const char *skip_fs_types[] = { SKIP_SUBFILES };
+
+/**
+ * Check if watch descriptor belongs a filesystem
+ * where opening of subfiles is inwanted.
+ *
+ * @param[in] fd A file descriptor of a watched entry.
+ * @return 1 if watching for subfiles is unwanted, 0 otherwise.
+ **/
+static int
+iwatch_want_skip_subfiles (int fd)
+{
+#ifdef STATFS_HAVE_F_FSTYPENAME
+    struct statfs st;
+#else
+    struct statvfs st;
+#endif
+    size_t i;
+    int ret;
+
+    memset (&st, 0, sizeof (st));
+#ifdef STATFS_HAVE_F_FSTYPENAME
+    ret = fstatfs (fd, &st);
+#else
+    ret = fstatvfs (fd, &st);
+#endif
+    if (ret == -1) {
+        perror_msg ("fstatfs failed on %d");
+        return 0;
+    }
+
+    for (i = 0; i < nitems (skip_fs_types); i++) {
+        if (strcmp (st.f_fstypename, skip_fs_types[i]) == 0) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+#endif
 
 /**
  * Preform minimal initialization required for opening watch descriptor
@@ -96,12 +144,31 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
     watch_set_init (&iw->watches);
 
     if (S_ISDIR (st.st_mode)) {
-        iw->deps = dl_listing (fd);
-        if (iw->deps == NULL) {
+#if READDIR_DOES_OPENDIR > 0
+        DIR *dir = fdreopendir (fd);
+#else
+        DIR *dir = fdopendir (fd);
+#endif
+        if (dir == NULL) {
             perror_msg ("Directory listing of %d failed", fd);
             iwatch_free (iw);
             return NULL;
         }
+        iw->deps = dl_readdir (dir);
+        if (iw->deps == NULL) {
+            perror_msg ("Directory listing of %d failed", fd);
+            closedir (dir);
+            iwatch_free (iw);
+            return NULL;
+        }
+#if READDIR_DOES_OPENDIR > 0
+        closedir (dir);
+#else
+        iw->dir = dir;
+#endif
+#ifdef SKIP_SUBFILES
+        iw->skip_subfiles = iwatch_want_skip_subfiles (fd);
+#endif
     }
 
     watch *parent = watch_init (iw, WATCH_USER, fd, &st);
@@ -115,7 +182,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
     if (S_ISDIR (st.st_mode)) {
 
         dep_node *iter;
-        SLIST_FOREACH (iter, &iw->deps->head, next) {
+        DL_FOREACH (iter, iw->deps) {
             iwatch_add_subwatch (iw, iter->item);
         }
     }
@@ -132,6 +199,16 @@ iwatch_free (i_watch *iw)
 {
     assert (iw != NULL);
 
+#if READDIR_DOES_OPENDIR == 0
+    if (iw->dir != NULL) {
+        closedir (iw->dir);
+        /* parent watch fd is closed on closedir(). Mark it as not opened */
+        watch *w = watch_set_find (&iw->watches, iw->inode);
+        if (w != NULL) {
+            w->fd = -1;
+        }
+    }
+#endif
     watch_set_free (&iw->watches);
     if (iw->deps != NULL) {
         dl_free (iw->deps);
@@ -156,6 +233,12 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
     if (iw->is_closed) {
         return NULL;
     }
+
+#ifdef SKIP_SUBFILES
+    if (iw->skip_subfiles) {
+        goto lstat;
+    }
+#endif
 
     watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL) {
@@ -281,18 +364,19 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
 
     if (iw->deps != NULL) {
         /* create list of unwatched subfiles */
-        dep_list *dl = dl_shallow_copy (iw->deps);
-        dep_node *iter, *tmpdn, *prev = NULL;
-        SLIST_FOREACH_SAFE (iter, &iw->deps->head, next, tmpdn) {
-            if (watch_set_find (&iw->watches, iter->item->inode)) {
-                dl_remove_after (dl, prev);
-            } else {
-                prev = iter;
+        dep_list *dl = dl_create ();
+        if (dl == NULL) {
+            return;
+        }
+        dep_node *iter;
+        DL_FOREACH (iter, iw->deps) {
+            if (watch_set_find (&iw->watches, iter->item->inode) == NULL) {
+                dl_insert (dl, iter->item);
             }
         }
 
         /* And finally try to watch that list */
-        SLIST_FOREACH (iter, &dl->head, next) {
+        DL_FOREACH (iter, dl) {
             iwatch_add_subwatch (iw, iter->item);
         }
         dl_shallow_free (dl);

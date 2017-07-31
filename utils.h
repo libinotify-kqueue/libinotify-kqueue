@@ -75,5 +75,6 @@ int is_deleted (int fd);
 int set_cloexec_flag (int fd, int value);
 int set_nonblock_flag (int fd, int value);
 int dup_cloexec (int oldd);
+DIR *fdreopendir (int oldd);
 
 #endif /* __UTILS_H__ */

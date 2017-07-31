@@ -270,46 +270,20 @@ dl_free (dep_list *dl)
 }
 
 /**
- * Open directory one more time by realtive path "."
+ * Create a directory listing from directory stream and return it as a list.
  *
- * @param[in] fd A file descriptor to inherit
- * @return A new file descriptor on success, or -1 if an error occured.
- **/
-static int
-reopendir (int oldd)
-{
-    int openflags = O_RDONLY | O_NONBLOCK;
-#ifdef O_CLOEXEC
-        openflags |= O_CLOEXEC;
-#endif
-
-    int fd = openat (oldd, ".", openflags);
-    if (fd == -1) {
-        perror_msg ("Failed to reopen parent filedes on dep_list reopen");
-        return -1;
-    }
-
-#ifndef O_CLOEXEC
-    if (set_cloexec_flag (fd, 1) == -1) {
-        close (fd);
-        return -1;
-    }
-#endif
-
-    return fd;
-}
-
-/**
- * Create a directory listing and return it as a list.
- *
+ * @param[in] dir A pointer to valid directory stream created with opendir().
  * @return A pointer to a list. May return NULL, check errno in this case.
  **/
 dep_list*
-dl_listing (int fd)
+dl_readdir (DIR *dir)
 {
-    assert (fd != -1);
+    assert (dir != NULL);
 
-    DIR *dir = NULL;
+    struct dirent *ent;
+    dep_item *item;
+    dep_node *node;
+    mode_t type;
 
     dep_list *head = dl_create ();
     if (head == NULL) {
@@ -317,81 +291,34 @@ dl_listing (int fd)
         return NULL;
     }
 
-#if defined (HAVE_FDOPENDIR) && !defined (DIRECTORY_LISTING_REWINDS)
-    /*
-     * Make a fresh copy of fd so it wont be destroyed on closedir.
-     * I found out that openat(fd, ".", ...) works more reliable then
-     * dup/rewind pair so use former.
-     */
-    int newfd = reopendir (fd);
-    if (newfd == -1 && errno == ENOENT) {
-        /* Why do I skip ENOENT? Because the directory could be deleted at this
-         * point */
-        return head;
-    }
-#else
-    int newfd = dup_cloexec (fd);
-#endif
-    if (newfd == -1) {
-        perror_msg ("Failed to reopen directory for listing");
-        goto error;
-    }
+    while ((ent = readdir (dir)) != NULL) {
+        if (!strcmp (ent->d_name, ".") || !strcmp (ent->d_name, "..")) {
+            continue;
+        }
 
-    dir = fdopendir (newfd);
-    if (dir == NULL) {
-        close (newfd);
-        if (errno != ENOENT) {
-            /* Why do I skip ENOENT? Because the directory could be deleted at
-             * this point */
-            perror_msg ("Failed to opendir for listing");
+#ifdef HAVE_STRUCT_DIRENT_D_TYPE
+        if (ent->d_type != DT_UNKNOWN)
+            type = DTTOIF (ent->d_type);
+        else
+#endif
+            type = S_IFUNK;
+
+        item = di_create (ent->d_name, ent->d_ino, type);
+        if (item == NULL) {
+            perror_msg ("Failed to allocate a new item during listing");
             goto error;
         }
-    } else {
-        struct dirent *ent;
-        dep_item *item;
-        dep_node *node;
-        mode_t type;
 
-        while ((ent = readdir (dir)) != NULL) {
-            if (!strcmp (ent->d_name, ".") || !strcmp (ent->d_name, "..")) {
-                continue;
-            }
-
-#ifdef DIRENT_HAVE_D_TYPE
-            if (ent->d_type != DT_UNKNOWN)
-                type = DTTOIF (ent->d_type);
-            else
-#endif
-                type = S_IFUNK;
-
-            item = di_create (ent->d_name, ent->d_ino, type);
-            if (item == NULL) {
-                perror_msg ("Failed to allocate a new item during listing");
-                goto error;
-            }
-
-            node = dl_insert (head, item);
-            if (node == NULL) {
-                free (item);
-                perror_msg ("Failed to allocate a new node during listing");
-                goto error;
-            }
+        node = dl_insert (head, item);
+        if (node == NULL) {
+            di_free (item);
+            perror_msg ("Failed to allocate a new node during listing");
+            goto error;
         }
-
-#ifdef DIRECTORY_LISTING_REWINDS
-        rewinddir (dir);
-#endif
-        closedir (dir);
     }
     return head;
 
 error:
-    if (dir != NULL) {
-#ifdef DIRECTORY_LISTING_REWINDS
-        rewinddir (dir);
-#endif
-        closedir (dir);
-    }
     dl_free (head);
     return NULL;
 }

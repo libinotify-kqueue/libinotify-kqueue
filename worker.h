@@ -86,7 +86,7 @@ struct worker {
 
     pthread_mutex_t mutex; /* worker mutex */
     atomic_uint mutex_rc;  /* worker mutex sleepers/holders refcount */
-    sem_t sync_sem;        /* worker <-> user syncronization semaphore */
+    ik_sem_t sync_sem;     /* worker <-> user syncronization semaphore */
     event_queue eq;        /* inotify events queue */
 };
 

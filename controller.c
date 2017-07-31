@@ -297,7 +297,14 @@ worker_exec (int fd, worker_cmd *cmd)
             cmd->error = EBADF;
 #ifdef EVFILT_USER
             struct kevent ke;
-            EV_SET (&ke, wrk->io[KQUEUE_FD], EVFILT_USER, 0, NOTE_TRIGGER, 0, cmd);
+            /* Pass cmd in data field as DragonflyBSD does not copy udata */
+            EV_SET (&ke,
+                    wrk->io[KQUEUE_FD],
+                    EVFILT_USER,
+                    0,
+                    NOTE_TRIGGER,
+                    (intptr_t)cmd,
+                    0);
             if (kevent (wrk->kq, &ke, 1, NULL, 0, NULL) != -1) {
 #else
             if (safe_write (wrk->io[INOTIFY_FD], &cmd, sizeof (cmd)) != -1) {

@@ -130,7 +130,7 @@ void
 worker_post (worker *wrk)
 {
     assert (wrk != NULL);
-    sem_post(&wrk->sync_sem);
+    ik_sem_post(&wrk->sync_sem);
 }
 
 /**
@@ -143,7 +143,7 @@ worker_wait (worker *wrk)
 {
     assert (wrk != NULL);
     do { /* NOTHING */
-    } while (sem_wait(&wrk->sync_sem) == -1 && errno == EINTR);
+    } while (ik_sem_wait(&wrk->sync_sem) == -1 && errno == EINTR);
 }
 
 /**
@@ -292,7 +292,7 @@ worker_create (int flags)
 
     pthread_mutex_init (&wrk->mutex, NULL);
     atomic_init (&wrk->mutex_rc, 0);
-    sem_init (&wrk->sync_sem, 0, 0);
+    ik_sem_init (&wrk->sync_sem, 0, 0);
     event_queue_init (&wrk->eq);
 
     /* create a run a worker thread */
@@ -356,7 +356,7 @@ worker_free (worker *wrk)
     }
     pthread_mutex_destroy (&wrk->mutex);
     /* And only after that destroy worker_cmd sync primitives */
-    sem_destroy (&wrk->sync_sem);
+    ik_sem_destroy (&wrk->sync_sem);
     event_queue_free (&wrk->eq);
     free (wrk);
 }

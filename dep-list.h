@@ -32,6 +32,8 @@
 #define S_IFUNK 0000000 /* mode_t extension. File type is unknown */
 #define S_ISUNK(m) (((m) & S_IFMT) == S_IFUNK)
 
+#define DL_FOREACH(dn, dl) SLIST_FOREACH ((dn), &(dl)->head, next)
+
 typedef struct dep_item {
     ino_t inode;
     mode_t type;
@@ -77,7 +79,7 @@ void      dl_print        (const dep_list *dl);
 dep_list* dl_shallow_copy (const dep_list *dl);
 void      dl_shallow_free (dep_list *dl);
 void      dl_free         (dep_list *dl);
-dep_list* dl_listing      (int fd);
+dep_list* dl_readdir      (DIR *dir);
 
 int
 dl_calculate (dep_list            *before,

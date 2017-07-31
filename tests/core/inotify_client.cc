@@ -140,9 +140,11 @@ time_t inotify_client::timems ()
 {
     struct timespec ts;
 
-    if (clock_gettime (CLOCK_MONOTONIC, &ts) < 0) {
-        return time(NULL) * 1000;
+#ifdef CLOCK_MONOTONIC
+    if (clock_gettime (CLOCK_MONOTONIC, &ts) == 0) {
+        return ts.tv_sec * 1000 + (time_t)(ts.tv_nsec / 1000000L);
     }
+#endif
 
-    return ts.tv_sec * 1000 + (time_t)(ts.tv_nsec / 1000000L);
+    return time(NULL) * 1000;
 }

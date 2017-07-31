@@ -251,11 +251,10 @@ static void
 handle_overwritten (void *udata, dep_item *from_di, dep_item *to_di)
 {
     assert (udata != NULL);
-
-    handle_context *ctx = (handle_context *) udata;
-    assert (ctx->iw != NULL);
+    assert (((handle_context *) udata)->iw != NULL);
 
 #ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+    handle_context *ctx = udata;
     if (ctx->fflags & NOTE_EXTEND) {
         handle_replaced (udata, from_di);
     } else
@@ -318,26 +317,49 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     assert (iw != NULL);
     assert (event != NULL);
 
-    dep_list *was = NULL, *now = NULL;
-    was = iw->deps;
-    now = dl_listing (iw->fd);
+    DIR *dir;
+    dep_list *now = NULL;
+
+#if READDIR_DOES_OPENDIR > 0
+    dir = fdreopendir (iw->fd);
+    if (dir == NULL) {
+        if (errno == ENOENT) {
+            /* Why do I skip ENOENT? Because the directory could be deleted
+             * at this point */
+            now = dl_create ();
+            goto do_diff;
+        }
+        perror_msg ("Failed to reopen directory for listing");
+        return;
+    }
+#else
+    dir = iw->dir;
+    rewinddir(dir);
+#endif
+
+    now = dl_readdir (dir);
+
+#if READDIR_DOES_OPENDIR > 0
+    closedir (dir);
+
+do_diff:
+#endif
     if (now == NULL) {
         perror_msg ("Failed to create a listing for watch %d", iw->wd);
         return;
     }
-
-    iw->deps = now;
 
     handle_context ctx;
     memset (&ctx, 0, sizeof (ctx));
     ctx.iw = iw;
     ctx.fflags = event->fflags;
 
-    if (dl_calculate (was, now, &cbs, &ctx) == -1) {
-        iw->deps = was;
+    if (dl_calculate (iw->deps, now, &cbs, &ctx) == -1) {
         dl_free (now);
         perror_msg ("Failed to produce directory diff for watch %d", iw->wd);
-    }
+    } else {
+        iw->deps = now;
+   }
 }
 
 /**
@@ -389,7 +411,7 @@ produce_notifications (worker *wrk, struct kevent *event)
                 w->flags |= WF_DELETED;
         }
 
-#if ! defined (DIRECTORY_LISTING_REWINDS) && \
+#if (READDIR_DOES_OPENDIR == 2) && \
     defined (NOTE_OPEN) && defined (NOTE_CLOSE)
         /* Mask events produced by open/closedir calls while directory diffing.
          * Kqueue coalesces both events as kevent is not called that time */
@@ -421,6 +443,13 @@ produce_notifications (worker *wrk, struct kevent *event)
             /* Report subfiles(dependency) list changes */
             if (ie_order[i] == IN_MODIFY &&
                 flags & NOTE_WRITE && S_ISDIR (w->flags)) {
+#ifdef __OpenBSD__
+                /* OpenBSD notifies user with kevent about file moved in/out
+                 * watched directory slightly BEFORE change hits directory
+                 * content. Workaround it with adding a small delay. */
+                struct timespec timeout = { 0, 5 };
+                nanosleep (&timeout, NULL);
+#endif
                 produce_directory_diff (iw, event);
                 w->flags |= WF_SKIP_NEXT;
             }
@@ -438,7 +467,7 @@ produce_notifications (worker *wrk, struct kevent *event)
             if (i_flags & ie_order[i]) {
                 dep_node *iter = NULL;
                 /* Report deaggregated items */
-                SLIST_FOREACH (iter, &iw->deps->head, next) {
+                DL_FOREACH (iter, iw->deps) {
                     dep_item *di = iter->item;
 
                     if (di->inode == w->inode) {
@@ -468,50 +497,50 @@ worker_thread (void *arg)
     assert (arg != NULL);
     worker* wrk = (worker *) arg;
     worker_cmd *cmd;
-    size_t sbspace = 0;
+    size_t i, sbspace = 0;
+#define MAXEVENTS 32
+    struct kevent received[MAXEVENTS];
 
     for (;;) {
-        struct kevent received;
-
         if (sbspace > 0 && wrk->eq.count > 0) {
             event_queue_flush (&wrk->eq, sbspace);
             sbspace = 0;
         }
 
-        int ret = kevent (wrk->kq, NULL, 0, &received, 1, NULL);
-        if (ret == -1) {
+        int nevents = kevent (wrk->kq, NULL, 0, received, MAXEVENTS, NULL);
+        if (nevents == -1) {
             perror_msg ("kevent failed");
             continue;
         }
-        if (received.ident == wrk->io[KQUEUE_FD]) {
-            if (received.flags & EV_EOF) {
-                wrk->io[INOTIFY_FD] = -1;
-                worker_erase (wrk);
+        for (i = 0; i < nevents; i++) {
+            if (received[i].ident == wrk->io[KQUEUE_FD]) {
+                if (received[i].flags & EV_EOF) {
+                    wrk->io[INOTIFY_FD] = -1;
+                    worker_erase (wrk);
+                    /* Notify user threads waiting for cmd of grim news */
+                    worker_post (wrk);
+                    worker_free (wrk);
+                    return NULL;
 
-                /* Notify user threads waiting for add/rm_watch of grim news */
-                worker_post (wrk);
-
-                worker_free (wrk);
-
-                return NULL;
-            } else if (received.filter == EVFILT_WRITE) {
-                sbspace = received.data;
-                if (sbspace >= wrk->sockbufsize) {
-                    /* Tell event queue about empty communication pipe */
-                    event_queue_reset_last(&wrk->eq);
-                }
+                } else if (received[i].filter == EVFILT_WRITE) {
+                    sbspace = received[i].data;
+                    if (sbspace >= wrk->sockbufsize) {
+                        /* Tell event queue about empty communication pipe */
+                        event_queue_reset_last(&wrk->eq);
+                    }
 #ifdef EVFILT_USER
-            } else if (received.filter == EVFILT_USER) {
-                cmd = received.udata;
-                process_command (wrk, cmd);
+                } else if (received[i].filter == EVFILT_USER) {
+                    cmd = (worker_cmd *)received[i].data;
+                    process_command (wrk, cmd);
 #else
-            } else if (received.filter == EVFILT_READ) {
-                safe_read (wrk->io[KQUEUE_FD], &cmd, sizeof (cmd));
-                process_command (wrk, cmd);
+                } else if (received[i].filter == EVFILT_READ) {
+                    safe_read (wrk->io[KQUEUE_FD], &cmd, sizeof (cmd));
+                    process_command (wrk, cmd);
 #endif
+                }
+            } else {
+                produce_notifications (wrk, &received[i]);
             }
-        } else {
-            produce_notifications (wrk, &received);
         }
     }
     return NULL;
