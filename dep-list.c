@@ -48,7 +48,7 @@ dl_print (const dep_list *dl)
 {
     dep_node *dn;
 
-    SLIST_FOREACH (dn, &dl->head, next) {
+    DL_FOREACH (dn, dl) {
         printf ("%lld:%s ", (long long int) dn->item->inode, dn->item->path);
     }
     printf ("\n");
@@ -188,7 +188,7 @@ dl_shallow_copy (const dep_list *dl)
     dep_node *cp = NULL;
     dep_node *iter;
 
-    SLIST_FOREACH (iter, &dl->head, next) {
+    DL_FOREACH (iter, dl) {
         dep_node *dn = dn_create (iter->item);
         if (dn == NULL) {
                 perror_msg ("Failed to allocate a new element during shallow copy");
@@ -340,7 +340,7 @@ error:
         dep_node *added_list##_prev = NULL;                             \
                                                                         \
         int matched = 0;                                                \
-        SLIST_FOREACH (added_list##_iter, &added_list->head, next) {    \
+        DL_FOREACH (added_list##_iter, added_list) {                    \
             if (match_expr) {                                           \
                 matched = 1;                                            \
                 ++productive;                                           \
@@ -530,7 +530,7 @@ dl_emit_single_cb_on (dep_list        *list,
     if (cb == NULL)
         return;
 
-    SLIST_FOREACH (iter, &list->head, next) {
+    DL_FOREACH (iter, list) {
         (cb) (udata, iter->item);
     }
 }
