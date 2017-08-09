@@ -29,6 +29,8 @@
 #include <sys/types.h> /* ino_t */
 #include <sys/stat.h>  /* mode_t */
 
+#define DI_UNCHANGED S_IXOTH /* dep_item remained unchanged between listings */
+
 #define S_IFUNK 0000000 /* mode_t extension. File type is unknown */
 #define S_ISUNK(m) (((m) & S_IFMT) == S_IFUNK)
 
@@ -60,7 +62,6 @@ typedef void (* list_cb)         (void *udata, const dep_list *list);
 
 
 typedef struct traverse_cbs {
-    dual_entry_cb    unchanged;
     single_entry_cb  added;
     single_entry_cb  removed;
     single_entry_cb  replaced;
@@ -73,7 +74,6 @@ typedef struct traverse_cbs {
 
 dep_item* di_create       (const char *path, ino_t inode, mode_t type);
 void      di_free         (dep_item *di);
-
 dep_list* dl_create       ();
 dep_node* dl_insert       (dep_list *dl, dep_item *di);
 void      dl_remove_after (dep_list *dl, dep_node *dn);
@@ -81,7 +81,8 @@ void      dl_print        (const dep_list *dl);
 dep_list* dl_shallow_copy (const dep_list *dl);
 void      dl_shallow_free (dep_list *dl);
 void      dl_free         (dep_list *dl);
-dep_list* dl_readdir      (DIR *dir);
+dep_node* dl_find         (dep_list *dl, const char *path);
+dep_list* dl_readdir      (DIR *dir, dep_list *before);
 
 int
 dl_calculate (dep_list            *before,
@@ -89,5 +90,8 @@ dl_calculate (dep_list            *before,
               const traverse_cbs  *cbs,
               void                *udata);
 
+#define di_settype(di, tp) do { \
+    (di)->type = ((di)->type & ~S_IFMT) | ((tp) & S_IFMT); \
+} while (0)
 
 #endif /* __DEP_LIST_H__ */

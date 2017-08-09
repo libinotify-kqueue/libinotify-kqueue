@@ -142,27 +142,6 @@ typedef struct {
 } handle_context;
 
 /**
- * Copy type of item from old directory listing to a new one.
- * Do not produces any notifications.
- *
- * This function is used as a callback and is invoked from the dep-list
- * routines.
- *
- * @param[in] udata   A pointer to user data (#handle_context).
- * @param[in] from_di The old name & inode number of the file.
- * @param[in] to_di   The new name & inode number of the file.
- **/
-static void
-handle_unchanged (void *udata, dep_item *from_di, dep_item *to_di)
-{
-    assert (udata != NULL);
-
-    if (to_di->type == S_IFUNK) {
-        to_di->type = from_di->type;
-    }
-}
-
-/**
  * Produce an IN_CREATE notification for a new file and start wathing on it.
  *
  * This function is used as a callback and is invoked from the dep-list
@@ -281,8 +260,8 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
-    if (to_di->type == S_IFUNK) {
-        to_di->type = from_di->type;
+    if (S_ISUNK (to_di->type)) {
+        di_settype (to_di, from_di->type);
     }
 
     enqueue_event (ctx->iw, IN_MOVED_FROM, from_di);
@@ -291,7 +270,6 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
 
 
 static const traverse_cbs cbs = {
-    handle_unchanged,
     handle_added,
     handle_removed,
     handle_replaced,
@@ -337,7 +315,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     rewinddir(dir);
 #endif
 
-    now = dl_readdir (dir);
+    now = dl_readdir (dir, iw->deps);
 
 #if READDIR_DOES_OPENDIR > 0
     closedir (dir);

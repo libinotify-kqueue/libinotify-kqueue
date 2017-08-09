@@ -270,13 +270,56 @@ dl_free (dep_list *dl)
 }
 
 /**
+ * Reset flags of all list items.
+ *
+ * @param[in] dl A pointer to a list.
+ **/
+static void
+dl_clearflags (dep_list *dl)
+{
+    assert (dl != NULL);
+
+    dep_node *dn;
+    DL_FOREACH (dn, dl) {
+        dn->item->type &= S_IFMT;
+    }
+}
+
+/*
+ * Find dependency list item by filename.
+ *
+ * @param[in] dl    A pointer to a list.
+ * @param[in] path  A name of a file.
+ * @return A pointer to a dep_node if node is found, NULL otherwise.
+ */
+dep_node*
+dl_find (dep_list *dl, const char *path)
+{
+    assert (dl != NULL);
+    assert (path != NULL);
+
+    dep_node *node;
+
+    DL_FOREACH (node, dl) {
+        if (strcmp (node->item->path, path) == 0) {
+            return node;
+        }
+    }
+
+    return NULL;
+}
+
+/**
  * Create a directory listing from directory stream and return it as a list.
  *
- * @param[in] dir A pointer to valid directory stream created with opendir().
+ * @param[in] dir    A pointer to valid directory stream created with opendir().
+ * @param[in] before A pointer to previous directory listing. If nonNULL value
+ *                   is specified, unchanged entries are not included in
+ *                   resulting list but marked as unchanged in before list.
  * @return A pointer to a list. May return NULL, check errno in this case.
  **/
 dep_list*
-dl_readdir (DIR *dir)
+dl_readdir (DIR *dir, dep_list* before)
 {
     assert (dir != NULL);
 
@@ -298,10 +341,24 @@ dl_readdir (DIR *dir)
 
 #ifdef HAVE_STRUCT_DIRENT_D_TYPE
         if (ent->d_type != DT_UNKNOWN)
-            type = DTTOIF (ent->d_type);
+            type = DTTOIF (ent->d_type) & S_IFMT;
         else
 #endif
             type = S_IFUNK;
+
+        /*
+         * Detect files remained unmoved between directory scans.
+         * This produces both intersection and symmetric diffrence of two sets.
+         * The same items will be marked as UNCHANGED in previous list and
+         * missed in returned set. Items are compared by name and inode number.
+         */
+        if (before != NULL) {
+            node = dl_find (before, ent->d_name);
+            if (node != NULL && node->item->inode == ent->d_ino) {
+                node->item->type |= DI_UNCHANGED;
+                continue;
+            }
+        }
 
         item = di_create (ent->d_name, ent->d_ino, type);
         if (item == NULL) {
@@ -319,10 +376,12 @@ dl_readdir (DIR *dir)
     return head;
 
 error:
+    if (before != NULL) {
+        dl_clearflags (before);
+    }
     dl_free (head);
     return NULL;
 }
-
 
 /**
  * Traverses two lists. Compares items with a supplied expression
@@ -338,6 +397,11 @@ error:
     DL_FOREACH_SAFE (removed_list##_iter, removed_list, tmp) {          \
         dep_node *added_list##_iter;                                    \
         dep_node *added_list##_prev = NULL;                             \
+                                                                        \
+        if (removed_list##_iter->item->type & DI_UNCHANGED) {           \
+            removed_list##_prev = removed_list##_iter;                  \
+            continue;                                                   \
+        }                                                               \
                                                                         \
         int matched = 0;                                                \
         DL_FOREACH (added_list##_iter, added_list) {                    \
@@ -366,37 +430,6 @@ error:
             (cbs->name) (udata, ## __VA_ARGS__); \
         } \
     } while (0)
-
-/**
- * Detect and notify about files remained unmoved between directory scans
- *
- * This function produces symmetric diffrence of two sets. The same items will
- * be removed from the both lists. Items are compared by name and inode number.
- * 
- * @param[in] before A pointer to a list. Will contain items
- *     which were not found in the `after' list.
- * @param[in] after  A pointer to a list. Will contain items
- *     which were not found in the `before' list.
- * @param[in] cbs    A pointer to #traverse_cbs, an user-defined set of
- *     traverse callbacks.
- * @param[in] udata  A pointer to the user-defined data.
- **/
-static int
-dl_detect_unchanged (dep_list            *before,
-                     dep_list            *after,
-                     const traverse_cbs  *cbs,
-                     void                *udata)
-{
-    assert (cbs != NULL);
-
-    EXCLUDE_SIMILAR
-        (before, after,
-         (before_iter->item->inode == after_iter->item->inode &&
-          strcmp(before_iter->item->path, after_iter->item->path) == 0),
-         {
-             cb_invoke (cbs, unchanged, udata, before_iter->item, after_iter->item);
-         });
-}
 
 /**
  * Detect and notify about moves in the watched directory.
@@ -531,7 +564,9 @@ dl_emit_single_cb_on (dep_list        *list,
         return;
 
     DL_FOREACH (iter, list) {
-        (cb) (udata, iter->item);
+        if (!(iter->item->type & DI_UNCHANGED)) {
+            (cb) (udata, iter->item);
+        }
     }
 }
 
@@ -559,13 +594,13 @@ dl_calculate (dep_list           *before,
     assert (cbs != NULL);
 
     int need_update = 0;
+    dep_node *dn, *tmp;
 
     dep_list *now = dl_shallow_copy (after);
     if (now == NULL) {
+        dl_clearflags (before);
         return -1;
     }
-
-    dl_detect_unchanged (before, now, cbs, udata);
 
     dep_list *lst = dl_shallow_copy (now);
 
@@ -594,6 +629,15 @@ dl_calculate (dep_list           *before,
     cb_invoke (cbs, many_removed, udata, before);
     
     dl_shallow_free (now);
+
+    /* Move unchanged items from before list to after list */
+    DL_FOREACH_SAFE (dn, before, tmp) {
+        if (dn->item->type & DI_UNCHANGED) {
+            SLIST_REMOVE (&before->head, dn, dep_node, next);
+            SLIST_INSERT_HEAD (&after->head, dn, next);
+        }
+    }
+    dl_clearflags (after);
     dl_free (before);
 
     return 0;

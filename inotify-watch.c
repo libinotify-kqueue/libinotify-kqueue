@@ -154,7 +154,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
             iwatch_free (iw);
             return NULL;
         }
-        iw->deps = dl_readdir (dir);
+        iw->deps = dl_readdir (dir, NULL);
         if (iw->deps == NULL) {
             perror_msg ("Directory listing of %d failed", fd);
             closedir (dir);
@@ -242,7 +242,7 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
 
     watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL) {
-        di->type = w->flags & S_IFMT;
+        di_settype (di, w->flags);
         goto hold;
     }
 
@@ -265,7 +265,7 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
         goto lstat;
     }
 
-    di->type = st.st_mode & S_IFMT;
+    di_settype (di, st.st_mode);
 
     /* Correct inode number if opened file is not a listed one */
     if (di->inode != st.st_ino) {
@@ -299,7 +299,7 @@ hold:
 lstat:
     if (S_ISUNK (di->type)) {
         if (fstatat (iw->fd, di->path, &st, AT_SYMLINK_NOFOLLOW) != -1) {
-            di->type = st.st_mode & S_IFMT;
+            di_settype (di, st.st_mode);
         } else {
             perror_msg ("Failed to lstat subwatch %s", di->path);
         }
