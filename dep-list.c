@@ -383,46 +383,6 @@ error:
     return NULL;
 }
 
-/**
- * Traverses two lists. Compares items with a supplied expression
- * and performs the passed code on a match. Removes the matched entries
- * from the both lists.
- **/
-#define EXCLUDE_SIMILAR(removed_list, added_list, match_expr, matched_code) \
-    dep_node *removed_list##_iter, *tmp;                                \
-    dep_node *removed_list##_prev = NULL;                               \
-                                                                        \
-    int productive = 0;                                                 \
-                                                                        \
-    DL_FOREACH_SAFE (removed_list##_iter, removed_list, tmp) {          \
-        dep_node *added_list##_iter;                                    \
-        dep_node *added_list##_prev = NULL;                             \
-                                                                        \
-        if (removed_list##_iter->item->type & DI_UNCHANGED) {           \
-            removed_list##_prev = removed_list##_iter;                  \
-            continue;                                                   \
-        }                                                               \
-                                                                        \
-        int matched = 0;                                                \
-        DL_FOREACH (added_list##_iter, added_list) {                    \
-            if (match_expr) {                                           \
-                matched = 1;                                            \
-                ++productive;                                           \
-                matched_code;                                           \
-                                                                        \
-                di_free (removed_list##_iter->item);                    \
-                dl_remove_after (removed_list, removed_list##_prev);    \
-                dl_remove_after (added_list, added_list##_prev);        \
-                break;                                                  \
-            }                                                           \
-            added_list##_prev = added_list##_iter;                      \
-        }                                                               \
-        if (matched == 0) {                                             \
-            removed_list##_prev = removed_list##_iter;                  \
-        }                                                               \
-    }                                                                   \
-    return (productive > 0);
-
 
 #define cb_invoke(cbs, name, udata, ...) \
     do { \
@@ -430,121 +390,6 @@ error:
             (cbs->name) (udata, ## __VA_ARGS__); \
         } \
     } while (0)
-
-/**
- * Detect and notify about moves in the watched directory.
- *
- * A move is what happens when you rename a file in a directory, and
- * a new name is unique, i.e. you didnt overwrite any existing files
- * with this one.
- *
- * @param[in] removed  A list of the removed files in the directory.
- * @param[in] added    A list of the added files of the directory.
- * @param[in] cbs      A pointer to #traverse_cbs, an user-defined set of
- *     traverse callbacks.
- * @param[in] udata    A pointer to the user-defined data.
- * @return 0 if no files were renamed, >0 otherwise.
-**/
-static int
-dl_detect_moves (dep_list            *removed, 
-                 dep_list            *added, 
-                 const traverse_cbs  *cbs, 
-                 void                *udata)
-{
-    assert (cbs != NULL);
-
-     EXCLUDE_SIMILAR
-        (removed, added,
-         (removed_iter->item->inode == added_iter->item->inode),
-         {
-             cb_invoke (cbs, moved, udata, removed_iter->item, added_iter->item);
-         });
-}
-
-/**
- * Detect and notify about replacements in the watched directory.
- *
- * Consider you are watching a directory foo with the folloing files
- * insinde:
- *
- *    foo/bar
- *    foo/baz
- *
- * A replacement in a watched directory is what happens when you invoke
- *
- *    mv /foo/bar /foo/bar
- *
- * i.e. when you replace a file in a watched directory with another file
- * from the same directory.
- *
- * @param[in] removed  A list of the removed files in the directory.
- * @param[in] current  A list with the current contents of the directory.
- * @param[in] cbs      A pointer to #traverse_cbs, an user-defined set of
- *     traverse callbacks.
- * @param[in] udata    A pointer to the user-defined data.
- * @return 0 if no files were renamed, >0 otherwise.
- **/
-static int
-dl_detect_replacements (dep_list            *removed,
-                        dep_list            *current,
-                        const traverse_cbs  *cbs,
-                        void                *udata)
-{
-    assert (cbs != NULL);
-
-    EXCLUDE_SIMILAR
-        (removed, current,
-         (strcmp (removed_iter->item->path, current_iter->item->path) == 0
-          && removed_iter->item->inode != current_iter->item->inode),
-         {
-            cb_invoke (cbs, replaced, udata, removed_iter->item);
-         });
-}
-
-/**
- * Detect and notify about overwrites in the watched directory.
- *
- * Consider you are watching a directory foo with a file inside:
- *
- *    foo/bar
- *
- * And you also have a directory tmp with a file 1:
- * 
- *    tmp/1
- *
- * You do not watching directory tmp.
- *
- * An overwrite in a watched directory is what happens when you invoke
- *
- *    mv /tmp/1 /foo/bar
- *
- * i.e. when you overwrite a file in a watched directory with another file
- * from the another directory.
- *
- * @param[in] previous A list with the previous contents of the directory.
- * @param[in] current  A list with the current contents of the directory.
- * @param[in] cbs      A pointer to #traverse_cbs, an user-defined set of
- *     traverse callbacks.
- * @param[in] udata    A pointer to the user-defined data.
- * @return 0 if no files were renamed, >0 otherwise.
- **/
-static int
-dl_detect_overwrites (dep_list            *previous,
-                      dep_list            *current,
-                      const traverse_cbs  *cbs,
-                      void                *udata)
-{
-    assert (cbs != NULL);
-
-    EXCLUDE_SIMILAR
-        (previous, current,
-         (strcmp (previous_iter->item->path, current_iter->item->path) == 0
-          && previous_iter->item->inode != current_iter->item->inode),
-         {
-             cb_invoke (cbs, overwritten, udata, previous_iter->item, current_iter->item);
-         });
-}
-
 
 /**
  * Traverse a list and invoke a callback for each item.
@@ -564,7 +409,7 @@ dl_emit_single_cb_on (dep_list        *list,
         return;
 
     DL_FOREACH (iter, list) {
-        if (!(iter->item->type & DI_UNCHANGED)) {
+        if (!(iter->item->type & (DI_UNCHANGED | DI_MOVED | DI_REPLACED))) {
             (cb) (udata, iter->item);
         }
     }
@@ -581,9 +426,8 @@ dl_emit_single_cb_on (dep_list        *list,
  * @param[in] after  The current contents of the directory.
  * @param[in] cbs    A pointer to user callbacks (#traverse_callbacks).
  * @param[in] udata  A pointer to user data.
- * @return 0 on success, -1 otherwise.
  **/
-int
+void
 dl_calculate (dep_list           *before,
               dep_list           *after,
               const traverse_cbs *cbs,
@@ -593,53 +437,61 @@ dl_calculate (dep_list           *before,
     assert (after != NULL);
     assert (cbs != NULL);
 
-    int need_update = 0;
-    dep_node *dn, *tmp;
-
-    dep_list *now = dl_shallow_copy (after);
-    if (now == NULL) {
-        dl_clearflags (before);
-        return -1;
-    }
-
-    dep_list *lst = dl_shallow_copy (now);
+    dep_node *dn_from, *dn_to, *tmp;
 
     /*
-     * at this point dl_calculate cannot be undone on dl_shallow_copy failure
-     * as some before list items has been already deleted. Handle this with
-     * skipping replacements detection routines. It not so bad as we continue
-     * to invoke handle_removed callback on this items instead of
-     * handle_replacements
+     * Some terminology. Between 2 consecutive directory scans file can be:
+     * unchanged - Nothing happened.
+     * added     - File was created or moved in from other directory.
+     * removed   - File was deleted/unlinked or moved out to other directory.
+     * moved     - File name was changed inside the watched directory.
+     * replaced  - File was overwritten by other file that was moved
+     *             (renamed inside the watched directory).
      */
-    if (lst != NULL) { /* TODO: Check & verify the behavior */
-        need_update += dl_detect_moves (before, now, cbs, udata);
-        dl_detect_overwrites (before, now, cbs, udata);
-        need_update += dl_detect_replacements (before, lst, cbs, udata);
-        dl_shallow_free (lst);
-    }
+    DL_FOREACH (dn_from, before) {
+        /* Skip unchanged files. They do not produce any events. */
+        if (dn_from->item->type & DI_UNCHANGED) {
+            continue;
+        }
 
-    if (need_update) {
-        cb_invoke (cbs, names_updated, udata);
+        /* Detect and notify about moves in the watched directory. */
+        DL_FOREACH (dn_to, after) {
+            if (dn_from->item->inode == dn_to->item->inode &&
+              !(dn_to->item->type & DI_MOVED)) {
+                /*
+                 * Detect and notify of replacements in the watched directory.
+                 *
+                 * Notification about replacements MUST always prepend
+                 * movement notification to be chronologically correct.
+                 * Right order: baz replaced than bar moved to baz.
+                 * Wrong order: bar moved to baz than baz replaced.
+                 */
+                tmp = dl_find (before, dn_to->item->path);
+                if (tmp != NULL) {
+                    tmp->item->type |= DI_REPLACED;
+                    cb_invoke (cbs, replaced, udata, tmp->item);
+                }
+
+                /* Now we can notify about move in the watched directory */
+                dn_to->item->type |= DI_MOVED;
+                dn_from->item->type |= DI_MOVED;
+                cb_invoke (cbs, moved, udata, dn_from->item, dn_to->item);
+                break;
+            }
+        }
     }
 
     dl_emit_single_cb_on (before, cbs->removed, udata);
-    dl_emit_single_cb_on (now, cbs->added, udata);
-
-    cb_invoke (cbs, many_added, udata, now);
-    cb_invoke (cbs, many_removed, udata, before);
-    
-    dl_shallow_free (now);
+    dl_emit_single_cb_on (after, cbs->added, udata);
 
     /* Move unchanged items from before list to after list */
-    DL_FOREACH_SAFE (dn, before, tmp) {
-        if (dn->item->type & DI_UNCHANGED) {
-            SLIST_REMOVE (&before->head, dn, dep_node, next);
-            SLIST_INSERT_HEAD (&after->head, dn, next);
+    DL_FOREACH_SAFE (dn_from, before, tmp) {
+        if (dn_from->item->type & DI_UNCHANGED) {
+            SLIST_REMOVE (&before->head, dn_from, dep_node, next);
+            SLIST_INSERT_HEAD (&after->head, dn_from, next);
         }
     }
     dl_clearflags (after);
     dl_free (before);
-
-    return 0;
 }
 

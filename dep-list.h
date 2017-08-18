@@ -30,6 +30,8 @@
 #include <sys/stat.h>  /* mode_t */
 
 #define DI_UNCHANGED S_IXOTH /* dep_item remained unchanged between listings */
+#define DI_REPLACED  S_IROTH /* dep_item was replaced by other item */
+#define DI_MOVED     S_IWOTH /* dep_item was renamed between listings */
 
 #define S_IFUNK 0000000 /* mode_t extension. File type is unknown */
 #define S_ISUNK(m) (((m) & S_IFMT) == S_IFUNK)
@@ -53,23 +55,16 @@ typedef struct dep_list {
     SLIST_HEAD(, dep_node) head;
 } dep_list;
 
-typedef void (* no_entry_cb)     (void *udata);
 typedef void (* single_entry_cb) (void *udata, dep_item *di);
 typedef void (* dual_entry_cb)   (void *udata,
                                   dep_item *from_di,
                                   dep_item *to_di);
-typedef void (* list_cb)         (void *udata, const dep_list *list);
-
 
 typedef struct traverse_cbs {
     single_entry_cb  added;
     single_entry_cb  removed;
     single_entry_cb  replaced;
-    dual_entry_cb    overwritten;
     dual_entry_cb    moved;
-    list_cb          many_added;
-    list_cb          many_removed;
-    no_entry_cb      names_updated;
 } traverse_cbs;
 
 dep_item* di_create       (const char *path, ino_t inode, mode_t type);
@@ -84,7 +79,7 @@ void      dl_free         (dep_list *dl);
 dep_node* dl_find         (dep_list *dl, const char *path);
 dep_list* dl_readdir      (DIR *dir, dep_list *before);
 
-int
+void
 dl_calculate (dep_list            *before,
               dep_list            *after,
               const traverse_cbs  *cbs,

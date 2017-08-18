@@ -216,33 +216,6 @@ handle_replaced (void *udata, dep_item *di)
 }
 
 /**
- * Produce an IN_DELETE/IN_CREATE notifications pair for an overwritten file.
- * Reopen a watch for the overwritten file.
- *
- * This function is used as a callback and is invoked from the dep-list
- * routines.
- *
- * @param[in] udata   A pointer to user data (#handle_context).
- * @param[in] from_di A file name & inode number of the deleted file.
- * @param[in] to_di   A file name & inode number of the appeared file.
- **/
-static void
-handle_overwritten (void *udata, dep_item *from_di, dep_item *to_di)
-{
-    assert (udata != NULL);
-    assert (((handle_context *) udata)->iw != NULL);
-
-#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
-    handle_context *ctx = udata;
-    if (ctx->fflags & NOTE_EXTEND) {
-        handle_replaced (udata, from_di);
-    } else
-#endif
-    handle_removed (udata, from_di);
-    handle_added (udata, to_di);
-}
-
-/**
  * Produce an IN_MOVED_FROM/IN_MOVED_TO notifications pair for a renamed file.
  *
  * This function is used as a callback and is invoked from the dep-list
@@ -273,11 +246,7 @@ static const traverse_cbs cbs = {
     handle_added,
     handle_removed,
     handle_replaced,
-    handle_overwritten,
     handle_moved,
-    NULL, /* many_added */
-    NULL, /* many_removed */
-    NULL, /* names_updated */
 };
 
 /**
@@ -332,12 +301,8 @@ do_diff:
     ctx.iw = iw;
     ctx.fflags = event->fflags;
 
-    if (dl_calculate (iw->deps, now, &cbs, &ctx) == -1) {
-        dl_free (now);
-        perror_msg ("Failed to produce directory diff for watch %d", iw->wd);
-    } else {
-        iw->deps = now;
-   }
+    dl_calculate (iw->deps, now, &cbs, &ctx);
+    iw->deps = now;
 }
 
 /**
