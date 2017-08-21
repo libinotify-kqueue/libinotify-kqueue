@@ -316,30 +316,6 @@ error:
         } \
     } while (0)
 
-/**
- * Traverse a list and invoke a callback for each item.
- * 
- * @param[in] list  A #dep_list.
- * @param[in] cb    A #single_entry_cb callback function.
- * @param[in] udata A pointer to the user-defined data.
- **/
-static void 
-dl_emit_single_cb_on (dep_list        *list,
-                      single_entry_cb  cb,
-                      void            *udata)
-{
-    dep_item *iter;
-
-    if (cb == NULL)
-        return;
-
-    DL_FOREACH (iter, list) {
-        if (!(iter->type & (DI_UNCHANGED | DI_MOVED | DI_REPLACED))) {
-            (cb) (udata, iter);
-        }
-    }
-}
-
 
 /**
  * Recognize all the changes in the directory, invoke the appropriate callbacks.
@@ -405,8 +381,17 @@ dl_calculate (dep_list           *before,
         }
     }
 
-    dl_emit_single_cb_on (before, cbs->removed, udata);
-    dl_emit_single_cb_on (after, cbs->added, udata);
+    /* Traverse lists and invoke a callback for each item. */
+    DL_FOREACH (di_from, before) {
+        if (!(di_from->type & (DI_UNCHANGED | DI_MOVED | DI_REPLACED))) {
+            cb_invoke (cbs, removed, udata, di_from);
+        }
+    }
+    DL_FOREACH (di_to, after) {
+        if (!(di_to->type & DI_MOVED)) {
+            cb_invoke (cbs, added, udata, di_to);
+        }
+    }
 
     /* Replace all changed items from before list with items from after list */
     dep_item *di_prev = NULL;
