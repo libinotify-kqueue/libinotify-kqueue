@@ -46,10 +46,10 @@
 void
 dl_print (const dep_list *dl)
 {
-    dep_node *dn;
+    dep_item *di;
 
-    DL_FOREACH (dn, dl) {
-        printf ("%lld:%s ", (long long int) dn->item->inode, dn->item->path);
+    DL_FOREACH (di, dl) {
+        printf ("%lld:%s ", (long long int) di->inode, di->path);
     }
     printf ("\n");
 }
@@ -71,26 +71,6 @@ dl_create ()
     }
     SLIST_INIT (&dl->head);
     return dl;
-}
-
-/**
- * Create a new list node.
- *
- * Create a new list node and initialize its fields.
- *
- * @param[in] di Parent directory of depedence list.
- * @return A pointer to a new list or NULL in the case of error.
- **/
-dep_node*
-dn_create (dep_item *di)
-{
-    dep_node *dn = calloc (1, sizeof (dep_node));
-    if (dn == NULL) {
-        perror_msg ("Failed to allocate new dep-list node");
-        return NULL;
-    }
-    dn->item = di;
-    return dn;
 }
 
 /**
@@ -125,110 +105,37 @@ di_create (const char *path, ino_t inode, mode_t type)
  *
  * @param[in] dl A pointer to a list.
  * @param[in] di A pointer to a list item to be inserted.
- * @return A pointer to a new node or NULL in the case of error.
  **/
-dep_node*
+void
 dl_insert (dep_list* dl, dep_item* di)
 {
-    dep_node *dn = dn_create (di);
-    if (dn == NULL) {
-        perror_msg ("Failed to create a new dep-list node");
-        return NULL;
-    }
+    assert (dl != NULL);
+    assert (di != NULL);
 
-    SLIST_INSERT_HEAD (&dl->head, dn, next);
-
-    return dn;
+    SLIST_INSERT_HEAD (&dl->head, di, next);
 }
 
 /**
  * Remove item after specified from a list.
  *
  * @param[in] dl      A pointer to a list.
- * @param[in] prev_dn A pointer to a list node prepending removed one.
+ * @param[in] prev_di A pointer to a list item prepending removed one.
  *     Should be NULL to remove first node from a list.
  **/
 void
-dl_remove_after (dep_list* dl, dep_node* prev_dn)
+dl_remove_after (dep_list* dl, dep_item* prev_di)
 {
-    dep_node *dn;
+    dep_item *di;
 
-    if (prev_dn) {
-        dn = SLIST_NEXT (prev_dn, next);
-        SLIST_REMOVE_AFTER (prev_dn, next);
+    if (prev_di) {
+        di = SLIST_NEXT (prev_di, next);
+        SLIST_REMOVE_AFTER (prev_di, next);
     } else {
-        dn = SLIST_FIRST (&dl->head);
+        di = SLIST_FIRST (&dl->head);
         SLIST_REMOVE_HEAD (&dl->head, next);
     }
 
-    free (dn);
-}
-
-/**
- * Create a shallow copy of a list.
- *
- * A shallow copy is a copy of a structure, but not the copy of the
- * contents. All data pointers (`item' in our case) of a list and its
- * shallow copy will point to the same memory.
- *
- * @param[in] dl A pointer to list to make a copy. May be NULL.
- * @return A shallow copy of the list.
- **/ 
-dep_list*
-dl_shallow_copy (const dep_list *dl)
-{
-    assert (dl != NULL);
-
-    dep_list *head = dl_create ();
-    if (head == NULL) {
-        perror_msg ("Failed to allocate head during shallow copy");
-        return NULL;
-    }
-
-    dep_node *cp = NULL;
-    dep_node *iter;
-
-    DL_FOREACH (iter, dl) {
-        dep_node *dn = dn_create (iter->item);
-        if (dn == NULL) {
-                perror_msg ("Failed to allocate a new element during shallow copy");
-                dl_shallow_free (head);
-                return NULL;
-        }
-
-        if (cp == NULL) {
-            SLIST_INSERT_HEAD (&head->head, dn, next);
-        } else {
-            SLIST_INSERT_AFTER (cp, dn, next);
-        }
-        cp = dn;
-    }
-
-    return head;
-}
-
-/**
- * Free the memory allocated for shallow copy.
- *
- * This function will free the memory used by a list structure, but
- * the list data will remain in the heap.
- *
- * @param[in] dl A pointer to a list. May be NULL.
- **/
-void
-dl_shallow_free (dep_list *dl)
-{
-    assert (dl != NULL);
-
-    dep_node *dn;
-
-    while (!SLIST_EMPTY (&dl->head)) {
-        dn = SLIST_FIRST (&dl->head);
-        SLIST_REMOVE_HEAD (&dl->head, next);
-        free (dn);
-    }
-
-    free (dl);
+    di_free (di);
 }
 
 /**
@@ -257,13 +164,12 @@ dl_free (dep_list *dl)
 {
     assert (dl != NULL);
 
-    dep_node *dn;
+    dep_item *di;
 
     while (!SLIST_EMPTY (&dl->head)) {
-        dn = SLIST_FIRST (&dl->head);
+        di = SLIST_FIRST (&dl->head);
         SLIST_REMOVE_HEAD (&dl->head, next);
-        di_free (dn->item);
-        free (dn);
+        di_free (di);
     }
 
     free (dl);
@@ -279,9 +185,9 @@ dl_clearflags (dep_list *dl)
 {
     assert (dl != NULL);
 
-    dep_node *dn;
-    DL_FOREACH (dn, dl) {
-        dn->item->type &= S_IFMT;
+    dep_item *di;
+    DL_FOREACH (di, dl) {
+        di->type &= S_IFMT;
     }
 }
 
@@ -290,19 +196,19 @@ dl_clearflags (dep_list *dl)
  *
  * @param[in] dl    A pointer to a list.
  * @param[in] path  A name of a file.
- * @return A pointer to a dep_node if node is found, NULL otherwise.
+ * @return A pointer to a dep_item if item is found, NULL otherwise.
  */
-dep_node*
+dep_item*
 dl_find (dep_list *dl, const char *path)
 {
     assert (dl != NULL);
     assert (path != NULL);
 
-    dep_node *node;
+    dep_item *item;
 
-    DL_FOREACH (node, dl) {
-        if (strcmp (node->item->path, path) == 0) {
-            return node;
+    DL_FOREACH (item, dl) {
+        if (strcmp (item->path, path) == 0) {
+            return item;
         }
     }
 
@@ -325,7 +231,6 @@ dl_readdir (DIR *dir, dep_list* before)
 
     struct dirent *ent;
     dep_item *item;
-    dep_node *node;
     mode_t type;
 
     dep_list *head = dl_create ();
@@ -353,9 +258,9 @@ dl_readdir (DIR *dir, dep_list* before)
          * missed in returned set. Items are compared by name and inode number.
          */
         if (before != NULL) {
-            node = dl_find (before, ent->d_name);
-            if (node != NULL && node->item->inode == ent->d_ino) {
-                node->item->type |= DI_UNCHANGED;
+            item = dl_find (before, ent->d_name);
+            if (item != NULL && item->inode == ent->d_ino) {
+                item->type |= DI_UNCHANGED;
                 continue;
             }
         }
@@ -366,12 +271,7 @@ dl_readdir (DIR *dir, dep_list* before)
             goto error;
         }
 
-        node = dl_insert (head, item);
-        if (node == NULL) {
-            di_free (item);
-            perror_msg ("Failed to allocate a new node during listing");
-            goto error;
-        }
+        dl_insert (head, item);
     }
     return head;
 
@@ -403,14 +303,14 @@ dl_emit_single_cb_on (dep_list        *list,
                       single_entry_cb  cb,
                       void            *udata)
 {
-    dep_node *iter;
+    dep_item *iter;
 
     if (cb == NULL)
         return;
 
     DL_FOREACH (iter, list) {
-        if (!(iter->item->type & (DI_UNCHANGED | DI_MOVED | DI_REPLACED))) {
-            (cb) (udata, iter->item);
+        if (!(iter->type & (DI_UNCHANGED | DI_MOVED | DI_REPLACED))) {
+            (cb) (udata, iter);
         }
     }
 }
@@ -437,7 +337,7 @@ dl_calculate (dep_list           *before,
     assert (after != NULL);
     assert (cbs != NULL);
 
-    dep_node *dn_from, *dn_to, *tmp;
+    dep_item *di_from, *di_to, *tmp;
 
     /*
      * Some terminology. Between 2 consecutive directory scans file can be:
@@ -448,16 +348,15 @@ dl_calculate (dep_list           *before,
      * replaced  - File was overwritten by other file that was moved
      *             (renamed inside the watched directory).
      */
-    DL_FOREACH (dn_from, before) {
+    DL_FOREACH (di_from, before) {
         /* Skip unchanged files. They do not produce any events. */
-        if (dn_from->item->type & DI_UNCHANGED) {
+        if (di_from->type & DI_UNCHANGED) {
             continue;
         }
 
         /* Detect and notify about moves in the watched directory. */
-        DL_FOREACH (dn_to, after) {
-            if (dn_from->item->inode == dn_to->item->inode &&
-              !(dn_to->item->type & DI_MOVED)) {
+        DL_FOREACH (di_to, after) {
+            if (di_from->inode == di_to->inode && !(di_to->type & DI_MOVED)) {
                 /*
                  * Detect and notify of replacements in the watched directory.
                  *
@@ -466,16 +365,16 @@ dl_calculate (dep_list           *before,
                  * Right order: baz replaced than bar moved to baz.
                  * Wrong order: bar moved to baz than baz replaced.
                  */
-                tmp = dl_find (before, dn_to->item->path);
+                tmp = dl_find (before, di_to->path);
                 if (tmp != NULL) {
-                    tmp->item->type |= DI_REPLACED;
-                    cb_invoke (cbs, replaced, udata, tmp->item);
+                    tmp->type |= DI_REPLACED;
+                    cb_invoke (cbs, replaced, udata, tmp);
                 }
 
                 /* Now we can notify about move in the watched directory */
-                dn_to->item->type |= DI_MOVED;
-                dn_from->item->type |= DI_MOVED;
-                cb_invoke (cbs, moved, udata, dn_from->item, dn_to->item);
+                di_to->type |= DI_MOVED;
+                di_from->type |= DI_MOVED;
+                cb_invoke (cbs, moved, udata, di_from, di_to);
                 break;
             }
         }
@@ -485,10 +384,10 @@ dl_calculate (dep_list           *before,
     dl_emit_single_cb_on (after, cbs->added, udata);
 
     /* Move unchanged items from before list to after list */
-    DL_FOREACH_SAFE (dn_from, before, tmp) {
-        if (dn_from->item->type & DI_UNCHANGED) {
-            SLIST_REMOVE (&before->head, dn_from, dep_node, next);
-            SLIST_INSERT_HEAD (&after->head, dn_from, next);
+    DL_FOREACH_SAFE (di_from, before, tmp) {
+        if (di_from->type & DI_UNCHANGED) {
+            SLIST_REMOVE (&before->head, di_from, dep_item, next);
+            SLIST_INSERT_HEAD (&after->head, di_from, next);
         }
     }
     dl_clearflags (after);

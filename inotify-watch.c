@@ -181,9 +181,9 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
 
     if (S_ISDIR (st.st_mode)) {
 
-        dep_node *iter;
+        dep_item *iter;
         DL_FOREACH (iter, iw->deps) {
-            iwatch_add_subwatch (iw, iter->item);
+            iwatch_add_subwatch (iw, iter);
         }
     }
     return iw;
@@ -364,18 +364,18 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
 
     if (iw->deps != NULL) {
         /* Mark unwatched subfiles */
-        dep_node *iter;
+        dep_item *iter;
         DL_FOREACH (iter, iw->deps) {
-            if (watch_set_find (&iw->watches, iter->item->inode) == NULL) {
-                iter->item->type |= DI_UNCHANGED;
+            if (watch_set_find (&iw->watches, iter->inode) == NULL) {
+                iter->type |= DI_UNCHANGED;
             }
         }
 
         /* And finally try to watch marked items */
         DL_FOREACH (iter, iw->deps) {
-            if (iter->item->type & DI_UNCHANGED) {
-                iwatch_add_subwatch (iw, iter->item);
-                iter->item->type &= ~DI_UNCHANGED;
+            if (iter->type & DI_UNCHANGED) {
+                iwatch_add_subwatch (iw, iter);
+                iter->type &= ~DI_UNCHANGED;
             }
         }
     }

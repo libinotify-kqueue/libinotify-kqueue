@@ -408,15 +408,13 @@ produce_notifications (worker *wrk, struct kevent *event)
         /* Deaggregate inotify events */
         for (i = 0; i < nitems (ie_order); i++) {
             if (i_flags & ie_order[i]) {
-                dep_node *iter = NULL;
+                dep_item *iter = NULL;
                 /* Report deaggregated items */
                 DL_FOREACH (iter, iw->deps) {
-                    dep_item *di = iter->item;
-
-                    if (di->inode == w->inode) {
+                    if (iter->inode == w->inode) {
                         enqueue_event (iw,
                                        ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
-                                       di);
+                                       iter);
                     }
                 }
             }

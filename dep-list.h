@@ -36,23 +36,19 @@
 #define S_IFUNK 0000000 /* mode_t extension. File type is unknown */
 #define S_ISUNK(m) (((m) & S_IFMT) == S_IFUNK)
 
-#define DL_FOREACH(dn, dl) SLIST_FOREACH ((dn), &(dl)->head, next)
-#define DL_FOREACH_SAFE(dn, dl, tmp_dn) \
-    SLIST_FOREACH_SAFE ((dn), &(dl)->head, next, (tmp_dn))
+#define DL_FOREACH(di, dl) SLIST_FOREACH ((di), &(dl)->head, next)
+#define DL_FOREACH_SAFE(di, dl, tmp_di) \
+    SLIST_FOREACH_SAFE ((di), &(dl)->head, next, (tmp_di))
 
 typedef struct dep_item {
+    SLIST_ENTRY(dep_item) next;
     ino_t inode;
     mode_t type;
     char path[];
 } dep_item;
 
-typedef struct dep_node {
-    SLIST_ENTRY(dep_node) next;
-    dep_item *item;
-} dep_node;
-
 typedef struct dep_list {
-    SLIST_HEAD(, dep_node) head;
+    SLIST_HEAD(, dep_item) head;
 } dep_list;
 
 typedef void (* single_entry_cb) (void *udata, dep_item *di);
@@ -70,13 +66,11 @@ typedef struct traverse_cbs {
 dep_item* di_create       (const char *path, ino_t inode, mode_t type);
 void      di_free         (dep_item *di);
 dep_list* dl_create       ();
-dep_node* dl_insert       (dep_list *dl, dep_item *di);
-void      dl_remove_after (dep_list *dl, dep_node *dn);
+void      dl_insert       (dep_list *dl, dep_item *di);
+void      dl_remove_after (dep_list *dl, dep_item *di);
 void      dl_print        (const dep_list *dl);
-dep_list* dl_shallow_copy (const dep_list *dl);
-void      dl_shallow_free (dep_list *dl);
 void      dl_free         (dep_list *dl);
-dep_node* dl_find         (dep_list *dl, const char *path);
+dep_item* dl_find         (dep_list *dl, const char *path);
 dep_list* dl_readdir      (DIR *dir, dep_list *before);
 
 void
