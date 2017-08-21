@@ -265,7 +265,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     assert (event != NULL);
 
     DIR *dir;
-    dep_list *now = NULL;
+    dep_list *changes = NULL;
 
 #if READDIR_DOES_OPENDIR > 0
     dir = fdreopendir (iw->fd);
@@ -273,7 +273,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
         if (errno == ENOENT) {
             /* Why do I skip ENOENT? Because the directory could be deleted
              * at this point */
-            now = dl_create ();
+            changes = dl_create ();
             goto do_diff;
         }
         perror_msg ("Failed to reopen directory for listing");
@@ -284,14 +284,14 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     rewinddir(dir);
 #endif
 
-    now = dl_readdir (dir, iw->deps);
+    changes = dl_readdir (dir, iw->deps);
 
 #if READDIR_DOES_OPENDIR > 0
     closedir (dir);
 
 do_diff:
 #endif
-    if (now == NULL) {
+    if (changes == NULL) {
         perror_msg ("Failed to create a listing for watch %d", iw->wd);
         return;
     }
@@ -301,8 +301,7 @@ do_diff:
     ctx.iw = iw;
     ctx.fflags = event->fflags;
 
-    dl_calculate (iw->deps, now, &cbs, &ctx);
-    iw->deps = now;
+    dl_calculate (iw->deps, changes, &cbs, &ctx);
 }
 
 /**

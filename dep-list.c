@@ -176,6 +176,31 @@ dl_free (dep_list *dl)
 }
 
 /**
+ * Merge source directory listing into target directory listing.
+ *
+ * This function will free all the memory used by a source list: both
+ * list structure and the list data.
+ *
+ * @param[in] dl_target A pointer to a target list.
+ * @param[in] dl_source A pointer to a source list.
+ **/
+void
+dl_join (dep_list *dl_target, dep_list *dl_source)
+{
+    assert (dl_target != NULL);
+    assert (dl_source != NULL);
+
+    dep_item *di;
+
+    while (!SLIST_EMPTY (&dl_source->head)) {
+        di = SLIST_FIRST (&dl_source->head);
+        SLIST_REMOVE_HEAD (&dl_source->head, next);
+        dl_insert (dl_target, di);
+    }
+    free (dl_source);
+}
+
+/**
  * Reset flags of all list items.
  *
  * @param[in] dl A pointer to a list.
@@ -383,14 +408,16 @@ dl_calculate (dep_list           *before,
     dl_emit_single_cb_on (before, cbs->removed, udata);
     dl_emit_single_cb_on (after, cbs->added, udata);
 
-    /* Move unchanged items from before list to after list */
+    /* Replace all changed items from before list with items from after list */
+    dep_item *di_prev = NULL;
     DL_FOREACH_SAFE (di_from, before, tmp) {
         if (di_from->type & DI_UNCHANGED) {
-            SLIST_REMOVE (&before->head, di_from, dep_item, next);
-            SLIST_INSERT_HEAD (&after->head, di_from, next);
+            di_prev = di_from;
+        } else {
+            dl_remove_after (before, di_prev);
         }
     }
-    dl_clearflags (after);
-    dl_free (before);
+    dl_join (before, after);
+    dl_clearflags (before);
 }
 
