@@ -363,22 +363,20 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
     }
 
     if (iw->deps != NULL) {
-        /* create list of unwatched subfiles */
-        dep_list *dl = dl_create ();
-        if (dl == NULL) {
-            return;
-        }
+        /* Mark unwatched subfiles */
         dep_node *iter;
         DL_FOREACH (iter, iw->deps) {
             if (watch_set_find (&iw->watches, iter->item->inode) == NULL) {
-                dl_insert (dl, iter->item);
+                iter->item->type |= DI_UNCHANGED;
             }
         }
 
-        /* And finally try to watch that list */
-        DL_FOREACH (iter, dl) {
-            iwatch_add_subwatch (iw, iter->item);
+        /* And finally try to watch marked items */
+        DL_FOREACH (iter, iw->deps) {
+            if (iter->item->type & DI_UNCHANGED) {
+                iwatch_add_subwatch (iw, iter->item);
+                iter->item->type &= ~DI_UNCHANGED;
+            }
         }
-        dl_shallow_free (dl);
     }
 }
