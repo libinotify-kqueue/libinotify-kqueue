@@ -255,7 +255,7 @@ dl_readdir (DIR *dir, dep_list* before)
     assert (dir != NULL);
 
     struct dirent *ent;
-    dep_item *item;
+    dep_item *item, *before_item;
     mode_t type;
 
     dep_list *head = dl_create ();
@@ -282,10 +282,11 @@ dl_readdir (DIR *dir, dep_list* before)
          * The same items will be marked as UNCHANGED in previous list and
          * missed in returned set. Items are compared by name and inode number.
          */
+        before_item = NULL;
         if (before != NULL) {
-            item = dl_find (before, ent->d_name);
-            if (item != NULL && item->inode == ent->d_ino) {
-                item->type |= DI_UNCHANGED;
+            before_item = dl_find (before, ent->d_name);
+            if (before_item != NULL && before_item->inode == ent->d_ino) {
+                before_item->type |= DI_UNCHANGED;
                 continue;
             }
         }
@@ -294,6 +295,12 @@ dl_readdir (DIR *dir, dep_list* before)
         if (item == NULL) {
             perror_msg ("Failed to allocate a new item during listing");
             goto error;
+        }
+
+        /* File was overwritten between scans. Cache reference on old entry. */
+        if (before_item != NULL) {
+            item->type |= DI_READDED;
+            item->cookie = before_item;
         }
 
         dl_insert (head, item);
@@ -348,6 +355,8 @@ dl_calculate (dep_list           *before,
      * moved     - File name was changed inside the watched directory.
      * replaced  - File was overwritten by other file that was moved
      *             (renamed inside the watched directory).
+     * readded   - File was created with the name of just deleted file or
+     *             moved and then overwrote other file.
      */
     DL_FOREACH (di_from, before) {
         /* Skip unchanged files. They do not produce any events. */
@@ -366,10 +375,9 @@ dl_calculate (dep_list           *before,
                  * Right order: baz replaced than bar moved to baz.
                  * Wrong order: bar moved to baz than baz replaced.
                  */
-                tmp = dl_find (before, di_to->path);
-                if (tmp != NULL) {
-                    tmp->type |= DI_REPLACED;
-                    cb_invoke (cbs, replaced, udata, tmp);
+                if (di_to->type & DI_READDED) {
+                    di_to->cookie->type |= DI_REPLACED;
+                    cb_invoke (cbs, replaced, udata, di_to->cookie);
                 }
 
                 /* Now we can notify about move in the watched directory */

@@ -31,6 +31,7 @@
 
 #define DI_UNCHANGED S_IXOTH /* dep_item remained unchanged between listings */
 #define DI_REPLACED  S_IROTH /* dep_item was replaced by other item */
+#define DI_READDED   DI_REPLACED /* dep_item replaced other item */
 #define DI_MOVED     S_IWOTH /* dep_item was renamed between listings */
 
 #define S_IFUNK 0000000 /* mode_t extension. File type is unknown */
@@ -44,6 +45,7 @@ typedef struct dep_item {
     SLIST_ENTRY(dep_item) next;
     ino_t inode;
     mode_t type;
+    struct dep_item *cookie;
     char path[];
 } dep_item;
 
