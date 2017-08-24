@@ -367,34 +367,48 @@ dl_calculate (dep_list           *before,
         /* Detect and notify about moves in the watched directory. */
         DL_FOREACH (di_to, after) {
             if (di_from->inode == di_to->inode && !(di_to->type & DI_MOVED)) {
-                /*
-                 * Detect and notify of replacements in the watched directory.
-                 *
-                 * Notification about replacements MUST always prepend
-                 * movement notification to be chronologically correct.
-                 * Right order: baz replaced than bar moved to baz.
-                 * Wrong order: bar moved to baz than baz replaced.
-                 */
+                /* Detect replacements in the watched directory */
                 if (di_to->type & DI_READDED) {
                     di_to->cookie->type |= DI_REPLACED;
-                    cb_invoke (cbs, replaced, udata, di_to->cookie);
                 }
 
-                /* Now we can notify about move in the watched directory */
+                /* Now we can mark item as moved in the watched directory */
                 di_to->type |= DI_MOVED;
                 di_from->type |= DI_MOVED;
-                cb_invoke (cbs, moved, udata, di_from, di_to);
+                di_to->cookie = di_from;
                 break;
             }
         }
     }
 
-    /* Traverse lists and invoke a callback for each item. */
+    /* Traverse lists and invoke a callback for each item.
+     *
+     * Note about correct order of events:
+     * Notification about file that disapeared (was removed or moved from)
+     * from directory MUST always prepend notification about file with the
+     * same name that appeared (added or moved to) in directory.
+     * To obey this rule run it in next sequence:
+     * 1. Notyfy about all deleted files.
+     * 2. Notify about all renamed files.
+     * 3. Notify about all created files.
+     */
+    /* Notify about files that have been deleted or replaced */
     DL_FOREACH (di_from, before) {
-        if (!(di_from->type & (DI_UNCHANGED | DI_MOVED | DI_REPLACED))) {
-            cb_invoke (cbs, removed, udata, di_from);
+        if (!(di_from->type & (DI_UNCHANGED | DI_MOVED))) {
+            if (di_from->type & DI_REPLACED) {
+                cb_invoke (cbs, replaced, udata, di_from);
+            } else {
+                cb_invoke (cbs, removed, udata, di_from);
+            }
         }
     }
+    /* Notify about files that have been renamed in between scans */
+    DL_FOREACH (di_to, after) {
+        if (di_to->type & DI_MOVED) {
+            cb_invoke (cbs, moved, udata, di_to->cookie, di_to);
+        }
+    }
+    /* Notify about newly created files */
     DL_FOREACH (di_to, after) {
         if (!(di_to->type & DI_MOVED)) {
             cb_invoke (cbs, added, udata, di_to);
