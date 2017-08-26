@@ -273,7 +273,6 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
         if (errno == ENOENT) {
             /* Why do I skip ENOENT? Because the directory could be deleted
              * at this point */
-            changes = dl_create ();
             goto do_diff;
         }
         perror_msg ("Failed to reopen directory for listing");
@@ -284,7 +283,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     rewinddir(dir);
 #endif
 
-    changes = dl_readdir (dir, iw->deps);
+    changes = dl_readdir (dir, &iw->deps);
 
 #if READDIR_DOES_OPENDIR > 0
     closedir (dir);
@@ -301,7 +300,7 @@ do_diff:
     ctx.iw = iw;
     ctx.fflags = event->fflags;
 
-    dl_calculate (iw->deps, changes, &cbs, &ctx);
+    dl_calculate (&iw->deps, changes, &cbs, &ctx);
 }
 
 /**
@@ -409,7 +408,7 @@ produce_notifications (worker *wrk, struct kevent *event)
             if (i_flags & ie_order[i]) {
                 dep_item *iter = NULL;
                 /* Report deaggregated items */
-                DL_FOREACH (iter, iw->deps) {
+                DL_FOREACH (iter, &iw->deps) {
                     if (iter->inode == w->inode) {
                         enqueue_event (iw,
                                        ie_order[i] | (i_flags & ~IN_ALL_EVENTS),

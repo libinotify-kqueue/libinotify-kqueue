@@ -56,8 +56,33 @@ dl_print (const dep_list *dl)
 }
 
 /**
- * Create a new list.
+ * Allocate memory for dependency list head.
  *
+ * @return A pointer to a new list or NULL in the case of error.
+ **/
+dep_list*
+dl_alloc ()
+{
+    dep_list *dl = calloc (1, sizeof (dep_list));
+    if (dl == NULL) {
+        perror_msg ("Failed to allocate new dep-list");
+    }
+    return dl;
+}
+
+/**
+ * Initialize a rb-tree based list.
+ *
+ * @param[in] dl A pointer to a list.
+ **/
+void
+dl_init (dep_list* dl)
+{
+    assert (dl != NULL);
+    SLIST_INIT (&dl->head);
+}
+
+/**
  * Create a new list and initialize its fields.
  *
  * @return A pointer to a new list or NULL in the case of error.
@@ -65,12 +90,11 @@ dl_print (const dep_list *dl)
 dep_list*
 dl_create ()
 {
-    dep_list *dl = calloc (1, sizeof (dep_list));
+    dep_list *dl = dl_alloc ();
     if (dl == NULL) {
-        perror_msg ("Failed to allocate new dep-list");
         return NULL;
     }
-    SLIST_INIT (&dl->head);
+    dl_init (dl);
     return dl;
 }
 
@@ -155,8 +179,7 @@ di_free (dep_item *di)
 /**
  * Free the memory allocated for a list.
  *
- * This function will free all the memory used by a list: both
- * list structure and the list data.
+ * This function will rmove and free all list items
  *
  * @param[in] dl A pointer to a list.
  **/
@@ -172,8 +195,6 @@ dl_free (dep_list *dl)
         SLIST_REMOVE_HEAD (&dl->head, next);
         di_free (di);
     }
-
-    free (dl);
 }
 
 /**
@@ -313,6 +334,7 @@ error:
         dl_clearflags (before);
     }
     dl_free (head);
+    free (head);
     return NULL;
 }
 
@@ -343,7 +365,6 @@ dl_calculate (dep_list           *before,
               void               *udata)
 {
     assert (before != NULL);
-    assert (after != NULL);
     assert (cbs != NULL);
 
     dep_item *di_from, *di_to, *tmp;
@@ -360,26 +381,29 @@ dl_calculate (dep_list           *before,
      * readded   - File was created with the name of just deleted file or
      *             moved and then overwrote other file.
      */
-    DL_FOREACH (di_from, before) {
-        /* Skip unchanged files. They do not produce any events. */
-        if (di_from->type & DI_UNCHANGED) {
-            continue;
-        }
+    if (after != NULL) {
+        DL_FOREACH (di_from, before) {
+            /* Skip unchanged files. They do not produce any events. */
+            if (di_from->type & DI_UNCHANGED) {
+                continue;
+            }
 
-        /* Detect and notify about moves in the watched directory. */
-        DL_FOREACH (di_to, after) {
-            if (di_from->inode == di_to->inode && !(di_to->type & DI_MOVED)) {
-                /* Detect replacements in the watched directory */
-                if (di_to->type & DI_READDED) {
-                    di_to->replacee->type |= DI_REPLACED;
+            /* Detect and notify about moves in the watched directory. */
+            DL_FOREACH (di_to, after) {
+                if (di_from->inode == di_to->inode &&
+                    !(di_to->type & DI_MOVED)) {
+                    /* Detect replacements in the watched directory */
+                    if (di_to->type & DI_READDED) {
+                        di_to->replacee->type |= DI_REPLACED;
+                    }
+
+                    /* Now we can mark item as moved in the watched directory */
+                    di_to->type |= DI_MOVED;
+                    di_to->moved_from = di_from;
+                    di_from->type |= DI_MOVED;
+                    ++n_moves;
+                    break;
                 }
-
-                /* Now we can mark item as moved in the watched directory */
-                di_to->type |= DI_MOVED;
-                di_to->moved_from = di_from;
-                di_from->type |= DI_MOVED;
-                ++n_moves;
-                break;
             }
         }
     }
@@ -405,49 +429,52 @@ dl_calculate (dep_list           *before,
             }
         }
     }
-    /*
-     * Notify about files that have been renamed in between scans
-     *
-     * Here we are doing several passes to provide ordering for overlapping
-     * renames. Renames overlap if they share common filename e.g. if
-     * next commands "mv file file.bak; mv file.new file;" were executed
-     * in between consecutive directory scans. 
-     * On each round we are reporting only moves that does not replace files
-     * parcitipating in other move. Than mark this file as not participating
-     * in moves to allow further progress in next round.
-     */
-    bool want_overlap = false;
-    while (n_moves > 0) {
-        size_t n_moves_prev = n_moves;
-        DL_FOREACH (di_to, after) {
-            bool is_overlap = di_to->type & DI_READDED &&
-                              di_to->replacee->type & DI_MOVED;
-            if (di_to->type & DI_MOVED && di_to->moved_from != NULL &&
-                (is_overlap == want_overlap)) {
-                cb_invoke (cbs, moved, udata, di_to->moved_from, di_to);
 
-                /* Mark file as not participating in moves */
-                di_to->moved_from->type &= ~DI_MOVED;
-                di_to->moved_from = NULL;
+    if (after != NULL) {
+        /*
+         * Notify about files that have been renamed in between scans
+         *
+         * Here we are doing several passes to provide ordering for overlapping
+         * renames. Renames overlap if they share common filename e.g. if
+         * next commands "mv file file.bak; mv file.new file;" were executed
+         * in between consecutive directory scans.
+         * On each round we are reporting only moves that does not replace
+         * files parcitipating in other move. Than mark this file as not
+         * participating in moves to allow further progress in next round.
+         */
+        bool want_overlap = false;
+        while (n_moves > 0) {
+            size_t n_moves_prev = n_moves;
+            DL_FOREACH (di_to, after) {
+                bool is_overlap = di_to->type & DI_READDED &&
+                                  di_to->replacee->type & DI_MOVED;
+                if (di_to->type & DI_MOVED && di_to->moved_from != NULL &&
+                    (is_overlap == want_overlap)) {
+                    cb_invoke (cbs, moved, udata, di_to->moved_from, di_to);
 
-                want_overlap = false;
-                --n_moves;
+                    /* Mark file as not participating in moves */
+                    di_to->moved_from->type &= ~DI_MOVED;
+                    di_to->moved_from = NULL;
+
+                    want_overlap = false;
+                    --n_moves;
+                }
+            }
+            /*
+             * No progress? Unbeilivable! Unfortunatelly, we cannot handle this
+             * properly without adding of renames to and from temporary file.
+             * So just break circular chain at random place. :-(
+             */
+            if (n_moves_prev == n_moves) {
+                perror_msg("Circular rename detected");
+                want_overlap = true;
             }
         }
-        /*
-         * No progress? Unbeilivable! Unfortunatelly, we cannot handle this
-         * properly without adding of renames to and from temporary file.
-         * So just break circular chain at random place. :-(
-         */
-        if (n_moves_prev == n_moves) {
-            perror_msg("Circular overlapped renames detected");
-            want_overlap = true;
-        }
-    }
-    /* Notify about newly created files */
-    DL_FOREACH (di_to, after) {
-        if (!(di_to->type & DI_MOVED)) {
-            cb_invoke (cbs, added, udata, di_to);
+        /* Notify about newly created files */
+        DL_FOREACH (di_to, after) {
+            if (!(di_to->type & DI_MOVED)) {
+                cb_invoke (cbs, added, udata, di_to);
+            }
         }
     }
 
@@ -460,7 +487,9 @@ dl_calculate (dep_list           *before,
             dl_remove_after (before, di_prev);
         }
     }
-    dl_join (before, after);
+    if (after != NULL) {
+        dl_join (before, after);
+    }
     dl_clearflags (before);
 }
 

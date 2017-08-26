@@ -133,7 +133,6 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
         return NULL;
     }
 
-    iw->deps = NULL;
     iw->wrk = wrk;
     iw->fd = fd;
     iw->flags = flags;
@@ -142,6 +141,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
     iw->is_closed = 0;
 
     watch_set_init (&iw->watches);
+    dl_init (&iw->deps);
 
     if (S_ISDIR (st.st_mode)) {
 #if READDIR_DOES_OPENDIR > 0
@@ -154,13 +154,14 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
             iwatch_free (iw);
             return NULL;
         }
-        iw->deps = dl_readdir (dir, NULL);
-        if (iw->deps == NULL) {
+        dep_list *deps = dl_readdir (dir, NULL);
+        if (deps == NULL) {
             perror_msg ("Directory listing of %d failed", fd);
             closedir (dir);
             iwatch_free (iw);
             return NULL;
         }
+        dl_join (&iw->deps, deps);
 #if READDIR_DOES_OPENDIR > 0
         closedir (dir);
 #else
@@ -182,7 +183,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
     if (S_ISDIR (st.st_mode)) {
 
         dep_item *iter;
-        DL_FOREACH (iter, iw->deps) {
+        DL_FOREACH (iter, &iw->deps) {
             iwatch_add_subwatch (iw, iter);
         }
     }
@@ -210,9 +211,7 @@ iwatch_free (i_watch *iw)
     }
 #endif
     watch_set_free (&iw->watches);
-    if (iw->deps != NULL) {
-        dl_free (iw->deps);
-    }
+    dl_free (&iw->deps);
     free (iw);
 }
 
@@ -227,7 +226,6 @@ watch*
 iwatch_add_subwatch (i_watch *iw, dep_item *di)
 {
     assert (iw != NULL);
-    assert (iw->deps != NULL);
     assert (di != NULL);
 
     if (iw->is_closed) {
@@ -362,21 +360,19 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
         }
     }
 
-    if (iw->deps != NULL) {
-        /* Mark unwatched subfiles */
-        dep_item *iter;
-        DL_FOREACH (iter, iw->deps) {
-            if (watch_set_find (&iw->watches, iter->inode) == NULL) {
-                iter->type |= DI_UNCHANGED;
-            }
+    /* Mark unwatched subfiles */
+    dep_item *iter;
+    DL_FOREACH (iter, &iw->deps) {
+        if (watch_set_find (&iw->watches, iter->inode) == NULL) {
+            iter->type |= DI_UNCHANGED;
         }
+    }
 
-        /* And finally try to watch marked items */
-        DL_FOREACH (iter, iw->deps) {
-            if (iter->type & DI_UNCHANGED) {
-                iwatch_add_subwatch (iw, iter);
-                iter->type &= ~DI_UNCHANGED;
-            }
+    /* And finally try to watch marked items */
+    DL_FOREACH (iter, &iw->deps) {
+        if (iter->type & DI_UNCHANGED) {
+            iwatch_add_subwatch (iw, iter);
+            iter->type &= ~DI_UNCHANGED;
         }
     }
 }

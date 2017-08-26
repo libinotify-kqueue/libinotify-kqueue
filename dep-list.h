@@ -68,11 +68,14 @@ typedef struct traverse_cbs {
 
 dep_item* di_create       (const char *path, ino_t inode, mode_t type);
 void      di_free         (dep_item *di);
+dep_list* dl_alloc        ();
+void      dl_init         (dep_list *dl);
 dep_list* dl_create       ();
 void      dl_insert       (dep_list *dl, dep_item *di);
 void      dl_remove_after (dep_list *dl, dep_item *di);
 void      dl_print        (const dep_list *dl);
 void      dl_free         (dep_list *dl);
+void      dl_join         (dep_list *dl_target, dep_list *dl_source);
 dep_item* dl_find         (dep_list *dl, const char *path);
 dep_list* dl_readdir      (DIR *dir, dep_list *before);
 
