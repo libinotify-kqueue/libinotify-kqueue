@@ -45,7 +45,8 @@ typedef struct dep_item {
     SLIST_ENTRY(dep_item) next;
     ino_t inode;
     mode_t type;
-    struct dep_item *cookie;
+    struct dep_item *replacee;
+    struct dep_item *moved_from;
     char path[];
 } dep_item;
 

@@ -25,6 +25,7 @@
 #include "compat.h"
 
 #include <errno.h>   /* errno */
+#include <stdbool.h> /* bool */
 #include <stddef.h>  /* offsetof */
 #include <stdlib.h>  /* calloc */
 #include <stdio.h>   /* printf */
@@ -300,7 +301,7 @@ dl_readdir (DIR *dir, dep_list* before)
         /* File was overwritten between scans. Cache reference on old entry. */
         if (before_item != NULL) {
             item->type |= DI_READDED;
-            item->cookie = before_item;
+            item->replacee = before_item;
         }
 
         dl_insert (head, item);
@@ -346,6 +347,7 @@ dl_calculate (dep_list           *before,
     assert (cbs != NULL);
 
     dep_item *di_from, *di_to, *tmp;
+    size_t n_moves = 0;
 
     /*
      * Some terminology. Between 2 consecutive directory scans file can be:
@@ -369,13 +371,14 @@ dl_calculate (dep_list           *before,
             if (di_from->inode == di_to->inode && !(di_to->type & DI_MOVED)) {
                 /* Detect replacements in the watched directory */
                 if (di_to->type & DI_READDED) {
-                    di_to->cookie->type |= DI_REPLACED;
+                    di_to->replacee->type |= DI_REPLACED;
                 }
 
                 /* Now we can mark item as moved in the watched directory */
                 di_to->type |= DI_MOVED;
+                di_to->moved_from = di_from;
                 di_from->type |= DI_MOVED;
-                di_to->cookie = di_from;
+                ++n_moves;
                 break;
             }
         }
@@ -402,10 +405,43 @@ dl_calculate (dep_list           *before,
             }
         }
     }
-    /* Notify about files that have been renamed in between scans */
-    DL_FOREACH (di_to, after) {
-        if (di_to->type & DI_MOVED) {
-            cb_invoke (cbs, moved, udata, di_to->cookie, di_to);
+    /*
+     * Notify about files that have been renamed in between scans
+     *
+     * Here we are doing several passes to provide ordering for overlapping
+     * renames. Renames overlap if they share common filename e.g. if
+     * next commands "mv file file.bak; mv file.new file;" were executed
+     * in between consecutive directory scans. 
+     * On each round we are reporting only moves that does not replace files
+     * parcitipating in other move. Than mark this file as not participating
+     * in moves to allow further progress in next round.
+     */
+    bool want_overlap = false;
+    while (n_moves > 0) {
+        size_t n_moves_prev = n_moves;
+        DL_FOREACH (di_to, after) {
+            bool is_overlap = di_to->type & DI_READDED &&
+                              di_to->replacee->type & DI_MOVED;
+            if (di_to->type & DI_MOVED && di_to->moved_from != NULL &&
+                (is_overlap == want_overlap)) {
+                cb_invoke (cbs, moved, udata, di_to->moved_from, di_to);
+
+                /* Mark file as not participating in moves */
+                di_to->moved_from->type &= ~DI_MOVED;
+                di_to->moved_from = NULL;
+
+                want_overlap = false;
+                --n_moves;
+            }
+        }
+        /*
+         * No progress? Unbeilivable! Unfortunatelly, we cannot handle this
+         * properly without adding of renames to and from temporary file.
+         * So just break circular chain at random place. :-(
+         */
+        if (n_moves_prev == n_moves) {
+            perror_msg("Circular overlapped renames detected");
+            want_overlap = true;
         }
     }
     /* Notify about newly created files */
