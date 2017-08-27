@@ -72,7 +72,7 @@ dep_list* dl_alloc        ();
 void      dl_init         (dep_list *dl);
 dep_list* dl_create       ();
 void      dl_insert       (dep_list *dl, dep_item *di);
-void      dl_remove_after (dep_list *dl, dep_item *di);
+void      dl_remove       (dep_list *dl, dep_item *di);
 void      dl_print        (const dep_list *dl);
 void      dl_free         (dep_list *dl);
 void      dl_join         (dep_list *dl_target, dep_list *dl_source);

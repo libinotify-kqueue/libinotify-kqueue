@@ -141,25 +141,15 @@ dl_insert (dep_list* dl, dep_item* di)
 }
 
 /**
- * Remove item after specified from a list.
+ * Remove specified item from a list.
  *
- * @param[in] dl      A pointer to a list.
- * @param[in] prev_di A pointer to a list item prepending removed one.
- *     Should be NULL to remove first node from a list.
+ * @param[in] dl A pointer to a list.
+ * @param[in] di A pointer to a list item to remove.
  **/
 void
-dl_remove_after (dep_list* dl, dep_item* prev_di)
+dl_remove (dep_list* dl, dep_item* di)
 {
-    dep_item *di;
-
-    if (prev_di) {
-        di = SLIST_NEXT (prev_di, next);
-        SLIST_REMOVE_AFTER (prev_di, next);
-    } else {
-        di = SLIST_FIRST (&dl->head);
-        SLIST_REMOVE_HEAD (&dl->head, next);
-    }
-
+    SLIST_REMOVE (&dl->head, di, dep_item, next);
     di_free (di);
 }
 
@@ -479,12 +469,9 @@ dl_calculate (dep_list           *before,
     }
 
     /* Replace all changed items from before list with items from after list */
-    dep_item *di_prev = NULL;
     DL_FOREACH_SAFE (di_from, before, tmp) {
-        if (di_from->type & DI_UNCHANGED) {
-            di_prev = di_from;
-        } else {
-            dl_remove_after (before, di_prev);
+        if (!(di_from->type & DI_UNCHANGED)) {
+            dl_remove (before, di_from);
         }
     }
     if (after != NULL) {
