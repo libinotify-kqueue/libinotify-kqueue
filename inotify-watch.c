@@ -154,7 +154,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
             iwatch_free (iw);
             return NULL;
         }
-        dep_list *deps = dl_readdir (dir, NULL);
+        chg_list *deps = dl_readdir (dir, NULL);
         if (deps == NULL) {
             perror_msg ("Directory listing of %d failed", fd);
             closedir (dir);

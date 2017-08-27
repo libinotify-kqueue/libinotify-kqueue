@@ -45,7 +45,7 @@
  * @param[in] dl A pointer to a list.
  **/
 void
-dl_print (const dep_list *dl)
+dl_print (dep_list *dl)
 {
     dep_item *di;
 
@@ -79,7 +79,7 @@ void
 dl_init (dep_list* dl)
 {
     assert (dl != NULL);
-    SLIST_INIT (&dl->head);
+    RB_INIT (&dl->head);
 }
 
 /**
@@ -136,8 +136,9 @@ dl_insert (dep_list* dl, dep_item* di)
 {
     assert (dl != NULL);
     assert (di != NULL);
+    assert (RB_FIND (dep_tree, &dl->head, di) == NULL);
 
-    SLIST_INSERT_HEAD (&dl->head, di, next);
+    RB_INSERT (dep_tree, &dl->head, di);
 }
 
 /**
@@ -149,7 +150,11 @@ dl_insert (dep_list* dl, dep_item* di)
 void
 dl_remove (dep_list* dl, dep_item* di)
 {
-    SLIST_REMOVE (&dl->head, di, dep_item, next);
+    assert (dl != NULL);
+    assert (di != NULL);
+    assert (RB_FIND (dep_tree, &dl->head, di) != NULL);
+
+    RB_REMOVE (dep_tree, &dl->head, di);
     di_free (di);
 }
 
@@ -180,24 +185,24 @@ dl_free (dep_list *dl)
 
     dep_item *di;
 
-    while (!SLIST_EMPTY (&dl->head)) {
-        di = SLIST_FIRST (&dl->head);
-        SLIST_REMOVE_HEAD (&dl->head, next);
-        di_free (di);
+    while (!RB_EMPTY (&dl->head)) {
+        di = RB_MIN (dep_tree, &dl->head);
+        dl_remove (dl, di);
     }
 }
 
 /**
- * Merge source directory listing into target directory listing.
+ * Merge linked list based source directory listing into
+ * target directory listing.
  *
  * This function will free all the memory used by a source list: both
  * list structure and the list data.
  *
  * @param[in] dl_target A pointer to a target list.
- * @param[in] dl_source A pointer to a source list.
+ * @param[in] dl_source A pointer to a source list (linked list based).
  **/
 void
-dl_join (dep_list *dl_target, dep_list *dl_source)
+dl_join (dep_list *dl_target, chg_list *dl_source)
 {
     assert (dl_target != NULL);
     assert (dl_source != NULL);
@@ -206,7 +211,7 @@ dl_join (dep_list *dl_target, dep_list *dl_source)
 
     while (!SLIST_EMPTY (&dl_source->head)) {
         di = SLIST_FIRST (&dl_source->head);
-        SLIST_REMOVE_HEAD (&dl_source->head, next);
+        SLIST_REMOVE_HEAD (&dl_source->head, list_link);
         dl_insert (dl_target, di);
     }
     free (dl_source);
@@ -241,19 +246,15 @@ dl_find (dep_list *dl, const char *path)
     assert (dl != NULL);
     assert (path != NULL);
 
-    dep_item *item;
+    dep_item find;
+    find.type = DI_EXT_PATH;
+    find.ext_path = path;
 
-    DL_FOREACH (item, dl) {
-        if (strcmp (item->path, path) == 0) {
-            return item;
-        }
-    }
-
-    return NULL;
+    return (RB_FIND (dep_tree, &dl->head, &find));
 }
 
 /**
- * Create a directory listing from directory stream and return it as a list.
+ * Create a directory listing from DIR stream and return it as a linked list.
  *
  * @param[in] dir    A pointer to valid directory stream created with opendir().
  * @param[in] before A pointer to previous directory listing. If nonNULL value
@@ -261,7 +262,7 @@ dl_find (dep_list *dl, const char *path)
  *                   resulting list but marked as unchanged in before list.
  * @return A pointer to a list. May return NULL, check errno in this case.
  **/
-dep_list*
+chg_list*
 dl_readdir (DIR *dir, dep_list* before)
 {
     assert (dir != NULL);
@@ -270,11 +271,12 @@ dl_readdir (DIR *dir, dep_list* before)
     dep_item *item, *before_item;
     mode_t type;
 
-    dep_list *head = dl_create ();
+    chg_list *head = calloc (1, sizeof (dep_list));
     if (head == NULL) {
         perror_msg ("Failed to allocate list during directory listing");
         return NULL;
     }
+    SLIST_INIT (&head->head);
 
     while ((ent = readdir (dir)) != NULL) {
         if (!strcmp (ent->d_name, ".") || !strcmp (ent->d_name, "..")) {
@@ -315,7 +317,7 @@ dl_readdir (DIR *dir, dep_list* before)
             item->replacee = before_item;
         }
 
-        dl_insert (head, item);
+        SLIST_INSERT_HEAD (&head->head, item, list_link);
     }
     return head;
 
@@ -323,7 +325,11 @@ error:
     if (before != NULL) {
         dl_clearflags (before);
     }
-    dl_free (head);
+    while (!SLIST_EMPTY (&head->head)) {
+        item = SLIST_FIRST (&head->head);
+        SLIST_REMOVE_HEAD (&head->head, list_link);
+        di_free (item);
+    }
     free (head);
     return NULL;
 }
@@ -350,7 +356,7 @@ error:
  **/
 void
 dl_calculate (dep_list           *before,
-              dep_list           *after,
+              chg_list           *after,
               const traverse_cbs *cbs,
               void               *udata)
 {
@@ -379,7 +385,7 @@ dl_calculate (dep_list           *before,
             }
 
             /* Detect and notify about moves in the watched directory. */
-            DL_FOREACH (di_to, after) {
+            CL_FOREACH (di_to, after) {
                 if (di_from->inode == di_to->inode &&
                     !(di_to->type & DI_MOVED)) {
                     /* Detect replacements in the watched directory */
@@ -435,7 +441,7 @@ dl_calculate (dep_list           *before,
         bool want_overlap = false;
         while (n_moves > 0) {
             size_t n_moves_prev = n_moves;
-            DL_FOREACH (di_to, after) {
+            CL_FOREACH (di_to, after) {
                 bool is_overlap = di_to->type & DI_READDED &&
                                   di_to->replacee->type & DI_MOVED;
                 if (di_to->type & DI_MOVED && di_to->moved_from != NULL &&
@@ -461,7 +467,7 @@ dl_calculate (dep_list           *before,
             }
         }
         /* Notify about newly created files */
-        DL_FOREACH (di_to, after) {
+        CL_FOREACH (di_to, after) {
             if (!(di_to->type & DI_MOVED)) {
                 cb_invoke (cbs, added, udata, di_to);
             }
@@ -480,3 +486,22 @@ dl_calculate (dep_list           *before,
     dl_clearflags (before);
 }
 
+/**
+ * Custom comparison function that can compare directory dependency list
+ * entries through pointers passed by RB tree functions
+ *
+ * @param[in] di1 A pointer to a first deplist item to compare
+ * @param[in] di2 A pointer to a second deplist item to compare
+ * @return An -1, 0, or +1 if the first inode is considered to be respectively
+ *     less than, equal to, or greater than the second one.
+ **/
+static int
+dep_item_cmp (dep_item *di1, dep_item *di2)
+{
+    const char *path1 = (di1->type == DI_EXT_PATH) ? di1->ext_path : di1->path;
+    const char *path2 = (di2->type == DI_EXT_PATH) ? di2->ext_path : di2->path;
+
+    return strcmp (path1, path2);
+}
+
+RB_GENERATE(dep_tree, dep_item, tree_link, dep_item_cmp);

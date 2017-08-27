@@ -265,7 +265,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     assert (event != NULL);
 
     DIR *dir;
-    dep_list *changes = NULL;
+    chg_list *changes = NULL;
 
 #if READDIR_DOES_OPENDIR > 0
     dir = fdreopendir (iw->fd);
