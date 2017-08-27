@@ -48,13 +48,15 @@
 typedef struct dep_item {
     union {
         RB_ENTRY(dep_item) tree_link;
-        SLIST_ENTRY(dep_item) list_link;
+        struct {
+            SLIST_ENTRY(dep_item) list_link;
+            struct dep_item *replacee;
+            struct dep_item *moved_from;
+        };
         const char *ext_path;
     };
     ino_t inode;
     mode_t type;
-    struct dep_item *replacee;
-    struct dep_item *moved_from;
     char path[];
 } dep_item;
 
