@@ -171,7 +171,6 @@ void notifications_dir_test::run ()
             contains (received, event ("one", wid, IN_MODIFY)));
 
 
-#if defined(__linux__) || defined(HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME)
     cons.output.reset ();
     cons.input.receive ();
 
@@ -179,6 +178,7 @@ void notifications_dir_test::run ()
 
     cons.output.wait ();
     received = cons.output.registered ();
+#if defined(__linux__) || defined(HAVE_NOTE_EXTEND_ON_MOVE_FROM)
     should ("receive IN_MOVED_FROM event on moving file from directory "
             "to another location within the same mount point",
             contains (received, event ("one", wid, IN_MOVED_FROM)));
@@ -189,7 +189,6 @@ void notifications_dir_test::run ()
 #endif
 
 
-#if defined(__linux__) || defined(HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME)
     cons.output.reset ();
     cons.input.receive ();
 
@@ -197,6 +196,7 @@ void notifications_dir_test::run ()
 
     cons.output.wait ();
     received = cons.output.registered ();
+#if defined(__linux__) || defined(HAVE_NOTE_EXTEND_ON_MOVE_TO)
     should ("receive IN_MOVED_TO event on moving file to directory "
             "from another location within the same mount point",
             contains (received, event ("one", wid, IN_MOVED_TO)));

@@ -275,7 +275,7 @@ AC_COMPILE_IFELSE(
 AC_MSG_RESULT($have_note_read)
 
 
-AC_MSG_CHECKING(for NOTE_EXTEND on renaming of file in subdirectory)
+AC_MSG_CHECKING(for NOTE_EXTEND on moving of a file into the watched subdirectory)
 rm -rf iktestdir
 mkdir iktestdir
 touch iktestfile
@@ -305,12 +305,46 @@ AC_RUN_IFELSE(
     ])
 ],
 [
-    AC_DEFINE([HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME],[1],[Define to 1 if rename set NODE_EXTEND flag])
+    AC_DEFINE([HAVE_NOTE_EXTEND_ON_MOVE_TO],[1],[Define to 1 if move_to sets NODE_EXTEND flag])
+    AC_MSG_RESULT(yes)
+],
+    AC_MSG_RESULT(no)
+)
+
+AC_MSG_CHECKING(for NOTE_EXTEND on moving of a file from the watched subdirectory)
+AC_RUN_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <sys/types.h>
+        @%:@include <sys/event.h>
+        @%:@include <sys/time.h>
+        @%:@include <stdio.h>
+        @%:@include <fcntl.h>
+    ],
+    [
+        int fd, kq;
+        struct kevent ev;
+        static const struct timespec tout = { 1, 0 };
+
+        if ((fd = open("iktestdir", O_RDONLY)) == -1) return 1;
+        if ((kq = kqueue()) == -1) return 1;
+        EV_SET(&ev, fd, EVFILT_VNODE, EV_ADD | EV_ENABLE | EV_ONESHOT,
+            NOTE_WRITE | NOTE_EXTEND, 0, 0);
+        if (kevent(kq, &ev, 1, NULL, 0, &tout) == -1) return 1;
+        if (rename ("iktestdir/iktestfile", "iktestfile") == -1) return 1;
+        if (kevent(kq, NULL, 0, &ev, 1, &tout) != 1) return 1;
+        return (ev.fflags & NOTE_EXTEND) ? 0 : 1;
+    ])
+],
+[
+    AC_DEFINE([HAVE_NOTE_EXTEND_ON_MOVE_FROM],[1],[Define to 1 if move_from sets NODE_EXTEND flag])
     AC_MSG_RESULT(yes)
 ],
     AC_MSG_RESULT(no)
 )
 rm -rf iktestdir
+rm iktestfile
 
 
 # There are three ways we can reread directory opened already. Namely:

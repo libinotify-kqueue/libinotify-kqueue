@@ -78,7 +78,8 @@ inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
     if (!(wf & WF_ISSUBWATCH)) {
         if (S_ISDIR (wf)) {
             result |= NOTE_WRITE;
-#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+#if defined(HAVE_NOTE_EXTEND_ON_MOVE_TO) || \
+    defined(HAVE_NOTE_EXTEND_ON_MOVE_FROM)
             result |= NOTE_EXTEND;
 #endif
         }

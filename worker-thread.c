@@ -159,7 +159,7 @@ handle_added (void *udata, dep_item *di)
     assert (ctx->iw != NULL);
 
     iwatch_add_subwatch (ctx->iw, di);
-#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+#ifdef HAVE_NOTE_EXTEND_ON_MOVE_TO
     if (ctx->fflags & NOTE_EXTEND) {
         enqueue_event (ctx->iw, IN_MOVED_TO, di);
     } else
@@ -184,7 +184,7 @@ handle_removed (void *udata, dep_item *di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
-#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+#ifdef HAVE_NOTE_EXTEND_ON_MOVE_FROM
     if (ctx->fflags & NOTE_EXTEND) {
         enqueue_event (ctx->iw, IN_MOVED_FROM, di);
     } else
