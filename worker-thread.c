@@ -469,7 +469,7 @@ worker_thread (void *arg)
                     }
 #ifdef EVFILT_USER
                 } else if (received[i].filter == EVFILT_USER) {
-                    cmd = (worker_cmd *)received[i].data;
+                    cmd = (worker_cmd *)(intptr_t)received[i].data;
                     process_command (wrk, cmd);
 #else
                 } else if (received[i].filter == EVFILT_READ) {
