@@ -437,7 +437,7 @@ worker_thread (void *arg)
     worker* wrk = (worker *) arg;
     worker_cmd *cmd;
     size_t i, sbspace = 0;
-#define MAXEVENTS 32
+#define MAXEVENTS 1
     struct kevent received[MAXEVENTS];
 
     for (;;) {
