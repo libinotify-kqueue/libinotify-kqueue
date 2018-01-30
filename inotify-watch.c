@@ -73,7 +73,7 @@ iwatch_want_skip_subfiles (int fd)
     ret = fstatvfs (fd, &st);
 #endif
     if (ret == -1) {
-        perror_msg ("fstatfs failed on %d");
+        perror_msg ("fstatfs failed on %d, fd");
         return 0;
     }
 
