@@ -1,13 +1,13 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
-  Copyright (c) 2014-2016 Vladimir Kondratiev <wulf@cicgroup.ru>
-
+  Copyright (c) 2014-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
   Copyright 2008, 2013, 2014
       The Board of Trustees of the Leland Stanford Junior University
   Copyright (c) 2004, 2005, 2006
       by Internet Systems Consortium, Inc. ("ISC")
   Copyright (c) 1991, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
       2002, 2003 by The Internet Software Consortium and Rich Salz
+  SPDX-License-Identifier: MIT AND ISC
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal

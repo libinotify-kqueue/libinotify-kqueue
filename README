@@ -2,7 +2,7 @@ libinotify-kqueue
 =================
 
 Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
-Copyright (c) 2014-2016 Vladimir Kondratiev <wulf@cicgroup.ru>
+Copyright (c) 2014-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
 
 The purpose of this library is to provide inotify API on the
 *BSD family of operating systems. The library uses kqueue(2)
