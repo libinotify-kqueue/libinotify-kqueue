@@ -1,6 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
-  Copyright (c) 2014-2016 Vladimir Kondratiev <wulf@cicgroup.ru>
+  Copyright (c) 2014-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
+  SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -78,7 +79,8 @@ inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
     if (!(wf & WF_ISSUBWATCH)) {
         if (S_ISDIR (wf)) {
             result |= NOTE_WRITE;
-#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+#if defined(HAVE_NOTE_EXTEND_ON_MOVE_TO) || \
+    defined(HAVE_NOTE_EXTEND_ON_MOVE_FROM)
             result |= NOTE_EXTEND;
 #endif
         }

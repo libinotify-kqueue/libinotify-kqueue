@@ -1,6 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
-  Copyright (c) 2014-2016 Vladimir Kondratiev <wulf@cicgroup.ru>
+  Copyright (c) 2014-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
+  SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -96,19 +97,6 @@ typedef struct {
     pthread_cond_destroy(&(sem)->cond); \
     pthread_mutex_destroy(&(sem)->mutex); \
 })
-
-#ifndef SLIST_FOREACH_SAFE
-#define SLIST_FOREACH_SAFE(var, head, field, tvar)			\
-	for ((var) = SLIST_FIRST((head));				\
-	     (var) && ((tvar) = SLIST_NEXT((var), field), 1);		\
-	     (var) = (tvar))
-#endif
-#ifndef SLIST_REMOVE_AFTER
-#define SLIST_REMOVE_AFTER(elm, field) do {				\
-	SLIST_NEXT(elm, field) =					\
-	    SLIST_NEXT(SLIST_NEXT(elm, field), field);			\
-} while (0)
-#endif
 
 #ifndef DTTOIF
 #define DTTOIF(dirtype) ((dirtype) << 12)

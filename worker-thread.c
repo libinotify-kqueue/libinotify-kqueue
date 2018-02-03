@@ -1,6 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
-  Copyright (c) 2014-2016 Vladimir Kondratiev <wulf@cicgroup.ru>
+  Copyright (c) 2014-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
+  SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -142,27 +143,6 @@ typedef struct {
 } handle_context;
 
 /**
- * Copy type of item from old directory listing to a new one.
- * Do not produces any notifications.
- *
- * This function is used as a callback and is invoked from the dep-list
- * routines.
- *
- * @param[in] udata   A pointer to user data (#handle_context).
- * @param[in] from_di The old name & inode number of the file.
- * @param[in] to_di   The new name & inode number of the file.
- **/
-static void
-handle_unchanged (void *udata, dep_item *from_di, dep_item *to_di)
-{
-    assert (udata != NULL);
-
-    if (to_di->type == S_IFUNK) {
-        to_di->type = from_di->type;
-    }
-}
-
-/**
  * Produce an IN_CREATE notification for a new file and start wathing on it.
  *
  * This function is used as a callback and is invoked from the dep-list
@@ -180,7 +160,7 @@ handle_added (void *udata, dep_item *di)
     assert (ctx->iw != NULL);
 
     iwatch_add_subwatch (ctx->iw, di);
-#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+#ifdef HAVE_NOTE_EXTEND_ON_MOVE_TO
     if (ctx->fflags & NOTE_EXTEND) {
         enqueue_event (ctx->iw, IN_MOVED_TO, di);
     } else
@@ -205,7 +185,7 @@ handle_removed (void *udata, dep_item *di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
-#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
+#ifdef HAVE_NOTE_EXTEND_ON_MOVE_FROM
     if (ctx->fflags & NOTE_EXTEND) {
         enqueue_event (ctx->iw, IN_MOVED_FROM, di);
     } else
@@ -237,33 +217,6 @@ handle_replaced (void *udata, dep_item *di)
 }
 
 /**
- * Produce an IN_DELETE/IN_CREATE notifications pair for an overwritten file.
- * Reopen a watch for the overwritten file.
- *
- * This function is used as a callback and is invoked from the dep-list
- * routines.
- *
- * @param[in] udata   A pointer to user data (#handle_context).
- * @param[in] from_di A file name & inode number of the deleted file.
- * @param[in] to_di   A file name & inode number of the appeared file.
- **/
-static void
-handle_overwritten (void *udata, dep_item *from_di, dep_item *to_di)
-{
-    assert (udata != NULL);
-    assert (((handle_context *) udata)->iw != NULL);
-
-#ifdef HAVE_NOTE_EXTEND_ON_SUBFILE_RENAME
-    handle_context *ctx = udata;
-    if (ctx->fflags & NOTE_EXTEND) {
-        handle_replaced (udata, from_di);
-    } else
-#endif
-    handle_removed (udata, from_di);
-    handle_added (udata, to_di);
-}
-
-/**
  * Produce an IN_MOVED_FROM/IN_MOVED_TO notifications pair for a renamed file.
  *
  * This function is used as a callback and is invoked from the dep-list
@@ -281,8 +234,8 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
     handle_context *ctx = (handle_context *) udata;
     assert (ctx->iw != NULL);
 
-    if (to_di->type == S_IFUNK) {
-        to_di->type = from_di->type;
+    if (S_ISUNK (to_di->type)) {
+        di_settype (to_di, from_di->type);
     }
 
     enqueue_event (ctx->iw, IN_MOVED_FROM, from_di);
@@ -291,15 +244,10 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
 
 
 static const traverse_cbs cbs = {
-    handle_unchanged,
     handle_added,
     handle_removed,
     handle_replaced,
-    handle_overwritten,
     handle_moved,
-    NULL, /* many_added */
-    NULL, /* many_removed */
-    NULL, /* names_updated */
 };
 
 /**
@@ -318,7 +266,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     assert (event != NULL);
 
     DIR *dir;
-    dep_list *now = NULL;
+    chg_list *changes = NULL;
 
 #if READDIR_DOES_OPENDIR > 0
     dir = fdreopendir (iw->fd);
@@ -326,7 +274,6 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
         if (errno == ENOENT) {
             /* Why do I skip ENOENT? Because the directory could be deleted
              * at this point */
-            now = dl_create ();
             goto do_diff;
         }
         perror_msg ("Failed to reopen directory for listing");
@@ -337,14 +284,14 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     rewinddir(dir);
 #endif
 
-    now = dl_readdir (dir);
+    changes = dl_readdir (dir, &iw->deps);
 
 #if READDIR_DOES_OPENDIR > 0
     closedir (dir);
 
 do_diff:
 #endif
-    if (now == NULL) {
+    if (changes == NULL) {
         perror_msg ("Failed to create a listing for watch %d", iw->wd);
         return;
     }
@@ -354,12 +301,7 @@ do_diff:
     ctx.iw = iw;
     ctx.fflags = event->fflags;
 
-    if (dl_calculate (iw->deps, now, &cbs, &ctx) == -1) {
-        dl_free (now);
-        perror_msg ("Failed to produce directory diff for watch %d", iw->wd);
-    } else {
-        iw->deps = now;
-   }
+    dl_calculate (&iw->deps, changes, &cbs, &ctx);
 }
 
 /**
@@ -465,15 +407,13 @@ produce_notifications (worker *wrk, struct kevent *event)
         /* Deaggregate inotify events */
         for (i = 0; i < nitems (ie_order); i++) {
             if (i_flags & ie_order[i]) {
-                dep_node *iter = NULL;
+                dep_item *iter = NULL;
                 /* Report deaggregated items */
-                DL_FOREACH (iter, iw->deps) {
-                    dep_item *di = iter->item;
-
-                    if (di->inode == w->inode) {
+                DL_FOREACH (iter, &iw->deps) {
+                    if (iter->inode == w->inode) {
                         enqueue_event (iw,
                                        ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
-                                       di);
+                                       iter);
                     }
                 }
             }
@@ -498,7 +438,7 @@ worker_thread (void *arg)
     worker* wrk = (worker *) arg;
     worker_cmd *cmd;
     size_t i, sbspace = 0;
-#define MAXEVENTS 32
+#define MAXEVENTS 1
     struct kevent received[MAXEVENTS];
 
     for (;;) {
@@ -530,7 +470,7 @@ worker_thread (void *arg)
                     }
 #ifdef EVFILT_USER
                 } else if (received[i].filter == EVFILT_USER) {
-                    cmd = (worker_cmd *)received[i].data;
+                    cmd = (worker_cmd *)(intptr_t)received[i].data;
                     process_command (wrk, cmd);
 #else
                 } else if (received[i].filter == EVFILT_READ) {
