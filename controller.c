@@ -32,6 +32,8 @@
 #include <stdio.h>
 
 #include <sys/types.h>
+#include <sys/param.h>
+#include <sys/mount.h>
 #include <sys/event.h>
 #include <sys/stat.h>
 
@@ -156,7 +158,7 @@ inotify_init1 (int flags) __THROW
  *
  * @param[in] fd   A file descriptor of an inotify instance.
  * @param[in] name A path to a file to watch.
- * @param[in] mask A combination of inotify flags. 
+ * @param[in] mask A combination of inotify flags.
  * @return id of a watch, -1 on failure.
  **/
 int
@@ -165,10 +167,24 @@ inotify_add_watch (int         fd,
                    uint32_t    mask) __THROW
 {
     struct stat st;
+    struct statfs stfs;
     worker_cmd cmd;
 
     if (!is_opened (fd)) {
         return -1;	/* errno = EBADF */
+    }
+
+    if (!getenv("INOTIFY_FORCE_WATCH_SMBFS")) {
+        if (statfs (name, &stfs) == -1) {
+            perror_msg("failed to statfs %s",
+                    errno != EFAULT ? name : "<bad addr>");
+            return -1;
+        }
+
+        if (!strcmp (stfs.f_fstypename, "smbfs")) {
+            perror_msg("refusing to watch smbfs %s", stfs.f_mntonname);
+            return -1;
+        }
     }
 
     /*
@@ -240,11 +256,11 @@ inotify_set_param (int fd, int param, intptr_t value)
 
 /**
  * Erase a worker from a list of workers.
- * 
+ *
  * This function does not lock the global array of workers (I assume that
  * marking its items as volatile should be enough). Also this function is
  * intended to be called from the worker threads only.
- * 
+ *
  * @param[in] wrk A pointer to a worker
  **/
 void
