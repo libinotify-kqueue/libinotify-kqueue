@@ -440,12 +440,20 @@ worker_thread (void *arg)
         int nevents;
 
         if (sbspace > 0 && wrk->eq.mem_events > 0) {
+            ssize_t sent;
             if (sbspace == SBEMPTY) {
                 /* Try to track sockbufsize changes on the fly */
                 sbspace = wrk->sockbufsize;
             }
-            event_queue_flush (&wrk->eq, sbspace);
-            sbspace = 0;
+            sent = event_queue_flush (&wrk->eq, sbspace);
+            if (sent < 0) {
+                if (errno == EPIPE || errno == EBADF || errno == ENOTSOCK) {
+                    goto die;
+                } else {
+                    sent = 0; /* Ignore nonfatal errors */
+                }
+            }
+            sbspace = wrk->eq.mem_events == 0 ? sbspace - sent : 0;
         }
 
         nevents = kevent (wrk->kq, NULL, 0, received, MAXEVENTS, NULL);
@@ -456,12 +464,7 @@ worker_thread (void *arg)
         for (i = 0; i < nevents; i++) {
             if (received[i].ident == wrk->io[KQUEUE_FD]) {
                 if (received[i].flags & EV_EOF) {
-                    worker_erase (wrk);
-                    /* Notify user threads waiting for cmd of grim news */
-                    worker_post (wrk);
-                    worker_free (wrk);
-                    return NULL;
-
+                    goto die;
 #ifdef EVFILT_EMPTY
                 } else if (received[i].filter == EVFILT_EMPTY) {
 #else
@@ -486,5 +489,10 @@ worker_thread (void *arg)
             }
         }
     }
+die:
+    worker_erase (wrk);
+    /* Notify user threads waiting for cmd of grim news */
+    worker_post (wrk);
+    worker_free (wrk);
     return NULL;
 }

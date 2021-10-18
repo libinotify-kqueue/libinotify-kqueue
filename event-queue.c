@@ -205,13 +205,16 @@ event_queue_enqueue (struct event_queue *eq,
  * @param[in] eq      A pointer to #event_queue.
  * @param[in] sbspace Amount of space in socket buffer available to write
  *                    w/o blocking
+ * @return Number of bytes written to socket on success, -1 otherwise.
  **/
-void event_queue_flush (struct event_queue *eq, size_t sbspace)
+ssize_t
+event_queue_flush (struct event_queue *eq, size_t sbspace)
 {
     int iovcnt, iovmax;
     int send_flags = 0;
     int fd = EQ_TO_WRK(eq)->io[KQUEUE_FD];
     size_t iovlen = 0;
+    ssize_t size;
     int i;
 
     iovmax = eq->mem_events;
@@ -227,30 +230,33 @@ void event_queue_flush (struct event_queue *eq, size_t sbspace)
     }
 
     if (iovcnt == 0) {
-        return;
+        return 0;
     }
 
 #if defined (MSG_NOSIGNAL)
     send_flags |= MSG_NOSIGNAL;
 #endif
 
-    if (safe_sendv (fd, eq->iov, iovcnt, send_flags) == -1) {
+    size = safe_sendv (fd, eq->iov, iovcnt, send_flags);
+    if (size > 0) {
+        /* Save last event sent to communication pipe for coalecsing checks */
+        free (eq->last);
+        eq->last = (void *)eq->iov[iovcnt - 1].iov_base;
+
+        for (i = 0; i < iovcnt - 1; i++) {
+            free (eq->iov[i].iov_base);
+        }
+
+        memmove (&eq->iov[0],
+                 &eq->iov[iovcnt],
+                 sizeof(struct iovec) * (eq->mem_events - iovcnt));
+        eq->mem_events -= iovcnt;
+        eq->sb_events += iovcnt;
+    } else {
         perror_msg (("Sending of inotify events to socket failed"));
     }
 
-    /* Save last event sent to communication pipe for coalecsing checks */
-    free (eq->last);
-    eq->last = (void *)eq->iov[iovcnt - 1].iov_base;
-
-    for (i = 0; i < iovcnt - 1; i++) {
-        free (eq->iov[i].iov_base);
-    }
-
-    memmove (&eq->iov[0],
-             &eq->iov[iovcnt],
-             sizeof(struct iovec) * (eq->mem_events - iovcnt));
-    eq->mem_events -= iovcnt;
-    eq->sb_events += iovcnt;
+    return size;
 }
 
 /**

@@ -48,7 +48,7 @@ int  event_queue_enqueue       (struct event_queue *eq,
                                 uint32_t            mask,
                                 uint32_t            cookie,
                                 const char         *name);
-void event_queue_flush         (struct event_queue *eq, size_t sbspace);
-void event_queue_reset_last    (struct event_queue *eq);
+ssize_t event_queue_flush      (struct event_queue *eq, size_t sbspace);
+void    event_queue_reset_last (struct event_queue *eq);
 
 #endif /* __EVENT_QUEUE_H__ */
