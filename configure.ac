@@ -73,30 +73,6 @@ AC_CHECK_HEADERS([sys/event.h],
 AM_CONDITIONAL(BUILD_LIBRARY, [test "$kqueue_support" = "yes"])
 
 
-AC_MSG_CHECKING(for RB_FOREACH_SAFE in sys/tree.h)
-AC_COMPILE_IFELSE(
-[
-    AC_LANG_PROGRAM(
-    [
-        @%:@include <sys/tree.h>
-    ],
-    [
-        @%:@ifndef RB_FOREACH_SAFE
-        @%:@error
-        @%:@endif
-        return 0;
-    ])
-],
-    have_sys_tree_h=yes,
-    have_sys_tree_h=no
-)
-AC_MSG_RESULT($have_sys_tree_h)
-AM_CONDITIONAL(HAVE_SYS_TREE_H, [test "$have_sys_tree_h" = "yes"])
-if test "$have_sys_tree_h" = "yes"; then
-    AC_DEFINE([HAVE_SYS_TREE_H],[1],[Define to 1 if the system has useable sys/tree.h])
-fi
-
-
 AC_MSG_CHECKING(for pthread_barrier)
 AC_COMPILE_IFELSE(
 [

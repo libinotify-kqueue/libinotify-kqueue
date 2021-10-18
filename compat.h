@@ -31,11 +31,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#ifdef HAVE_SYS_TREE_H
-#include <sys/tree.h>  /* RB tree macroses */
-#else
+/* Always use bunled RB tree macroses */
 #include "compat/tree.h"
-#endif
 
 #if defined (HAVE_STATFS)
 #include <sys/mount.h> /* fstatfs */

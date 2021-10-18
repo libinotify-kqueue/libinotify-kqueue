@@ -320,7 +320,7 @@ struct name {								\
 struct {								\
 	struct type *rbe_left;		/* left element */		\
 	struct type *rbe_right;		/* right element */		\
-	struct type *rbe_parent;	/* parent element */		\
+	unsigned long rbe_parent;	/* parent element */		\
 }
 
 #define RB_LEFT(elm, field)		(elm)->field.rbe_left
@@ -334,26 +334,26 @@ struct {								\
  * that the left or right child of the tree node is "red".
  */
 #define RB_UP(elm, field)		(elm)->field.rbe_parent
-#define RB_BITS(elm, field)		(*(__uintptr_t *)&RB_UP(elm, field))
-#define RB_RED_L			((__uintptr_t)1)
-#define RB_RED_R			((__uintptr_t)2)
-#define RB_RED_MASK			((__uintptr_t)3)
+#define RB_BITS(elm, field)		(RB_UP(elm, field))
+#define RB_RED_L			(1UL)
+#define RB_RED_R			(2UL)
+#define RB_RED_MASK			(3UL)
 #define RB_FLIP_LEFT(elm, field)	(RB_BITS(elm, field) ^= RB_RED_L)
 #define RB_FLIP_RIGHT(elm, field)	(RB_BITS(elm, field) ^= RB_RED_R)
 #define RB_RED_LEFT(elm, field)		((RB_BITS(elm, field) & RB_RED_L) != 0)
 #define RB_RED_RIGHT(elm, field)	((RB_BITS(elm, field) & RB_RED_R) != 0)
-#define RB_PARENT(elm, field)		((__typeof(RB_UP(elm, field)))	\
+#define RB_PARENT(elm, field)		((typeof(RB_LEFT(elm, field)))	\
 					 (RB_BITS(elm, field) & ~RB_RED_MASK))
 #define RB_ROOT(head)			(head)->rbh_root
 #define RB_EMPTY(head)			(RB_ROOT(head) == NULL)
 
 #define RB_SET_PARENT(dst, src, field) do {				\
 	RB_BITS(dst, field) &= RB_RED_MASK;				\
-	RB_BITS(dst, field) |= (__uintptr_t)src;			\
+	RB_BITS(dst, field) |= (unsigned long)src;			\
 } while (/*CONSTCOND*/ 0)
 
 #define RB_SET(elm, parent, field) do {					\
-	RB_UP(elm, field) = parent;					\
+	RB_UP(elm, field) = (unsigned long)parent;			\
 	RB_LEFT(elm, field) = RB_RIGHT(elm, field) = NULL;		\
 } while (/*CONSTCOND*/ 0)
 

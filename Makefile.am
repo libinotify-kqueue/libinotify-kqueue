@@ -57,9 +57,7 @@ libinotify_la_SOURCES += compat/ik_atomic.c compat/ik_atomic.h
 endif
 endif
 
-if !HAVE_SYS_TREE_H
 libinotify_la_SOURCES += compat/tree.h
-endif
 
 libinotify_la_CFLAGS = -I. @DEBUG_CFLAGS@ @PTHREAD_CFLAGS@ -Wall -Werror
 libinotify_la_LDFLAGS = @PTHREAD_LIBS@ -export-symbols libinotify.sym
