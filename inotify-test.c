@@ -85,8 +85,7 @@ int main (int argc, char *argv[])
 }
 
 /* ----------------------------------------------------------------- */
-/* Allow for 1024 simultanious events */
-#define BUFF_SIZE ((sizeof(struct inotify_event)+FILENAME_MAX)*1024)
+#define BUFF_SIZE (16*1024)
 
 void get_event (int fd, const char * target)
 {
