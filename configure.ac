@@ -20,6 +20,19 @@ AM_CONDITIONAL(LINUX, [test "$OS" = "Linux"])
 AM_CONDITIONAL(FREEBSD, [test "$OS" = "FreeBSD"])
 
 
+AC_ARG_ENABLE([debug],
+    AS_HELP_STRING([--enable-debug], [enable debug build]),
+    [
+        AC_DEFINE([DEBUG], [1], [debug build])
+        DEBUG_CFLAGS="-DDEBUG"
+    ],
+    [
+        DEBUG_CFLAGS="-DNDEBUG"
+    ]
+)
+AC_SUBST([DEBUG_CFLAGS])
+
+
 AC_ARG_ENABLE([perrors],
     AS_HELP_STRING([--enable-perrors], [enable error messages in the library]),
     AC_DEFINE([ENABLE_PERRORS],[1],[Enable error messages])
