@@ -175,6 +175,11 @@ watch_register_event (watch *w, int kq, uint32_t fflags)
     assert (kq != -1);
 
     struct kevent ev;
+    int result;
+
+    if (fflags == w->fflags) {
+        return 0;
+    }
 
     EV_SET (&ev,
             w->fd,
@@ -184,7 +189,13 @@ watch_register_event (watch *w, int kq, uint32_t fflags)
             0,
             PTR_TO_UDATA (w));
 
-    return kevent (kq, &ev, 1, NULL, 0, NULL);
+    result = kevent (kq, &ev, 1, NULL, 0, NULL);
+
+    if (result != -1) {
+        w->fflags = fflags;
+    }
+
+    return result;
 }
 
 /**
@@ -257,25 +268,14 @@ watch_open (int dirfd, const char *path, uint32_t flags)
 /**
  * Initialize a watch.
  *
- * @param[in] iw;        A backreference to parent #i_watch.
- * @param[in] watch_type The type of the watch.
- * @param[in] fd         A file descriptor of a watched entry.
- * @param[in] st         A stat structure of watch.
+ * @param[in] fd A file descriptor of a watched entry.
+ * @param[in] st A stat structure of watch.
  * @return A pointer to a watch on success, NULL on failure.
  **/
 watch *
-watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
+watch_init (int fd, struct stat *st)
 {
-    assert (iw != NULL);
     assert (fd != -1);
-
-    uint32_t fflags = inotify_to_kqueue (iw->flags,
-                                         st->st_mode & S_IFMT,
-                                         watch_type == WATCH_USER);
-    /* Skip watches with empty kqueue filter flags */
-    if (fflags == 0) {
-        return NULL;
-    }
 
     watch *w = calloc (1, sizeof (struct watch));
     if (w == NULL) {
@@ -284,16 +284,12 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
     }
 
     w->fd = fd;
+    w->fflags = 0;
     w->skip_next = false;
     SLIST_INIT (&w->deps);
     /* Inode number obtained via fstat call cannot be used here as it
      * differs from readdir`s one at mount points. */
     w->inode = st->st_ino;
-
-    if (watch_register_event (w, iw->wrk->kq, fflags) == -1) {
-        free (w);
-        return NULL;
-    }
 
     return w;
 }
@@ -361,6 +357,19 @@ watch_add_dep (watch *w, i_watch *iw, const dep_item *di)
     if (wd != NULL) {
         wd->iw = iw;
         wd->di = di;
+
+        uint32_t fflags = inotify_to_kqueue (iw->flags,
+                                             watch_dep_get_mode (wd),
+                                             watch_dep_is_parent (wd));
+        /* It's too late to skip watches with empty kqueue filter flags here */
+        assert (fflags != 0);
+
+        fflags |= w->fflags;
+        if (watch_register_event (w, iw->wrk->kq, fflags) == -1) {
+            free (wd);
+            return NULL;
+        }
+
         SLIST_INSERT_HEAD (&w->deps, wd, next);
     }
     return (wd);

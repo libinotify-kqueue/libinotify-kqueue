@@ -41,11 +41,6 @@ typedef struct watch watch;
 
 #define WD_FOREACH(wd, w) SLIST_FOREACH ((wd), &(w)->deps, next)
 
-typedef enum watch_type {
-    WATCH_USER,
-    WATCH_DEPENDENCY,
-} watch_type_t;
-
 SLIST_HEAD(watch_dep_list, watch_dep);
 struct watch_dep {
     i_watch *iw;              /* A pointer to parent inotify watch */
@@ -55,6 +50,7 @@ struct watch_dep {
 
 struct watch {
     int fd;                   /* file descriptor of a watched entry */
+    uint32_t fflags;          /* kqueue vnode filter flags currently applied */
     ino_t inode;              /* inode number taken from readdir call */
     bool skip_next;           /* next kevent can be produced by readdir call */
     struct watch_dep_list deps; /* An associated dep_items list */
@@ -68,10 +64,7 @@ uint32_t kqueue_to_inotify (uint32_t flags,
                             bool is_deleted);
 
 int    watch_open (int dirfd, const char *path, uint32_t flags);
-watch *watch_init (i_watch *iw,
-                   watch_type_t watch_type,
-                   int fd,
-                   struct stat *st);
+watch *watch_init (int fd, struct stat *st);
 void   watch_free (watch *w);
 
 struct watch_dep *watch_find_dep (watch *w, i_watch *iw, const dep_item *di);

@@ -143,7 +143,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
 #endif
     }
 
-    watch *parent = watch_init (iw, WATCH_USER, fd, &st);
+    watch *parent = watch_init (fd, &st);
     if (parent == NULL) {
         iwatch_free (iw);
         return NULL;
@@ -259,7 +259,7 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
         }
     }
 
-    w = watch_init (iw, WATCH_DEPENDENCY, fd, &st);
+    w = watch_init (fd, &st);
     if (w == NULL) {
         close (fd);
         return NULL;
