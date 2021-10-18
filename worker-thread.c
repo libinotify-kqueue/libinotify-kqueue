@@ -317,13 +317,15 @@ produce_notifications (worker *wrk, struct kevent *event)
     watch *w = (watch *)event->udata;
     assert (w != NULL);
     assert (w->fd == event->ident);
+    assert (!watch_deps_empty (w));
 
     struct watch_dep *wd, *wd2;
     uint32_t flags = event->fflags;
     bool deleted = false;
+    mode_t mode = watch_get_mode (w);
 
     /* Set deleted flag if no more links exist */
-    if (flags & NOTE_DELETE && is_deleted (w->fd)) {
+    if (flags & NOTE_DELETE && (!S_ISREG (mode) || is_deleted (w->fd))) {
         deleted = true;
     }
 
@@ -347,15 +349,13 @@ produce_notifications (worker *wrk, struct kevent *event)
     /* Deaggregate inotify events  */
     for (i = 0; i < nitems (ie_order); i++) {
 
-        assert (!watch_deps_empty (w));
-
         WD_FOREACH (wd, w) {
 
             i_watch *iw = wd->iw;
             bool is_parent = watch_dep_is_parent (wd);
-            mode_t mode = watch_dep_get_mode (wd);
 
             assert (watch_set_find (&wrk->watches, w->dev, w->inode) == w);
+            assert ((mode & S_IFMT) == (watch_dep_get_mode (wd) & S_IFMT));
 
             uint32_t i_flags = kqueue_to_inotify (flags,
                                                   mode,
