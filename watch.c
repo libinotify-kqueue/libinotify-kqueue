@@ -48,11 +48,11 @@
  * @return Converted kqueue event filter flags.
  **/
 uint32_t
-inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
+inotify_to_kqueue (uint32_t flags, mode_t mode, bool is_parent)
 {
     uint32_t result = 0;
 
-    if (!(S_ISREG (wf) || S_ISDIR (wf) || S_ISLNK (wf))) {
+    if (!(S_ISREG (mode) || S_ISDIR (mode) || S_ISLNK (mode))) {
         return result;
     }
 
@@ -65,26 +65,26 @@ inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
         result |= NOTE_CLOSE;
 #endif
 #ifdef NOTE_CLOSE_WRITE
-    if (flags & IN_CLOSE_WRITE && S_ISREG (wf))
+    if (flags & IN_CLOSE_WRITE && S_ISREG (mode))
         result |= NOTE_CLOSE_WRITE;
 #endif
 #ifdef NOTE_READ
-    if (flags & IN_ACCESS && (S_ISREG (wf) || S_ISDIR (wf)))
+    if (flags & IN_ACCESS && (S_ISREG (mode) || S_ISDIR (mode)))
         result |= NOTE_READ;
 #endif
     if (flags & IN_ATTRIB)
         result |= NOTE_ATTRIB;
-    if (flags & IN_MODIFY && S_ISREG (wf))
+    if (flags & IN_MODIFY && S_ISREG (mode))
         result |= NOTE_WRITE;
-    if (!(wf & WF_ISSUBWATCH)) {
-        if (S_ISDIR (wf)) {
+    if (is_parent) {
+        if (S_ISDIR (mode)) {
             result |= NOTE_WRITE;
 #if defined(HAVE_NOTE_EXTEND_ON_MOVE_TO) || \
     defined(HAVE_NOTE_EXTEND_ON_MOVE_FROM)
             result |= NOTE_EXTEND;
 #endif
         }
-        if (flags & IN_ATTRIB && S_ISREG (wf))
+        if (flags & IN_ATTRIB && S_ISREG (mode))
             result |= NOTE_LINK;
         if (flags & IN_MOVE_SELF)
             result |= NOTE_RENAME;
@@ -101,7 +101,10 @@ inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
  * @return Converted inotify watch mask.
  **/
 uint32_t
-kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
+kqueue_to_inotify (uint32_t flags,
+                   mode_t mode,
+                   bool is_parent,
+                   bool is_deleted)
 {
     uint32_t result = 0;
 
@@ -118,32 +121,31 @@ kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
         result |= IN_CLOSE_WRITE;
 #endif
 #ifdef NOTE_READ
-    if (flags & NOTE_READ && (S_ISREG (wf) || S_ISDIR (wf)))
+    if (flags & NOTE_READ && (S_ISREG (mode) || S_ISDIR (mode)))
         result |= IN_ACCESS;
 #endif
 
     if (flags & NOTE_ATTRIB ||                /* attribute changes */
         (flags & (NOTE_LINK | NOTE_DELETE) && /* link number changes */
-         S_ISREG (wf) && !(wf & WF_ISSUBWATCH)))
+         S_ISREG (mode) && is_parent))
         result |= IN_ATTRIB;
 
-    if (flags & NOTE_WRITE && S_ISREG (wf))
+    if (flags & NOTE_WRITE && S_ISREG (mode))
         result |= IN_MODIFY;
 
     /* Do not issue IN_DELETE_SELF if links still exist */
-    if (flags & NOTE_DELETE && !(wf & WF_ISSUBWATCH) &&
-        (wf & WF_DELETED || !S_ISREG (wf)))
+    if (flags & NOTE_DELETE && is_parent && (is_deleted || !S_ISREG (mode)))
         result |= IN_DELETE_SELF;
 
-    if (flags & NOTE_RENAME && !(wf & WF_ISSUBWATCH))
+    if (flags & NOTE_RENAME && is_parent)
         result |= IN_MOVE_SELF;
 
-    if (flags & NOTE_REVOKE && !(wf & WF_ISSUBWATCH))
+    if (flags & NOTE_REVOKE && is_parent)
         result |= IN_UNMOUNT;
 
     /* IN_ISDIR flag for subwatches is set in the enqueue_event routine */
     if ((result & (IN_ATTRIB | IN_OPEN | IN_ACCESS | IN_CLOSE))
-        && S_ISDIR (wf) && !(wf & WF_ISSUBWATCH)) {
+        && S_ISDIR (mode) && is_parent) {
         result |= IN_ISDIR;
     }
 
@@ -267,10 +269,9 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
     assert (iw != NULL);
     assert (fd != -1);
 
-    watch_flags_t wf = watch_type != WATCH_USER ? WF_ISSUBWATCH : 0;
-    wf |= st->st_mode & S_IFMT;
-
-    uint32_t fflags = inotify_to_kqueue (iw->flags, wf);
+    uint32_t fflags = inotify_to_kqueue (iw->flags,
+                                         st->st_mode & S_IFMT,
+                                         watch_type == WATCH_USER);
     /* Skip watches with empty kqueue filter flags */
     if (fflags == 0) {
         return NULL;
@@ -284,7 +285,7 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
 
     w->iw = iw;
     w->fd = fd;
-    w->flags = wf;
+    w->flags = st->st_mode & S_IFMT;
     SLIST_INIT (&w->deps);
     /* Inode number obtained via fstat call cannot be used here as it
      * differs from readdir`s one at mount points. */

@@ -29,6 +29,7 @@
 #include <errno.h>  /* errno */
 #include <stdlib.h> /* calloc, realloc */
 #include <string.h> /* memset */
+#include <stdbool.h>
 #include <stdio.h>
 
 #include <sys/types.h>
@@ -321,10 +322,12 @@ produce_notifications (worker *wrk, struct kevent *event)
     assert (watch_set_find (&iw->watches, w->inode) == w);
 
     uint32_t flags = event->fflags;
+    bool deleted = false;
+    bool is_parent = false;
 
     /* Set deleted flag if no more links exist */
     if (flags & NOTE_DELETE && (!S_ISREG (w->flags) || is_deleted (w->fd))) {
-        w->flags |= WF_DELETED;
+        deleted = true;
     }
 
 #if (READDIR_DOES_OPENDIR == 2) && \
@@ -345,8 +348,6 @@ produce_notifications (worker *wrk, struct kevent *event)
         w->flags &= ~WF_SKIP_NEXT;
     }
 
-    uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
-
     size_t i;
     /* Deaggregate inotify events  */
     for (i = 0; i < nitems (ie_order); i++) {
@@ -356,7 +357,13 @@ produce_notifications (worker *wrk, struct kevent *event)
         struct watch_dep *wd;
         WD_FOREACH (wd, w) {
 
-            if (watch_dep_is_parent (wd) && ie_order[i] == IN_MODIFY &&
+            is_parent = watch_dep_is_parent (wd);
+
+            uint32_t i_flags = kqueue_to_inotify (flags,
+                                                  w->flags,
+                                                  is_parent,
+                                                  deleted);
+            if (is_parent && ie_order[i] == IN_MODIFY &&
                 flags & NOTE_WRITE && S_ISDIR (w->flags)) {
 #ifdef __OpenBSD__
                 /* OpenBSD notifies user with kevent about file moved in/out
@@ -371,8 +378,8 @@ produce_notifications (worker *wrk, struct kevent *event)
             } else if (i_flags & ie_order[i]) {
 
                 /* Report deaggregated items */
-                assert (watch_dep_is_parent (wd) || (w->inode == wd->di->inode
-                        && wd->di == dl_find (&iw->deps, wd->di->path)));
+                assert (is_parent || (w->inode == wd->di->inode &&
+                        wd->di == dl_find (&iw->deps, wd->di->path)));
                 enqueue_event (iw,
                                ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
                                wd->di);
@@ -380,8 +387,7 @@ produce_notifications (worker *wrk, struct kevent *event)
         }
     }
 
-    if (iw->is_closed || (!(w->flags & WF_ISSUBWATCH) &&
-        (w->flags & WF_DELETED || flags & NOTE_REVOKE))) {
+    if (iw->is_closed || (is_parent && (deleted || flags & NOTE_REVOKE))) {
         worker_remove (wrk, iw->wd);
     }
 }

@@ -225,8 +225,8 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
     }
 
     /* Don`t open a watches with empty kqueue filter flags */
-    watch_flags_t wf = (di->type & S_IFMT) | WF_ISSUBWATCH;
-    if (!S_ISUNK (di->type) && inotify_to_kqueue (iw->flags, wf) == 0) {
+    if (!S_ISUNK (di->type) &&
+        inotify_to_kqueue (iw->flags, di->type, false) == 0) {
         return NULL;
     }
 
@@ -357,7 +357,9 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
     watch *w, *tmpw;
     /* update kwatches or close those we dont need to watch */
     RB_FOREACH_SAFE (w, watch_set, &iw->watches, tmpw) {
-        uint32_t fflags = inotify_to_kqueue (flags, w->flags);
+        uint32_t fflags = inotify_to_kqueue (flags,
+                                             w->flags,
+                                             w->inode == iw->inode);
         if (fflags == 0) {
             watch_set_delete (&iw->watches, w);
         } else {

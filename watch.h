@@ -36,14 +36,11 @@
 #include <sys/stat.h>  /* stat */
 
 typedef struct watch watch;
-/* Inherit watch_flags_t from <sys/stat.h> mode_t type.
- * It is hackish but allow to use existing stat macroses */
-typedef mode_t watch_flags_t;
 
 #include "inotify-watch.h"
 
-#define WF_ISSUBWATCH S_IXOTH /* a type of watch */
-#define WF_DELETED    S_IROTH /* file`s link count == 0 */
+/* Inherit watch_flags_t from <sys/stat.h> mode_t type.
+ * It is hackish but allow to use existing stat macroses */
 #define WF_SKIP_NEXT  S_IWOTH /* Some evens (open/close/read) should be skipped
                                * on the next round as produced by libinotify */
 
@@ -62,15 +59,18 @@ struct watch_dep {
 
 struct watch {
     i_watch *iw;              /* A pointer to parent inotify watch */
-    watch_flags_t flags;      /* A watch flags. Not in inotify/kqueue format */
+    mode_t flags;             /* A watch flags. Not in inotify/kqueue format */
     int fd;                   /* file descriptor of a watched entry */
     ino_t inode;              /* inode number taken from readdir call */
     struct watch_dep_list deps; /* An associated dep_items list */
     RB_ENTRY(watch) link;     /* RB tree links */
 };
 
-uint32_t inotify_to_kqueue (uint32_t flags, watch_flags_t wf);
-uint32_t kqueue_to_inotify (uint32_t flags, watch_flags_t wf);
+uint32_t inotify_to_kqueue (uint32_t flags, mode_t mode, bool is_subwatch);
+uint32_t kqueue_to_inotify (uint32_t flags,
+                            mode_t mode,
+                            bool is_parent,
+                            bool is_deleted);
 
 int    watch_open (int dirfd, const char *path, uint32_t flags);
 watch *watch_init (i_watch *iw,
