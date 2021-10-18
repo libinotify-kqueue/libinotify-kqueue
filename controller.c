@@ -23,6 +23,7 @@
 *******************************************************************************/
 
 #include <sys/types.h>
+#include <sys/queue.h>
 #include <sys/stat.h>
 
 #include <assert.h>
@@ -40,13 +41,9 @@
 
 
 #define WORKER_SZ 100
-static struct worker* workers[WORKER_SZ];
+static struct workers_list workers = SLIST_HEAD_INITIALIZER (&workers);
+static atomic_uint nworkers = ATOMIC_VAR_INIT (0);
 static pthread_rwlock_t workers_rwlock = PTHREAD_RWLOCK_INITIALIZER;
-static bool initialized = false;
-
-/* Arbitrary pointers that can not be returned by malloc () */;
-#define WRK_FREE ((void *)workers)
-#define WRK_RESV NULL
 
 static inline void
 workerset_rlock (void)
@@ -67,7 +64,6 @@ workerset_unlock (void)
 }
 
 static int     worker_exec (int fd, struct worker_cmd *cmd);
-static void    workers_init (void);
 
 /**
  * Create a new inotify instance.
@@ -108,32 +104,15 @@ inotify_init1 (int flags)
         return -1;
     }
 
-    workerset_wlock ();
-
-    if (!initialized) {
-        workers_init();
-    }
-
-    int i;
-    for (i = 0; i < WORKER_SZ; i++) {
-        if (workers[i] == WRK_FREE) {
-            workers[i] = WRK_RESV;
-            break;
-        }
-    }
-
-    workerset_unlock ();
-
-    if (i == WORKER_SZ) {
+    if (atomic_fetch_add (&nworkers, 1) >= WORKER_SZ) {
         errno = EMFILE;
+        atomic_fetch_sub (&nworkers, 1);
         return -1;
     }
 
     struct worker *wrk = worker_create (flags);
-    workerset_wlock ();
     if (wrk == NULL) {
-        workers[i] = WRK_FREE;
-        workerset_unlock ();
+        atomic_fetch_sub (&nworkers, 1);
         return -1;
     }
 
@@ -144,17 +123,17 @@ inotify_init1 (int flags)
      * the worker has not been removed from a list yet. The fd is free, and
      * when we create a new worker, we can * receive the same fd. So check
      * for duplicates and remove them now. */
-    int j;
-    for (j = 0; j < WORKER_SZ; j++) {
-        struct worker *jw = workers[j];
-        if (jw != WRK_FREE && jw != WRK_RESV && jw->io[INOTIFY_FD] == lfd) {
-            workers[j] = WRK_FREE;
+    workerset_wlock ();
+    struct worker *iter;
+    SLIST_FOREACH (iter, &workers, next) {
+        if (iter->io[INOTIFY_FD] == lfd) {
+            iter->io[INOTIFY_FD] = -1;
             perror_msg ("Collision found: fd %d", lfd);
             break;
         }
     }
 
-    workers[i] = wrk;
+    SLIST_INSERT_HEAD (&workers, wrk, next);
     workerset_unlock ();
 
     return lfd;
@@ -267,14 +246,10 @@ worker_erase (struct worker *wrk)
     assert (wrk != NULL);
 
     workerset_wlock ();
-    int i;
-    for (i = 0; i < WORKER_SZ; i++) {
-        if (workers[i] == wrk) {
-            workers[i] = WRK_FREE;
-            break;
-        }
-    }
+    SLIST_REMOVE (&workers, wrk, worker, next);
     wrk->io[INOTIFY_FD] = -1;
+    assert (atomic_load (&nworkers) > 0);
+    atomic_fetch_sub (&nworkers, 1);
     workerset_unlock ();
 }
 
@@ -288,23 +263,17 @@ worker_erase (struct worker *wrk)
 static int
 worker_exec (int fd, struct worker_cmd *cmd)
 {
-    if (!initialized) {
-        errno = EINVAL;
-        return -1;
-    }
-
     workerset_rlock ();
 
     /* look up for an appropriate worker */
-    int i;
-    for (i = 0; i < WORKER_SZ; i++) {
-        struct worker *wrk = workers[i];
-        if (wrk != WRK_FREE && wrk != WRK_RESV && wrk->io[INOTIFY_FD] == fd) {
+    struct worker *wrk;
+    SLIST_FOREACH (wrk, &workers, next) {
+        if (wrk->io[INOTIFY_FD] == fd) {
             worker_ref (wrk);
             workerset_unlock ();
             worker_cmd_lock (wrk);
-            if (wrk != workers[i]) {
-                /* RACE: worker thread overwrote worker pointer in between
+            if (wrk->io[INOTIFY_FD] != fd) {
+                /* RACE: worker thread overwrote inotify descriptor in between
                    obtaining pointer on wrk and locking its mutex. */
                 perror_msg ("race detected. fd: %d", fd);
                 worker_cmd_unlock (wrk);
@@ -332,17 +301,4 @@ worker_exec (int fd, struct worker_cmd *cmd)
     workerset_unlock ();
     errno = EINVAL;
     return -1;
-}
-
-/**
- * Initialize inotify at first first use. Should be run via pthread_once
- **/
-static void
-workers_init (void)
-{
-    int i;
-    for (i = 0; i < WORKER_SZ; i++) {
-        workers[i] = WRK_FREE;
-    }
-    initialized = true;
 }

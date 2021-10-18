@@ -80,6 +80,8 @@ void worker_cmd_add    (struct worker_cmd *cmd,
 void worker_cmd_remove (struct worker_cmd *cmd, int watch_id);
 void worker_cmd_param  (struct worker_cmd *cmd, int param, intptr_t value);
 
+SLIST_HEAD(workers_list, worker);
+
 struct worker {
     int kq;                /* kqueue descriptor */
     int io[2];             /* a socket pair */
@@ -96,6 +98,7 @@ struct worker {
     pthread_cond_t cv;        /* worker <-> user syncronization condvar */
     struct event_queue eq;    /* inotify events queue */
     struct watch_set watches; /* kqueue watches */
+    SLIST_ENTRY(worker) next; /* next worker */
 };
 
 #define container_of(p, s, f) ((s *)(((uint8_t *)(p)) - offsetof(s, f)))
