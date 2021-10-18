@@ -41,6 +41,10 @@ if !HAVE_FDOPENDIR
 libinotify_la_SOURCES += compat/fdopendir.c
 endif
 
+if !HAVE_FDCLOSEDIR
+libinotify_la_SOURCES += compat/fdclosedir.c
+endif
+
 if !HAVE_FSTATAT
 libinotify_la_SOURCES += compat/fstatat.c
 endif

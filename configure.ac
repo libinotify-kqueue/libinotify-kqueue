@@ -163,17 +163,20 @@ AM_CONDITIONAL(HAVE_COMPAT_STDATOMIC_H, [test "$have_compat_stdatomic_h" = "yes"
 
 
 AC_ARG_ENABLE([unsafe_fchdir],
-    AS_HELP_STRING([--enable-unsafe-fchdir], [allow unsafe use of fchdir to track of watched directory path changes on its renaming]))
-AS_IF([test "x$enable_unsafe_fchdir" = "xyes"], [
-    AC_DEFINE([ENABLE_UNSAFE_FCHDIR],[1],[Allow to use of fchdir to track of watched directory path changes])
-])
+    AS_HELP_STRING([--enable-unsafe-fchdir], [allow unsafe use of fchdir to track of watched directory path changes on its renaming]),
+    AS_IF([test "x$enable_unsafe_fchdir" = "xyes"], [
+        AC_DEFINE([ENABLE_UNSAFE_FCHDIR],[1],[Allow to use of fchdir to track of watched directory path changes])
+    ]),
+    enable_unsafe_fchdir=no
+)
 
 atfuncs_support=yes
 AC_CHECK_FUNCS(openat fdopendir fstatat,,atfuncs_support=no)
+AC_CHECK_FUNCS(fdclosedir)
 if test "$atfuncs_support" = "yes"; then
     AC_DEFINE([HAVE_ATFUNCS],[1],[Define to 1 if relative pathname functions detected])
 fi
-if test "$ac_cv_func_fdopendir" = "no"; then
+if test "$ac_cv_func_fdopendir" = "no" -o "$ac_cv_func_fdclosedir" = "no" ; then
     AC_CHECK_MEMBER([DIR.dd_fd],
     [
         AC_DEFINE([DIR_HAVE_DD_FD],[1],[Define to 1 if DIR have dd_fd field])
@@ -186,6 +189,7 @@ fi
 AM_CONDITIONAL(HAVE_ATFUNCS, [test "$atfuncs_support" = "yes"])
 AM_CONDITIONAL(HAVE_OPENAT, [test "$ac_cv_func_openat" = "yes"])
 AM_CONDITIONAL(HAVE_FDOPENDIR, [test "$ac_cv_func_fdopendir" = "yes"])
+AM_CONDITIONAL(HAVE_FDCLOSEDIR, [test "$ac_cv_func_fdclosedir" = "yes"])
 AM_CONDITIONAL(HAVE_FSTATAT, [test "$ac_cv_func_fstatat" = "yes"])
 
 f_getpath_support=no
@@ -198,10 +202,12 @@ if test "$atfuncs_support" = "no"; then
     AC_MSG_RESULT($f_getpath_support)
 fi
 
+atfuncs_are_broken=no
 if test "$atfuncs_support" = "no" -a \
         "$f_getpath_support" = "no" -a \
         "$enable_unsafe_fchdir" = "no"; then
     AC_MSG_WARN([Neither POSIX.1-2008 relative pathname functions nor F_GETPATH fcntl have been found. Watched directory renamings are untracked. You can specify --enable-unsafe-fchdir to avoid this])
+    atfuncs_are_broken=yes
 fi
 
 AC_STRUCT_DIRENT_D_TYPE
@@ -373,7 +379,16 @@ rm iktestfile
 AC_ARG_ENABLE([opendir],
     AS_HELP_STRING([--enable-opendir=no|dup|open], [Do opendir on each directory read @<:@default=dup@:>@]),
     ,
-    [enable_opendir=dup]
+    AS_IF([test "$ac_cv_func_fdopendir" = "yes" -a "$ac_cv_func_fdclosedir" = "yes"],
+          [enable_opendir=no],
+          AS_IF([test "$ac_cv_func_fdopendir" = "no"],
+                AS_IF([test "$atfuncs_are_broken" = "yes"],
+                      [enable_opendir=no],
+                      [enable_opendir=open]
+                ),
+                [enable_opendir=dup]
+          )
+    )
 )
 case $enable_opendir in
 no)
@@ -406,18 +421,18 @@ AC_ARG_ENABLE([skip-subfiles],
 )
 
 
-AS_IF([test "$skip_subfiles" = "yes"],
+AS_IF([test "$skip_subfiles" = "yes" -o "$ac_cv_func_fdopendir" = "no"],
 [
     AC_CHECK_FUNC(statfs,
     [
-        AC_CHECK_MEMBER([struct statfs.f_fstypename],
+        AC_CHECK_MEMBERS([struct statfs.f_fstypename, struct statfs.f_mntonname],
         [
             AC_DEFINE([HAVE_STATFS], [1], [Define to 1 if you have the `statfs' function.])
         ],
         [
             AC_CHECK_FUNC(statvfs,
             [
-                AC_CHECK_MEMBER([struct statvfs.f_fstypename],
+                AC_CHECK_MEMBERS([struct statvfs.f_fstypename, struct statvfs.f_mntonname],
                     AC_DEFINE([HAVE_STATVFS], [1], [Define to 1 if you have the `statvfs' function.]),
                     AC_MSG_ERROR(No means for detecting filesystem type found. Remove --enable-skip-subfiles option!),
                     [@%:@include <sys/statvfs.h>]

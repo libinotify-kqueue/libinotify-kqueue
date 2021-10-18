@@ -93,6 +93,7 @@ void      dl_free         (dep_list *dl);
 void      dl_join         (dep_list *dl_target, chg_list *dl_source);
 dep_item* dl_find         (dep_list *dl, const char *path);
 chg_list* dl_readdir      (DIR *dir, dep_list *before);
+chg_list* dl_listing      (int fd, struct dep_list *before);
 
 void
 dl_calculate (dep_list            *before,

@@ -335,6 +335,45 @@ error:
     return NULL;
 }
 
+/**
+ * Create a directory listing and return it as a list.
+ *
+ * @return A pointer to a list. May return NULL, check errno in this case.
+ **/
+chg_list*
+dl_listing (int fd, dep_list* before)
+{
+    DIR *dir = NULL;
+    chg_list *head;
+
+    assert (fd >= 0);
+
+    dir = fdreopendir (fd);
+    if (dir == NULL) {
+        if (errno == ENOENT) {
+            /* ENOENT is skipped as the directory could be just deleted */
+            head = calloc (1, sizeof (chg_list));
+            if (head != NULL) {
+                SLIST_INIT (&head->head);
+                return (head);
+            }
+            perror_msg ("Failed to allocate list during directory listing");
+        }
+        perror_msg ("Failed to opendir for listing");
+        return NULL;
+    }
+
+    head = dl_readdir (dir, before);
+
+#if READDIR_DOES_OPENDIR > 0
+    closedir (dir);
+#else
+    fdclosedir (dir);
+#endif
+
+    return head;
+}
+
 
 #define cb_invoke(cbs, name, udata, ...) \
     do { \

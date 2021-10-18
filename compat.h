@@ -177,6 +177,9 @@ int openat (int fd, const char *path, int flags, ...);
 #ifndef HAVE_FDOPENDIR
 DIR *fdopendir (int fd);
 #endif
+#ifndef HAVE_FDCLOSEDIR
+int fdclosedir (DIR *dir);
+#endif
 #ifndef HAVE_FSTATAT
 int fstatat (int fd, const char *path, struct stat *buf, int flag);
 #endif

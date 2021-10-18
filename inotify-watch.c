@@ -130,29 +130,13 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
     dl_init (&iw->deps);
 
     if (S_ISDIR (st.st_mode)) {
-#if READDIR_DOES_OPENDIR > 0
-        DIR *dir = fdreopendir (fd);
-#else
-        DIR *dir = fdopendir (fd);
-#endif
-        if (dir == NULL) {
-            perror_msg ("Directory listing of %d failed", fd);
-            iwatch_free (iw);
-            return NULL;
-        }
-        chg_list *deps = dl_readdir (dir, NULL);
+        struct chg_list *deps = dl_listing (fd, NULL);
         if (deps == NULL) {
             perror_msg ("Directory listing of %d failed", fd);
-            closedir (dir);
             iwatch_free (iw);
             return NULL;
         }
         dl_join (&iw->deps, deps);
-#if READDIR_DOES_OPENDIR > 0
-        closedir (dir);
-#else
-        iw->dir = dir;
-#endif
 #ifdef SKIP_SUBFILES
         iw->skip_subfiles = iwatch_want_skip_subfiles (fd);
 #endif
@@ -186,16 +170,6 @@ iwatch_free (i_watch *iw)
 {
     assert (iw != NULL);
 
-#if READDIR_DOES_OPENDIR == 0
-    if (iw->dir != NULL) {
-        closedir (iw->dir);
-        /* parent watch fd is closed on closedir(). Mark it as not opened */
-        watch *w = watch_set_find (&iw->watches, iw->inode);
-        if (w != NULL) {
-            w->fd = -1;
-        }
-    }
-#endif
     watch_set_free (&iw->watches);
     dl_free (&iw->deps);
     free (iw);

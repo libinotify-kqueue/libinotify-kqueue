@@ -265,32 +265,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
     assert (iw != NULL);
     assert (event != NULL);
 
-    DIR *dir;
-    chg_list *changes = NULL;
-
-#if READDIR_DOES_OPENDIR > 0
-    dir = fdreopendir (iw->fd);
-    if (dir == NULL) {
-        if (errno == ENOENT) {
-            /* Why do I skip ENOENT? Because the directory could be deleted
-             * at this point */
-            goto do_diff;
-        }
-        perror_msg ("Failed to reopen directory for listing");
-        return;
-    }
-#else
-    dir = iw->dir;
-    rewinddir(dir);
-#endif
-
-    changes = dl_readdir (dir, &iw->deps);
-
-#if READDIR_DOES_OPENDIR > 0
-    closedir (dir);
-
-do_diff:
-#endif
+    chg_list *changes = dl_listing (iw->fd, &iw->deps);
     if (changes == NULL) {
         perror_msg ("Failed to create a listing for watch %d", iw->wd);
         return;

@@ -413,17 +413,32 @@ fdreopendir (int oldd)
 {
     DIR *dir;
 
+#if (READDIR_DOES_OPENDIR == 2) && ! defined (HAVE_FDOPENDIR)
+    char *dirpath = fd_getpath_cached (oldd);
+    if (dirpath == NULL) {
+        return NULL;
+    }
+    dir = opendir (dirpath);
+#else /* READDIR_DOES_OPENDIR == 2 && ! HAVE_FDOPENDIR */
+    int fd;
 #if (READDIR_DOES_OPENDIR == 2)
     int openflags = O_RDONLY | O_NONBLOCK;
 #ifdef O_CLOEXEC
         openflags |= O_CLOEXEC;
 #endif
-#ifdef O_DIRECTORY
-        openflags |= O_DIRECTORY;
-#endif
-    int fd = openat (oldd, ".", openflags);
+    fd = openat (oldd, ".", openflags);
+#elif (READDIR_DOES_OPENDIR == 1)
+    fd = dup_cloexec (oldd);
+#elif (READDIR_DOES_OPENDIR == 0)
+    fd = oldd;
 #else
-    int fd = dup_cloexec (oldd);
+#error unknown READDIR_DOES_OPENDIR value
+#endif
+    if (fd == -1) {
+        return NULL;
+    }
+
+#if (READDIR_DOES_OPENDIR < 2)
     /*
      * Rewind directory content as fdopendir() does not do it for us.
      * Note: rewinddir() right after fdopendir() is not working here
@@ -431,21 +446,18 @@ fdreopendir (int oldd)
      */
     lseek (fd, 0, SEEK_SET);
 #endif
-    if (fd == -1) {
-        return NULL;
-    }
 
-#if (READDIR_DOES_OPENDIR == 2) && !defined(O_CLOEXEC)
-    if (set_cloexec_flag (fd, 1) == -1) {
-        close (fd);
-        return NULL;
-    }
+#if (READDIR_DOES_OPENDIR == 2) && ! defined(O_CLOEXEC)
+    set_cloexec_flag (fd, 1);
 #endif
 
     dir = fdopendir (fd);
+#if (READDIR_DOES_OPENDIR > 0)
     if (dir == NULL) {
         close (fd);
     }
+#endif
+#endif /* READDIR_DOES_OPENDIR != 2 && HAVE_FDOPENDIR */
 
     return dir;
 }
