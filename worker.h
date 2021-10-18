@@ -45,7 +45,7 @@ typedef enum {
     WCMD_NONE = 0,   /* uninitialized state */
     WCMD_ADD,        /* add or modify a watch */
     WCMD_REMOVE,     /* remove a watch */
-    WCMD_PARAM,      /* set worker thread parameter */
+    WCMD_PARAM       /* set worker thread parameter */
 } worker_cmd_type_t;
 
 /**
