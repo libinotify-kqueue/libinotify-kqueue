@@ -48,6 +48,9 @@
 #include "config.h"
 #include "utils.h"
 
+static const struct timespec zero_ts = { 0, 0 };
+const struct timespec *zero_tsp = &zero_ts;
+
 #ifdef ENABLE_PERRORS
 #include <stdarg.h>
 #include <pthread.h>

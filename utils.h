@@ -36,6 +36,8 @@
 
 #include "config.h"
 
+extern const struct timespec *zero_tsp;
+
 /**
  * Print an error message, if allowed.
  *

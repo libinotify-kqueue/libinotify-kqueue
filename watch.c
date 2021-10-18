@@ -190,7 +190,7 @@ watch_register_event (struct watch *w, int kq, uint32_t fflags)
             0,
             PTR_TO_UDATA (w));
 
-    result = kevent (kq, &ev, 1, NULL, 0, NULL);
+    result = kevent (kq, &ev, 1, NULL, 0, zero_tsp);
 
     if (result != -1) {
         w->fflags = fflags;

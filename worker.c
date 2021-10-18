@@ -173,7 +173,7 @@ worker_notify (struct worker *wrk, struct worker_cmd *cmd)
             NOTE_TRIGGER,
             (intptr_t)cmd,
             0);
-    return kevent (wrk->kq, &ke, 1, NULL, 0, NULL);
+    return kevent (wrk->kq, &ke, 1, NULL, 0, zero_tsp);
 #else
     return safe_write (wrk->io[INOTIFY_FD], &cmd, sizeof (cmd));
 #endif
@@ -321,7 +321,7 @@ worker_create (int flags)
             0,
             0);
 
-    if (kevent (wrk->kq, ev, 2, NULL, 0, NULL) == -1) {
+    if (kevent (wrk->kq, ev, 2, NULL, 0, zero_tsp) == -1) {
         perror_msg (("Failed to register kqueue event on pipe"));
         goto failure;
     }
