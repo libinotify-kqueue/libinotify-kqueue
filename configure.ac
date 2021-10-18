@@ -3,10 +3,11 @@ AM_INIT_AUTOMAKE([foreign subdir-objects])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
+AC_CONFIG_FILES([Makefile libinotify.pc])
+AC_GNU_SOURCE
 AC_PROG_LIBTOOL
 AC_PROG_CC
 AC_PROG_CXX
-AC_CONFIG_FILES([Makefile libinotify.pc])
 AC_C_INLINE
 AC_C_TYPEOF
 AC_C_FLEXIBLE_ARRAY_MEMBER

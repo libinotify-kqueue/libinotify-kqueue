@@ -83,6 +83,7 @@ typedef int _Bool;
 #include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
+#include <stdio.h>
 
 #ifndef DTTOIF
 #define DTTOIF(dirtype) ((dirtype) << 12)
@@ -96,9 +97,14 @@ typedef int _Bool;
 #define nitems(x) (sizeof((x)) / sizeof((x)[0]))
 #endif
 
+/* Under linuxolator we should take IOV_MAX from the host system. */
+#if defined(__linux__) && defined (IOV_MAX)
+#undef IOV_MAX
+#endif
+
 /* FreeBSD 4.x doesn't have IOV_MAX exposed. */
 #ifndef IOV_MAX
-#if defined(__FreeBSD__) || defined(__APPLE__)
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__linux__)
 #define IOV_MAX 1024
 #endif
 #endif
