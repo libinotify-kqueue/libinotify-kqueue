@@ -42,6 +42,7 @@
 #include "sys/inotify.h"
 
 #include "event-queue.h"
+#include "inotify-watch.h"
 #include "utils.h"
 #include "watch.h"
 #include "worker-thread.h"

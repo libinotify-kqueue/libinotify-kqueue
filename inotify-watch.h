@@ -27,10 +27,10 @@
 #include "compat.h"
 
 #include "dep-list.h"
-#include "watch-set.h"
-#include "watch.h"
-#include "worker.h"
 
+struct worker;
+
+SLIST_HEAD(i_watch_list, i_watch);
 struct i_watch {
     int wd;                    /* watch descriptor */
     int fd;                    /* file descriptor of parent kqueue watch */

@@ -29,11 +29,10 @@
 
 #include <pthread.h>
 
-#include "worker-thread.h"
 #include "dep-list.h"
 #include "event-queue.h"
 #include "inotify-watch.h"
-#include "watch.h"
+#include "watch-set.h"
 
 /* Optimized watch destruction on freeing of worker thread */
 #define WORKER_FAST_WATCHSET_DESTROY 1
@@ -84,7 +83,7 @@ struct worker {
     volatile int io[2];    /* a socket pair */
     int sockbufsize;       /* socket buffer size */
     pthread_t thread;      /* worker thread */
-    SLIST_HEAD(, i_watch) head; /* linked list of inotify watches */
+    struct i_watch_list head; /* linked list of inotify watches */
     int wd_last;           /* last allocated inotify watch descriptor */
     bool wd_overflow;      /* if watch descriptor have been overflown */
 

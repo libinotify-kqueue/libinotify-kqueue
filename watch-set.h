@@ -32,7 +32,7 @@
 
 RB_HEAD(watch_set, watch);
 
-#include "watch.h"
+struct watch;
 
 void          watch_set_init   (struct watch_set *ws);
 void          watch_set_free   (struct watch_set *ws);

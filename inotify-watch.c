@@ -40,6 +40,7 @@
 #include "utils.h"
 #include "watch-set.h"
 #include "watch.h"
+#include "worker.h"
 
 #ifdef SKIP_SUBFILES
 static const char *skip_fs_types[] = { SKIP_SUBFILES };
