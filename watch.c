@@ -420,7 +420,11 @@ watch_add_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
             /* Files opened with O_PATH skip access control at open, but kevent
              * rejects unaccessible files with EBADF. Convert it to EACCES */
             if (watch_dep_is_parent (wd) && errno == EBADF)
+#if defined(HAVE_FACCESSAT) && defined(HAVE_AT_EMPTY_PATH)
+                faccessat(w->fd, "", R_OK, AT_EACCESS | AT_EMPTY_PATH);
+#else
                 errno = EACCES;
+#endif
 #endif
             free (wd);
             return NULL;

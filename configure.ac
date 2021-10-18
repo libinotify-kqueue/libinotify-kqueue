@@ -183,7 +183,7 @@ AC_ARG_ENABLE([unsafe_fchdir],
 
 atfuncs_support=yes
 AC_CHECK_FUNCS(openat fdopendir fstatat,,atfuncs_support=no)
-AC_CHECK_FUNCS(fdclosedir)
+AC_CHECK_FUNCS(fdclosedir faccessat)
 if test "$atfuncs_support" = "yes"; then
     AC_DEFINE([HAVE_ATFUNCS],[1],[Define to 1 if relative pathname functions detected])
 fi
@@ -202,6 +202,7 @@ AM_CONDITIONAL(HAVE_OPENAT, [test "$ac_cv_func_openat" = "yes"])
 AM_CONDITIONAL(HAVE_FDOPENDIR, [test "$ac_cv_func_fdopendir" = "yes"])
 AM_CONDITIONAL(HAVE_FDCLOSEDIR, [test "$ac_cv_func_fdclosedir" = "yes"])
 AM_CONDITIONAL(HAVE_FSTATAT, [test "$ac_cv_func_fstatat" = "yes"])
+AM_CONDITIONAL(HAVE_FACCESSAT, [test "$ac_cv_func_faccessat" = "yes"])
 
 f_getpath_support=no
 if test "$atfuncs_support" = "no"; then
@@ -381,6 +382,29 @@ if test "$ac_cv_func_openat" = "yes"; then
     ],
     [
         AC_DEFINE([HAVE_O_EMPTY_PATH],[1],[Define to 1 if openat supports O_EMPTY_PATH flag])
+        AC_MSG_RESULT(yes)
+    ],
+        AC_MSG_RESULT(no)
+    )
+fi
+
+
+dnl Need a run-time check to build under linuxolator
+if test "$ac_cv_func_faccessat" = "yes"; then
+    AC_MSG_CHECKING(for AT_EMPTY_PATH in fcntl.h)
+    AC_RUN_IFELSE(
+    [
+        AC_LANG_PROGRAM(
+        [
+            @%:@include <fcntl.h>
+            @%:@include <unistd.h>
+        ],
+        [
+           return faccessat(open("iktestdir", O_RDONLY), "", R_OK, AT_EACCESS | AT_EMPTY_PATH) < 0;
+        ])
+    ],
+    [
+        AC_DEFINE([HAVE_AT_EMPTY_PATH],[1],[Define to 1 if faccessat supports AT_EMPTY_PATH flag])
         AC_MSG_RESULT(yes)
     ],
         AC_MSG_RESULT(no)
