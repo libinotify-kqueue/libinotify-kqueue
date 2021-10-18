@@ -23,6 +23,8 @@
 
 #include <pthread.h>
 
+#include "config.h"
+
 extern pthread_mutex_t ik_atomic_mutex;
 
 #define	_Atomic(T)		T volatile
