@@ -103,6 +103,7 @@ struct worker* worker_create  (int flags);
 void           worker_free    (struct worker *wrk);
 void           worker_post    (struct worker *wrk);
 void           worker_wait    (struct worker *wrk);
+int            worker_notify  (struct worker *wrk, struct worker_cmd *cmd);
 
 int     worker_add_or_modify  (struct worker *wrk,
                                const char *path,

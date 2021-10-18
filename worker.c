@@ -148,6 +148,33 @@ worker_wait (struct worker *wrk)
 }
 
 /**
+ * Signal worker thread that #worker_cmd should be executed.
+ *
+ * @param[in] wrk A pointer to #worker.
+ * @param[in] cmd A pointer to #worker_cmd passed to #worker.
+ * @return positive number or 0 on success, -1 on error
+ **/
+int
+worker_notify (struct worker *wrk, struct worker_cmd *cmd)
+{
+#ifdef EVFILT_USER
+    struct kevent ke;
+
+    /* Pass cmd in data field as DragonflyBSD does not copy udata */
+    EV_SET (&ke,
+            wrk->io[KQUEUE_FD],
+            EVFILT_USER,
+            0,
+            NOTE_TRIGGER,
+            (intptr_t)cmd,
+            0);
+    return kevent (wrk->kq, &ke, 1, NULL, 0, NULL);
+#else
+    return safe_write (wrk->io[INOTIFY_FD], &cmd, sizeof (cmd));
+#endif
+}
+
+/**
  * Set communication pipe buffer size
  * @param[in] wrk     A pointer to #worker.
  * @param[in] bufsize A buffer size allocated for communication pipe

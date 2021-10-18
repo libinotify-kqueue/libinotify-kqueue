@@ -23,7 +23,6 @@
 *******************************************************************************/
 
 #include <sys/types.h>
-#include <sys/event.h>
 #include <sys/stat.h>
 
 #include <assert.h>
@@ -314,20 +313,8 @@ worker_exec (int fd, struct worker_cmd *cmd)
 
             cmd->retval = -1;
             cmd->error = EBADF;
-#ifdef EVFILT_USER
-            struct kevent ke;
-            /* Pass cmd in data field as DragonflyBSD does not copy udata */
-            EV_SET (&ke,
-                    wrk->io[KQUEUE_FD],
-                    EVFILT_USER,
-                    0,
-                    NOTE_TRIGGER,
-                    (intptr_t)cmd,
-                    0);
-            if (kevent (wrk->kq, &ke, 1, NULL, 0, NULL) != -1) {
-#else
-            if (safe_write (wrk->io[INOTIFY_FD], &cmd, sizeof (cmd)) != -1) {
-#endif
+
+            if (worker_notify (wrk, cmd) >= 0) {
                 worker_wait (wrk);
             }
 
