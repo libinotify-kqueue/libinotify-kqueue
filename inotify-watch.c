@@ -143,7 +143,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
 #endif
     }
 
-    watch *parent = watch_set_find (&iw->watches, iw->inode);
+    watch *parent = watch_set_find (&iw->watches, iw->dev, iw->inode);
     if (parent == NULL) {
         parent = watch_init (fd, &st);
         if (parent == NULL) {
@@ -188,7 +188,7 @@ iwatch_free (i_watch *iw)
     }
 
     /* unwatch parent */
-    watch *w = watch_set_find (&iw->watches, iw->inode);
+    watch *w = watch_set_find (&iw->watches, iw->dev, iw->inode);
     if (w != NULL) {
         assert (!watch_deps_empty (w));
         watch_del_dep (w, iw, DI_PARENT);
@@ -221,7 +221,7 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
     }
 #endif
 
-    watch *w = watch_set_find (&iw->watches, di->inode);
+    watch *w = watch_set_find (&iw->watches, iw->dev, di->inode);
     if (w != NULL) {
         goto hold;
     }
@@ -256,7 +256,7 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
             /* Race detected. Use new inode number and try to find watch again */
             perror_msg ("%s has been replaced after directory listing", di->path);
             di->inode = st.st_ino;
-            w = watch_set_find (&iw->watches, di->inode);
+            w = watch_set_find (&iw->watches, iw->dev, di->inode);
             if (w != NULL) {
                 close (fd);
                 goto hold;
@@ -301,7 +301,7 @@ iwatch_del_subwatch (i_watch *iw, const dep_item *di)
     assert (iw != NULL);
     assert (di != NULL);
 
-    watch *w = watch_set_find (&iw->watches, di->inode);
+    watch *w = watch_set_find (&iw->watches, iw->dev, di->inode);
     if (w != NULL) {
         assert (!watch_deps_empty (w));
         watch_del_dep (w, iw, di);
@@ -325,7 +325,7 @@ iwatch_move_subwatch (i_watch *iw,
     assert (di_to != NULL);
     assert (di_from->inode == di_to->inode);
 
-    watch *w = watch_set_find (&iw->watches, di_to->inode);
+    watch *w = watch_set_find (&iw->watches, iw->dev, di_to->inode);
     if (w != NULL && !watch_deps_empty (w)) {
         watch_chg_dep (w, iw, di_from, di_to);
     }
@@ -353,7 +353,7 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
     iw->flags = flags;
 
     /* update parent kqueue watch */
-    watch *w = watch_set_find (&iw->watches, iw->inode);
+    watch *w = watch_set_find (&iw->watches, iw->dev, iw->inode);
     assert (w != NULL);
     assert (!watch_deps_empty (w));
     watch_update_event (w);
@@ -361,7 +361,7 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
     /* update kqueue subwatches or close those we dont need to watch */
     dep_item *iter;
     DL_FOREACH (iter, &iw->deps) {
-        w = watch_set_find (&iw->watches, iter->inode);
+        w = watch_set_find (&iw->watches, iw->dev, iter->inode);
         if (w == NULL || watch_find_dep (w, iw, iter) == NULL) {
             /* try to watch  unwatched subfiles */
             iwatch_add_subwatch (iw, iter);

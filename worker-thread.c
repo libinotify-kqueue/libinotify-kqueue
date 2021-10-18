@@ -355,7 +355,7 @@ produce_notifications (worker *wrk, struct kevent *event)
             bool is_parent = watch_dep_is_parent (wd);
             mode_t mode = watch_dep_get_mode (wd);
 
-            assert (watch_set_find (&iw->watches, w->inode) == w);
+            assert (watch_set_find (&iw->watches, w->dev, w->inode) == w);
 
             uint32_t i_flags = kqueue_to_inotify (flags,
                                                   mode,

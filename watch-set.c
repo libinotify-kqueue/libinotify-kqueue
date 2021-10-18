@@ -101,11 +101,11 @@ watch_set_insert (watch_set *ws, watch *w)
  * @return A pointer to kqueue watch if found NULL otherwise
  **/
 watch *
-watch_set_find (watch_set *ws, ino_t inode)
+watch_set_find (watch_set *ws, dev_t dev, ino_t inode)
 {
     assert (ws != NULL);
 
-    watch find = { .inode = inode };
+    watch find = { .dev = dev, .inode = inode };
     return RB_FIND (watch_set, ws, &find);
 }
 /**
@@ -120,7 +120,10 @@ watch_set_find (watch_set *ws, ino_t inode)
 static int
 watch_set_cmp (watch *w1, watch *w2)
 {
-    return ((w1->inode > w2->inode) - (w1->inode < w2->inode));
+    if (w1->dev == w2->dev)
+        return ((w1->inode > w2->inode) - (w1->inode < w2->inode));
+    else
+        return ((w1->dev > w2->dev) - (w1->dev < w2->dev));
 }
 
 RB_GENERATE(watch_set, watch, link, watch_set_cmp);

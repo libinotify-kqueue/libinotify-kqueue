@@ -38,7 +38,7 @@ void   watch_set_init   (watch_set *ws);
 void   watch_set_free   (watch_set *ws);
 void   watch_set_delete (watch_set *ws, watch *w);
 void   watch_set_insert (watch_set *ws, watch *w);
-watch *watch_set_find   (watch_set *ws, ino_t inode);
+watch *watch_set_find   (watch_set *ws, dev_t dev, ino_t inode);
 
 RB_PROTOTYPE(watch_set, watch, link, watch_cmp);
 

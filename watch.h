@@ -51,6 +51,7 @@ struct watch_dep {
 struct watch {
     int fd;                   /* file descriptor of a watched entry */
     uint32_t fflags;          /* kqueue vnode filter flags currently applied */
+    dev_t dev;                /* ID of the device containing the watch */
     ino_t inode;              /* inode number taken from readdir call */
     bool skip_next;           /* next kevent can be produced by readdir call */
     struct watch_dep_list deps; /* An associated dep_items list */
