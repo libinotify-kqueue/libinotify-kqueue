@@ -175,7 +175,7 @@ worker_notify (struct worker *wrk, struct worker_cmd *cmd)
             0);
     return kevent (wrk->kq, &ke, 1, NULL, 0, zero_tsp);
 #else
-    return safe_write (wrk->io[INOTIFY_FD], &cmd, sizeof (cmd));
+    return write (wrk->io[INOTIFY_FD], &cmd, sizeof (cmd));
 #endif
 }
 
@@ -250,6 +250,11 @@ pipe_init (int fildes[2], int flags)
                     sizeof(on));
     }
 #endif
+
+    if (set_nonblock_flag (fildes[KQUEUE_FD], 1) == -1) {
+        perror_msg (("Failed to set socket into nonblocking mode"));
+        return -1;
+    }
 
     if (set_cloexec_flag (fildes[KQUEUE_FD], 1) == -1) {
         perror_msg (("Failed to set cloexec flag on socket"));

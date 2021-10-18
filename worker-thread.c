@@ -31,6 +31,7 @@
 #include <stdlib.h> /* calloc, realloc */
 #include <string.h> /* memset */
 #include <stdio.h>
+#include <unistd.h>
 
 #include "sys/inotify.h"
 
@@ -480,8 +481,9 @@ worker_thread (void *arg)
                     process_command (wrk, cmd);
 #else
                 } else if (received[i].filter == EVFILT_READ) {
-                    safe_read (wrk->io[KQUEUE_FD], &cmd, sizeof (cmd));
-                    process_command (wrk, cmd);
+                    if (read (wrk->io[KQUEUE_FD], &cmd, sizeof (cmd)) != -1) {
+                        process_command (wrk, cmd);
+                    }
 #endif
                 }
             } else {

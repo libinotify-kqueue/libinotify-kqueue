@@ -237,7 +237,8 @@ event_queue_flush (struct event_queue *eq, size_t sbspace)
     send_flags |= MSG_NOSIGNAL;
 #endif
 
-    size = safe_sendv (fd, eq->iov, iovcnt, send_flags);
+    size = sendv (fd, eq->iov, iovcnt, send_flags);
+    assert (size == iovlen || size == -1);
     if (size > 0) {
         /* Save last event sent to communication pipe for coalecsing checks */
         free (eq->last);

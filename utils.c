@@ -1,13 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
   Copyright (c) 2014-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
-  Copyright 2008, 2013, 2014
-      The Board of Trustees of the Leland Stanford Junior University
-  Copyright (c) 2004, 2005, 2006
-      by Internet Systems Consortium, Inc. ("ISC")
-  Copyright (c) 1991, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-      2002, 2003 by The Internet Software Consortium and Rich Salz
-  SPDX-License-Identifier: MIT AND ISC
+  SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -110,152 +104,6 @@ create_inotify_event (int         wd,
 }
 
 
-#define SAFE_GENERIC_OP(fcn, fd, data, size)    \
-    size_t total = 0;                           \
-    if (fd == -1) {                             \
-        return -1;                              \
-    }                                           \
-    while (size > 0) {                          \
-        ssize_t retval = fcn (fd, data, size);  \
-        if (retval == -1) {                     \
-            if (errno == EINTR) {               \
-                continue;                       \
-            } else {                            \
-                return -1;                      \
-            }                                   \
-        }                                       \
-        total += retval;                        \
-        size -= retval;                         \
-        data = (char *)data + retval;           \
-    }                                           \
-    return (ssize_t) total;
-
-/**
- * EINTR-ready version of read().
- *
- * @param[in]  fd   A file descriptor to read from.
- * @param[out] data A receiving buffer.
- * @param[in]  size The number of bytes to read.
- * @return Number of bytes which were read on success, -1 on failure.
- **/
-ssize_t
-safe_read (int fd, void *data, size_t size)
-{
-    SAFE_GENERIC_OP (read, fd, data, size);
-}
-
-/**
- * EINTR-ready version of write().
- *
- * @param[in] fd   A file descriptor to write to.
- * @param[in] data A buffer to wtite.
- * @param[in] size The number of bytes to write.
- * @return Number of bytes which were written on success, -1 on failure.
- **/
-ssize_t
-safe_write (int fd, const void *data, size_t size)
-{
-    SAFE_GENERIC_OP (write, fd, data, size);
-}
-
-/**
- * The canonical version of this routine is maintained in the rra-c-util,
- * which can be found at <http://www.eyrie.org/~eagle/software/rra-c-util/>.
- */
-#define SAFE_GENERIC_VOP(fcn, fd, iov, iovcnt, flags)			\
-									\
-    ssize_t total, status = 0;						\
-    size_t left, offset;						\
-    int iovleft, i, count;						\
-    struct iovec *tmpiov;						\
-                                                                        \
-    /*									\
-     * Bounds-check the iovcnt argument.  This is just for our safety.  The	\
-     * system will probably impose a lower limit on iovcnt, causing the later	\
-     * writev to fail with an error we'll return.				\
-     */									\
-    if (iovcnt == 0)							\
-        return 0;							\
-    if (iovcnt < 0 || (size_t) iovcnt > SIZE_MAX / sizeof(struct iovec)) {	\
-        errno = EINVAL;							\
-        return -1;							\
-    }									\
-                                                                        \
-    /* Get a count of the total number of bytes in the iov array. */	\
-    for (total = 0, i = 0; i < iovcnt; i++)				\
-        total += iov[i].iov_len;					\
-    if (total == 0)							\
-        return 0;							\
-                                                                        \
-    /*									\
-     * First, try just writing it all out.  Most of the time this will succeed	\
-     * and save us lots of work.  Abort the write if we try ten times with no	\
-     * forward progress.						\
-     */									\
-    count = 0;								\
-    do {								\
-        if (++count > 10)						\
-            break;							\
-        status = fcn(fd, iov, iovcnt, flags);				\
-        if (status > 0)							\
-            count = 0;							\
-    } while (status < 0 && errno == EINTR);				\
-    if (status < 0)							\
-        return -1;							\
-    if (status == total)						\
-        return total;							\
-                                                                        \
-    /*									\
-     * If we fell through to here, the first write partially succeeded.	\
-     * Figure out how far through the iov array we got, and then duplicate the	\
-     * rest of it so that we can modify it to reflect how much we manage to	\
-     * write on successive tries.					\
-     */									\
-    offset = status;							\
-    left = total - offset;						\
-    for (i = 0; offset >= (size_t) iov[i].iov_len; i++)			\
-        offset -= iov[i].iov_len;					\
-    iovleft = iovcnt - i;						\
-    assert(iovleft > 0);						\
-    tmpiov = calloc(iovleft, sizeof(struct iovec));			\
-    if (tmpiov == NULL)							\
-        return -1;							\
-    memcpy(tmpiov, iov + i, iovleft * sizeof(struct iovec));		\
-                                                                        \
-    /*									\
-     * status now contains the offset into the first iovec struct in tmpiov.	\
-     * Go into the write loop, trying to write out everything remaining at	\
-     * each point.  At the top of the loop, status will contain a count of	\
-     * bytes written out at the beginning of the set of iovec structs.		\
-     */									\
-    i = 0;								\
-    do {								\
-        if (++count > 10)						\
-            break;							\
-                                                                        \
-        /* Skip any leading data that has been written out. */		\
-        for (; offset >= (size_t) tmpiov[i].iov_len && iovleft > 0; i++) {	\
-            offset -= tmpiov[i].iov_len;				\
-            iovleft--;							\
-        }								\
-        tmpiov[i].iov_base = (char *) tmpiov[i].iov_base + offset;	\
-        tmpiov[i].iov_len -= offset;					\
-                                                                        \
-        /* Write out what's left and return success if it's all written. */	\
-        status = fcn(fd, tmpiov + i, iovleft, flags);			\
-        if (status <= 0)						\
-            offset = 0;							\
-        else {								\
-            offset = status;						\
-            left -= offset;						\
-            count = 0;							\
-        }								\
-    } while (left > 0 && (status >= 0 || errno == EINTR));		\
-                                                                        \
-    /* We're either done or got an error; if we're done, left is now 0. */	\
-    free(tmpiov);							\
-    return (left == 0) ? total : -1;
-
 /**
  * scatter-gather version of send with writev()-style parameters.
  *
@@ -275,21 +123,6 @@ sendv (int fd, struct iovec iov[], int iovcnt, int flags)
     msg.msg_iovlen = iovcnt;
 
     return (sendmsg (fd, &msg, flags));
-}
-
-/**
- * EINTR-ready version of sendv().
- *
- * @param[in] fd     A file descriptor to send to.
- * @param[in] iov    An array of iovec buffers to wtite.
- * @param[in] iovcnt A number of iovec buffers to write.
- * @param[in] flags  A send(3) flags.
- * @return Number of bytes which were written on success, -1 on failure.
- **/
-ssize_t
-safe_sendv (int fd, struct iovec iov[], int iovcnt, int flags)
-{
-    SAFE_GENERIC_VOP (sendv, fd, iov, iovcnt, flags);
 }
 
 /**
