@@ -76,6 +76,7 @@ struct watch_dep *watch_chg_dep  (watch *w,
                                   const dep_item *di_to);
 
 int    watch_register_event (watch *w, int kq, uint32_t fflags);
+int    watch_update_event   (watch *w);
 
 /**
  * Checks if #watch is associated with any file dependency or not.

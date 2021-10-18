@@ -351,8 +351,7 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
     watch *w = watch_set_find (&iw->watches, iw->inode);
     assert (w != NULL);
     assert (!watch_deps_empty (w));
-    uint32_t fflags = inotify_to_kqueue (flags, iw->mode, true);
-    watch_register_event (w, iw->wrk->kq, fflags);
+    watch_update_event (w);
 
     /* update kqueue subwatches or close those we dont need to watch */
     dep_item *iter;
@@ -361,13 +360,10 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
         if (w == NULL || watch_find_dep (w, iw, iter) == NULL) {
             /* try to watch  unwatched subfiles */
             iwatch_add_subwatch (iw, iter);
+        } else if (inotify_to_kqueue (flags, iter->type, false) == 0) {
+            watch_del_dep (w, iw, iter);
         } else {
-            fflags = inotify_to_kqueue (flags, iter->type, false);
-            if (fflags == 0) {
-                watch_del_dep (w, iw, iter);
-            } else {
-                watch_register_event (w, iw->wrk->kq, fflags);
-            }
+            watch_update_event (w);
         }
     }
 }

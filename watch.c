@@ -199,6 +199,33 @@ watch_register_event (watch *w, int kq, uint32_t fflags)
 }
 
 /**
+ * Calculates kqueue filter flags for a #watch with traversing depedencies.
+ * and register vnode kqueue watch in kernel kqueue(2) subsystem
+ *
+ * @param[in] w  A pointer to the #watch.
+ * @return 1 on success, -1 on error and 0 if no events have been registered
+ **/
+int
+watch_update_event (watch *w)
+{
+    assert (w != NULL);
+    assert (!watch_deps_empty (w));
+
+    int kq = SLIST_FIRST(&w->deps)->iw->wrk->kq;
+    uint32_t fflags = 0;
+    struct watch_dep *wd;
+
+    WD_FOREACH (wd, w) {
+        fflags |= inotify_to_kqueue (wd->iw->flags,
+                                     watch_dep_get_mode (wd),
+                                     watch_dep_is_parent (wd));
+    }
+    assert (fflags != 0);
+
+    return (watch_register_event (w, kq, fflags));
+}
+
+/**
  * Opens a file descriptor of kqueue watch
  *
  * @param[in] dirfd A filedes of parent directory or AT_FDCWD.
@@ -395,6 +422,8 @@ watch_del_dep (watch *w, i_watch *iw, const dep_item *di)
         free (wd);
         if (watch_deps_empty (w)) {
             watch_set_delete (&iw->watches, w);
+        } else {
+            watch_update_event (w);
         }
     }
     return (wd);
