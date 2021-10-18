@@ -45,7 +45,7 @@ static pthread_rwlock_t workers_rwlock = PTHREAD_RWLOCK_INITIALIZER;
 static bool initialized = false;
 static struct worker dummy_wrk = {
     .io = { -1, -1 },
-    .mutex = PTHREAD_MUTEX_INITIALIZER
+    .cmd_mtx = PTHREAD_MUTEX_INITIALIZER
 };
 
 #define WRK_FREE (&dummy_wrk)
@@ -300,12 +300,14 @@ worker_exec (int fd, struct worker_cmd *cmd)
     for (i = 0; i < WORKER_SZ; i++) {
         struct worker *wrk = workers[i];
         if (wrk != WRK_FREE && wrk != WRK_RESV && wrk->io[INOTIFY_FD] == fd) {
-            worker_lock (wrk);
+            worker_ref (wrk);
+            worker_cmd_lock (wrk);
             if (wrk != workers[i]) {
                 /* RACE: worker thread overwrote worker pointer in between
                    obtaining pointer on wrk and locking its mutex. */
                 perror_msg ("race detected. fd: %d", fd);
-                worker_unlock (wrk);
+                worker_cmd_unlock (wrk);
+                worker_unref (wrk);
                 workerset_unlock ();
                 errno = EBADF;
                 return -1;
@@ -318,7 +320,8 @@ worker_exec (int fd, struct worker_cmd *cmd)
                 worker_wait (wrk);
             }
 
-            worker_unlock (wrk);
+            worker_cmd_unlock (wrk);
+            worker_unref (wrk);
             workerset_unlock ();
             if (cmd->retval == -1) {
                 errno = cmd->error;

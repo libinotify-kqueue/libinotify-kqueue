@@ -89,8 +89,8 @@ struct worker {
     int wd_last;           /* last allocated inotify watch descriptor */
     bool wd_overflow;      /* if watch descriptor have been overflown */
 
-    pthread_mutex_t mutex; /* worker mutex */
-    atomic_uint mutex_rc;  /* worker mutex sleepers/holders refcount */
+    pthread_mutex_t cmd_mtx;  /* worker command execution serializer */
+    atomic_uint mutex_rc;     /* worker mutexes sleepers/holders refcount */
     struct ik_sem sync_sem;   /* worker <-> user syncronization semaphore */
     struct event_queue eq;    /* inotify events queue */
     struct watch_set watches; /* kqueue watches */
@@ -113,17 +113,27 @@ void    worker_remove_iwatch  (struct worker *wrk, struct i_watch *iw);
 int     worker_set_param      (struct worker *wrk, int param, intptr_t value);
 
 static inline void
-worker_lock (struct worker *wrk)
+worker_cmd_lock (struct worker *wrk)
 {
-    atomic_fetch_add (&wrk->mutex_rc, 1);
-    pthread_mutex_lock (&wrk->mutex);
+    pthread_mutex_lock (&wrk->cmd_mtx);
 }
 
 static inline void
-worker_unlock (struct worker *wrk)
+worker_cmd_unlock (struct worker *wrk)
+{
+    pthread_mutex_unlock (&wrk->cmd_mtx);
+}
+
+static inline void
+worker_ref (struct worker *wrk)
+{
+    atomic_fetch_add (&wrk->mutex_rc, 1);
+}
+
+static inline void
+worker_unref (struct worker *wrk)
 {
     assert (atomic_load (&wrk->mutex_rc) > 0);
-    pthread_mutex_unlock (&wrk->mutex);
     atomic_fetch_sub (&wrk->mutex_rc, 1);
 }
 

@@ -318,7 +318,7 @@ worker_create (int flags)
     wrk->wd_last = 0;
     wrk->wd_overflow = false;
 
-    pthread_mutex_init (&wrk->mutex, NULL);
+    pthread_mutex_init (&wrk->cmd_mtx, NULL);
     atomic_init (&wrk->mutex_rc, 0);
     ik_sem_init (&wrk->sync_sem, 0, 0);
     event_queue_init (&wrk->eq);
@@ -383,10 +383,10 @@ worker_free (struct worker *wrk)
 
     /* Wait for user thread(s) to release worker`s mutex */
     while (atomic_load (&wrk->mutex_rc) > 0) {
-        worker_lock (wrk);
-        worker_unlock (wrk);
+        worker_cmd_lock (wrk);
+        worker_cmd_unlock (wrk);
     }
-    pthread_mutex_destroy (&wrk->mutex);
+    pthread_mutex_destroy (&wrk->cmd_mtx);
     /* And only after that destroy worker_cmd sync primitives */
     ik_sem_destroy (&wrk->sync_sem);
     event_queue_free (&wrk->eq);
