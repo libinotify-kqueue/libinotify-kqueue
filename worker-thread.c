@@ -111,18 +111,18 @@ process_command (struct worker *wrk, struct worker_cmd *cmd)
     switch (cmd->type) {
     case WCMD_ADD:
         cmd->retval = worker_add_or_modify (wrk,
-                                            cmd->add.filename,
-                                            cmd->add.mask);
+                                            cmd->cmd.add.filename,
+                                            cmd->cmd.add.mask);
         cmd->error = errno;
         break;
     case WCMD_REMOVE:
-        cmd->retval = worker_remove (wrk, cmd->rm_id);
+        cmd->retval = worker_remove (wrk, cmd->cmd.rm_id);
         cmd->error = errno;
         break;
     case WCMD_PARAM:
         cmd->retval = worker_set_param (wrk,
-                                        cmd->param.param,
-                                        cmd->param.value);
+                                        cmd->cmd.param.param,
+                                        cmd->cmd.param.value);
         cmd->error = errno;
         break;
     default:

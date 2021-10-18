@@ -65,8 +65,8 @@ worker_cmd_add (struct worker_cmd *cmd, const char *filename, uint32_t mask)
     worker_cmd_reset (cmd);
 
     cmd->type = WCMD_ADD;
-    cmd->add.filename = filename;
-    cmd->add.mask = mask;
+    cmd->cmd.add.filename = filename;
+    cmd->cmd.add.mask = mask;
 }
 
 
@@ -83,7 +83,7 @@ worker_cmd_remove (struct worker_cmd *cmd, int watch_id)
     worker_cmd_reset (cmd);
 
     cmd->type = WCMD_REMOVE;
-    cmd->rm_id = watch_id;
+    cmd->cmd.rm_id = watch_id;
 }
 
 /**
@@ -100,8 +100,8 @@ worker_cmd_param (struct worker_cmd *cmd, int param, intptr_t value)
     worker_cmd_reset (cmd);
 
     cmd->type = WCMD_PARAM;
-    cmd->param.param = param;
-    cmd->param.value = value;
+    cmd->cmd.param.param = param;
+    cmd->cmd.param.value = value;
 }
 
 /**
@@ -114,13 +114,7 @@ worker_cmd_reset (struct worker_cmd *cmd)
 {
     assert (cmd != NULL);
 
-    cmd->type = 0;
-    cmd->retval = 0;
-    cmd->add.filename = NULL;
-    cmd->add.mask = 0;
-    cmd->rm_id = 0;
-    cmd->param.param = 0;
-    cmd->param.value = 0;
+    memset (cmd, 0, sizeof (struct worker_cmd));
 }
 
 /**

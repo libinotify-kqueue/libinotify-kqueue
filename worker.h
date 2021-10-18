@@ -69,7 +69,7 @@ struct worker_cmd {
             int param;
             intptr_t value;
         } param;
-    };
+    } cmd;
 
 };
 

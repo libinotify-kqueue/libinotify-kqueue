@@ -43,7 +43,7 @@
 #define S_IFUNK 0000000 /* mode_t extension. File type is unknown */
 #define S_ISUNK(m) (((m) & S_IFMT) == S_IFUNK)
 
-#define CL_FOREACH(di, dl) SLIST_FOREACH ((di), (dl), list_link)
+#define CL_FOREACH(di, dl) SLIST_FOREACH ((di), (dl), u.s.list_link)
 #define DL_FOREACH(di, dl) RB_FOREACH ((di), dep_list, (dl))
 #define DL_FOREACH_SAFE(di, dl, tmp_di) \
     RB_FOREACH_SAFE ((di), dep_list, (dl), (tmp_di))
@@ -55,9 +55,9 @@ struct dep_item {
             SLIST_ENTRY(dep_item) list_link;
             struct dep_item *replacee;
             struct dep_item *moved_from;
-        };
+        } s;
         const char *ext_path;
-    };
+    } u;
     ino_t inode;
     mode_t type;
     char path[FLEXIBLE_ARRAY_MEMBER];
@@ -98,6 +98,6 @@ di_settype (struct dep_item *di, mode_t type)
     di->type = (di->type & ~S_IFMT) | (type & S_IFMT);
 }
 
-RB_PROTOTYPE(dep_list, dep_item, tree_link, dep_item_cmp);
+RB_PROTOTYPE(dep_list, dep_item, u.tree_link, dep_item_cmp);
 
 #endif /* __DEP_LIST_H__ */

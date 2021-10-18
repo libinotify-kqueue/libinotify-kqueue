@@ -163,7 +163,7 @@ dl_join (struct dep_list *dl_target, struct chg_list *dl_source)
 
     while (!SLIST_EMPTY (dl_source)) {
         di = SLIST_FIRST (dl_source);
-        SLIST_REMOVE_HEAD (dl_source, list_link);
+        SLIST_REMOVE_HEAD (dl_source, u.s.list_link);
         dl_insert (dl_target, di);
     }
     free (dl_source);
@@ -200,7 +200,7 @@ dl_find (struct dep_list *dl, const char *path)
 
     struct dep_item find;
     find.type = DI_EXT_PATH;
-    find.ext_path = path;
+    find.u.ext_path = path;
 
     return (RB_FIND (dep_list, dl, &find));
 }
@@ -266,10 +266,10 @@ dl_readdir (DIR *dir, struct dep_list* before)
         /* File was overwritten between scans. Cache reference on old entry. */
         if (before_item != NULL) {
             item->type |= DI_READDED;
-            item->replacee = before_item;
+            item->u.s.replacee = before_item;
         }
 
-        SLIST_INSERT_HEAD (head, item, list_link);
+        SLIST_INSERT_HEAD (head, item, u.s.list_link);
     }
     return head;
 
@@ -279,7 +279,7 @@ error:
     }
     while (!SLIST_EMPTY (head)) {
         item = SLIST_FIRST (head);
-        SLIST_REMOVE_HEAD (head, list_link);
+        SLIST_REMOVE_HEAD (head, u.s.list_link);
         di_free (item);
     }
     free (head);
@@ -373,12 +373,12 @@ dl_calculate (struct dep_list           *before,
                     !(di_to->type & DI_MOVED)) {
                     /* Detect replacements in the watched directory */
                     if (di_to->type & DI_READDED) {
-                        di_to->replacee->type |= DI_REPLACED;
+                        di_to->u.s.replacee->type |= DI_REPLACED;
                     }
 
                     /* Now we can mark item as moved in the watched directory */
                     di_to->type |= DI_MOVED;
-                    di_to->moved_from = di_from;
+                    di_to->u.s.moved_from = di_from;
                     di_from->type |= DI_MOVED;
                     ++n_moves;
                     break;
@@ -426,14 +426,14 @@ dl_calculate (struct dep_list           *before,
             size_t n_moves_prev = n_moves;
             CL_FOREACH (di_to, after) {
                 bool is_overlap = di_to->type & DI_READDED &&
-                                  di_to->replacee->type & DI_MOVED;
-                if (di_to->type & DI_MOVED && di_to->moved_from != NULL &&
+                                  di_to->u.s.replacee->type & DI_MOVED;
+                if (di_to->type & DI_MOVED && di_to->u.s.moved_from != NULL &&
                     (is_overlap == want_overlap)) {
-                    cbs->moved (udata, di_to->moved_from, di_to);
+                    cbs->moved (udata, di_to->u.s.moved_from, di_to);
 
                     /* Mark file as not participating in moves */
-                    di_to->moved_from->type &= ~DI_MOVED;
-                    di_to->moved_from = NULL;
+                    di_to->u.s.moved_from->type &= ~DI_MOVED;
+                    di_to->u.s.moved_from = NULL;
 
                     want_overlap = false;
                     --n_moves;
@@ -481,10 +481,10 @@ dl_calculate (struct dep_list           *before,
 static int
 dep_item_cmp (struct dep_item *di1, struct dep_item *di2)
 {
-    const char *path1 = (di1->type == DI_EXT_PATH) ? di1->ext_path : di1->path;
-    const char *path2 = (di2->type == DI_EXT_PATH) ? di2->ext_path : di2->path;
+    const char *path1 = (di1->type == DI_EXT_PATH) ? di1->u.ext_path : di1->path;
+    const char *path2 = (di2->type == DI_EXT_PATH) ? di2->u.ext_path : di2->path;
 
     return strcmp (path1, path2);
 }
 
-RB_GENERATE(dep_list, dep_item, tree_link, dep_item_cmp);
+RB_GENERATE(dep_list, dep_item, u.tree_link, dep_item_cmp);
