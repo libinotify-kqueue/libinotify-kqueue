@@ -43,12 +43,10 @@
 #define S_IFUNK 0000000 /* mode_t extension. File type is unknown */
 #define S_ISUNK(m) (((m) & S_IFMT) == S_IFUNK)
 
-#define CL_FOREACH(di, dl) \
-    SLIST_FOREACH ((di), &(dl)->head, list_link)
-#define DL_FOREACH(di, dl) \
-    RB_FOREACH ((di), dep_tree, &(dl)->head)
+#define CL_FOREACH(di, dl) SLIST_FOREACH ((di), (dl), list_link)
+#define DL_FOREACH(di, dl) RB_FOREACH ((di), dep_list, (dl))
 #define DL_FOREACH_SAFE(di, dl, tmp_di) \
-    RB_FOREACH_SAFE ((di), dep_tree, &(dl)->head, (tmp_di))
+    RB_FOREACH_SAFE ((di), dep_list, (dl), (tmp_di))
 
 struct dep_item {
     union {
@@ -65,13 +63,8 @@ struct dep_item {
     char path[];
 };
 
-struct dep_list {
-    RB_HEAD(dep_tree, dep_item) head;
-};
-
-struct chg_list {
-    SLIST_HEAD(, dep_item) head;
-};
+RB_HEAD(dep_list, dep_item);
+SLIST_HEAD(chg_list, dep_item);
 
 typedef void (* single_entry_cb) (void *udata, struct dep_item *di);
 typedef void (* dual_entry_cb)   (void *udata,
@@ -105,6 +98,6 @@ di_settype (struct dep_item *di, mode_t type)
     di->type = (di->type & ~S_IFMT) | (type & S_IFMT);
 }
 
-RB_PROTOTYPE(dep_tree, dep_item, tree_link, dep_item_cmp);
+RB_PROTOTYPE(dep_list, dep_item, tree_link, dep_item_cmp);
 
 #endif /* __DEP_LIST_H__ */

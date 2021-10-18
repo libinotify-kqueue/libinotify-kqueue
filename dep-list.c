@@ -50,7 +50,7 @@ void
 dl_init (struct dep_list* dl)
 {
     assert (dl != NULL);
-    RB_INIT (&dl->head);
+    RB_INIT (dl);
 }
 
 /**
@@ -91,9 +91,9 @@ dl_insert (struct dep_list* dl, struct dep_item* di)
 {
     assert (dl != NULL);
     assert (di != NULL);
-    assert (RB_FIND (dep_tree, &dl->head, di) == NULL);
+    assert (RB_FIND (dep_list, dl, di) == NULL);
 
-    RB_INSERT (dep_tree, &dl->head, di);
+    RB_INSERT (dep_list, dl, di);
 }
 
 /**
@@ -107,9 +107,9 @@ dl_remove (struct dep_list* dl, struct dep_item* di)
 {
     assert (dl != NULL);
     assert (di != NULL);
-    assert (RB_FIND (dep_tree, &dl->head, di) != NULL);
+    assert (RB_FIND (dep_list, dl, di) != NULL);
 
-    RB_REMOVE (dep_tree, &dl->head, di);
+    RB_REMOVE (dep_list, dl, di);
     di_free (di);
 }
 
@@ -140,8 +140,8 @@ dl_free (struct dep_list *dl)
 
     struct dep_item *di;
 
-    while (!RB_EMPTY (&dl->head)) {
-        di = RB_MIN (dep_tree, &dl->head);
+    while (!RB_EMPTY (dl)) {
+        di = RB_MIN (dep_list, dl);
         dl_remove (dl, di);
     }
 }
@@ -164,9 +164,9 @@ dl_join (struct dep_list *dl_target, struct chg_list *dl_source)
 
     struct dep_item *di;
 
-    while (!SLIST_EMPTY (&dl_source->head)) {
-        di = SLIST_FIRST (&dl_source->head);
-        SLIST_REMOVE_HEAD (&dl_source->head, list_link);
+    while (!SLIST_EMPTY (dl_source)) {
+        di = SLIST_FIRST (dl_source);
+        SLIST_REMOVE_HEAD (dl_source, list_link);
         dl_insert (dl_target, di);
     }
     free (dl_source);
@@ -205,7 +205,7 @@ dl_find (struct dep_list *dl, const char *path)
     find.type = DI_EXT_PATH;
     find.ext_path = path;
 
-    return (RB_FIND (dep_tree, &dl->head, &find));
+    return (RB_FIND (dep_list, dl, &find));
 }
 
 /**
@@ -231,7 +231,7 @@ dl_readdir (DIR *dir, struct dep_list* before)
         perror_msg ("Failed to allocate list during directory listing");
         return NULL;
     }
-    SLIST_INIT (&head->head);
+    SLIST_INIT (head);
 
     while ((ent = readdir (dir)) != NULL) {
         if (!strcmp (ent->d_name, ".") || !strcmp (ent->d_name, "..")) {
@@ -272,7 +272,7 @@ dl_readdir (DIR *dir, struct dep_list* before)
             item->replacee = before_item;
         }
 
-        SLIST_INSERT_HEAD (&head->head, item, list_link);
+        SLIST_INSERT_HEAD (head, item, list_link);
     }
     return head;
 
@@ -280,9 +280,9 @@ error:
     if (before != NULL) {
         dl_clearflags (before);
     }
-    while (!SLIST_EMPTY (&head->head)) {
-        item = SLIST_FIRST (&head->head);
-        SLIST_REMOVE_HEAD (&head->head, list_link);
+    while (!SLIST_EMPTY (head)) {
+        item = SLIST_FIRST (head);
+        SLIST_REMOVE_HEAD (head, list_link);
         di_free (item);
     }
     free (head);
@@ -308,7 +308,7 @@ dl_listing (int fd, struct dep_list* before)
             /* ENOENT is skipped as the directory could be just deleted */
             head = calloc (1, sizeof (struct chg_list));
             if (head != NULL) {
-                SLIST_INIT (&head->head);
+                SLIST_INIT (head);
                 return (head);
             }
             perror_msg ("Failed to allocate list during directory listing");
@@ -498,4 +498,4 @@ dep_item_cmp (struct dep_item *di1, struct dep_item *di2)
     return strcmp (path1, path2);
 }
 
-RB_GENERATE(dep_tree, dep_item, tree_link, dep_item_cmp);
+RB_GENERATE(dep_list, dep_item, tree_link, dep_item_cmp);
