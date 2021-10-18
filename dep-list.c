@@ -37,6 +37,13 @@
 #include "utils.h"
 
 static inline void di_free (struct dep_item *di);
+static int dep_item_cmp (struct dep_item *di1, struct dep_item *di2);
+
+RB_GENERATE_INSERT_COLOR(dep_list, dep_item, u.tree_link, static)
+RB_GENERATE_REMOVE_COLOR(dep_list, dep_item, u.tree_link, static)
+RB_GENERATE_INSERT(dep_list, dep_item, u.tree_link, dep_item_cmp, static)
+RB_GENERATE_REMOVE(dep_list, dep_item, u.tree_link, static)
+RB_GENERATE_FIND(dep_list, dep_item, u.tree_link, dep_item_cmp, static)
 
 /**
  * Initialize a rb-tree based list.
@@ -489,5 +496,3 @@ dep_item_cmp (struct dep_item *di1, struct dep_item *di2)
 
     return strcmp (path1, path2);
 }
-
-RB_GENERATE(dep_list, dep_item, u.tree_link, dep_item_cmp)

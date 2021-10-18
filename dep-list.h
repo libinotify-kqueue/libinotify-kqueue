@@ -98,6 +98,7 @@ di_settype (struct dep_item *di, mode_t type)
     di->type = (di->type & ~S_IFMT) | (type & S_IFMT);
 }
 
-RB_PROTOTYPE(dep_list, dep_item, u.tree_link, dep_item_cmp)
+RB_GENERATE_NEXT(dep_list, dep_item, u.tree_link, static inline)
+RB_GENERATE_MINMAX(dep_list, dep_item, u.tree_link, static inline)
 
 #endif /* __DEP_LIST_H__ */
