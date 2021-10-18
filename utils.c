@@ -373,6 +373,19 @@ set_nonblock_flag (int fd, int value)
 }
 
 /**
+ * Set size of socket buffer
+ *
+ * @param[in] fd  A file descriptor (send side).
+ * @param[in] len A new size of socket buffer.
+ * @return 0 on success, or -1 on error with errno set.
+ **/
+int
+set_sndbuf_size (int fd, int len)
+{
+    return setsockopt (fd, SOL_SOCKET, SO_SNDBUF, &len, sizeof(len));
+}
+
+/**
  * Perform dup(2) and set the FD_CLOEXEC flag on the new file descriptor
  *
  * @param[in] oldd A file descriptor to duplicate.

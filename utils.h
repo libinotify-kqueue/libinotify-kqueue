@@ -80,6 +80,7 @@ int is_opened (int fd);
 int is_deleted (int fd);
 int set_cloexec_flag (int fd, int value);
 int set_nonblock_flag (int fd, int value);
+int set_sndbuf_size (int fd, int len);
 int dup_cloexec (int oldd);
 DIR *fdreopendir (int oldd);
 

@@ -195,13 +195,28 @@ worker_set_sockbufsize (struct worker *wrk, int bufsize)
         return -1;
     }
 
-    if (setsockopt(wrk->io[KQUEUE_FD],
-                   SOL_SOCKET,
-                   SO_SNDBUF,
-                   &bufsize,
-                   sizeof(bufsize))) {
+    if (set_sndbuf_size (wrk->io[KQUEUE_FD], bufsize)) {
         perror_msg (("Failed to set send buffer size for socket"));
         return -1;
+    }
+    {
+        struct kevent ev;
+        EV_SET (&ev,
+                wrk->io[KQUEUE_FD],
+                EVFILT_WRITE,
+                EV_ADD | EV_ENABLE | EV_CLEAR,
+                NOTE_LOWAT,
+                bufsize,
+                0);
+
+        if (kevent (wrk->kq, &ev, 1, NULL, 0, zero_tsp) == -1) {
+            int save_errno = errno;
+            bufsize = wrk->sockbufsize;
+            set_sndbuf_size (wrk->io[KQUEUE_FD], bufsize);
+            errno = save_errno;
+            perror_msg (("Failed to register kqueue event on socket"));
+            return -1;
+        }
     }
     wrk->sockbufsize = bufsize;
 
@@ -269,7 +284,7 @@ struct worker*
 worker_create (int flags)
 {
     pthread_attr_t attr;
-    struct kevent ev[2];
+    struct kevent ev[1];
     sigset_t set, oset;
     int result;
 
@@ -313,15 +328,7 @@ worker_create (int flags)
             0);
 #endif
 
-    EV_SET (&ev[1],
-            wrk->io[KQUEUE_FD],
-            EVFILT_WRITE,
-            EV_ADD | EV_ENABLE | EV_CLEAR,
-            0,
-            0,
-            0);
-
-    if (kevent (wrk->kq, ev, 2, NULL, 0, zero_tsp) == -1) {
+    if (kevent (wrk->kq, ev, 1, NULL, 0, zero_tsp) == -1) {
         perror_msg (("Failed to register kqueue event on pipe"));
         goto failure;
     }

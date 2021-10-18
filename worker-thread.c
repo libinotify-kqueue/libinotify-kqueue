@@ -428,7 +428,8 @@ worker_thread (void *arg)
 {
     struct worker* wrk = (struct worker *) arg;
     struct worker_cmd *cmd;
-    size_t sbspace = 0;
+#define SBEMPTY SIZE_MAX
+    size_t sbspace = SBEMPTY;
 #define MAXEVENTS 1
     struct kevent received[MAXEVENTS];
 
@@ -439,6 +440,10 @@ worker_thread (void *arg)
         int nevents;
 
         if (sbspace > 0 && wrk->eq.mem_events > 0) {
+            if (sbspace == SBEMPTY) {
+                /* Try to track sockbufsize changes on the fly */
+                sbspace = wrk->sockbufsize;
+            }
             event_queue_flush (&wrk->eq, sbspace);
             sbspace = 0;
         }
@@ -458,11 +463,10 @@ worker_thread (void *arg)
                     return NULL;
 
                 } else if (received[i].filter == EVFILT_WRITE) {
-                    sbspace = received[i].data;
-                    if (sbspace >= wrk->sockbufsize) {
-                        /* Tell event queue about empty communication pipe */
-                        event_queue_reset_last(&wrk->eq);
-                    }
+                    assert (received[i].data >= wrk->sockbufsize);
+                    sbspace = SBEMPTY;
+                    /* Tell event queue about empty communication pipe */
+                    event_queue_reset_last (&wrk->eq);
 #ifdef EVFILT_USER
                 } else if (received[i].filter == EVFILT_USER) {
                     cmd = (struct worker_cmd *)(intptr_t)received[i].data;
