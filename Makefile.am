@@ -81,7 +81,7 @@ MAN_LINKS = \
 	inotify_init1.3 \
 	inotify_add_watch.3 \
 	inotify_rm_watch.3 \
-	inotify_set_param.3 \
+	libinotify_set_param.3 \
 	inotify_event.3
 
 install-data-hook: $(MAN_LINKS)

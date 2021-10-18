@@ -87,7 +87,7 @@ worker_cmd_remove (struct worker_cmd *cmd, int watch_id)
 }
 
 /**
- * Prepare a command with the data of the inotify_set_param() call.
+ * Prepare a command with the data of the libinotify_set_param() call.
  *
  * @param[in] cmd    A pointer to #worker_cmd
  * @param[in] param  Worker-thread parameter name to set.
@@ -575,7 +575,7 @@ worker_remove_iwatch (struct worker *wrk, struct i_watch *iw)
 }
 
 /**
- * Prepare a command with the data of the inotify_set_param() call.
+ * Prepare a command with the data of the libinotify_set_param() call.
  *
  * @param[in] wrk   A pointer to #worker.
  * @param[in] param Worker-thread parameter name to set.

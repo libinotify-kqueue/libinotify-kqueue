@@ -109,7 +109,8 @@ int inotify_add_watch (int fd, const char *name, uint32_t mask) __THROW;
 int inotify_rm_watch (int fd, int wd) __THROW;
 
 /* Libinotify specific. Set inotify instance parameter. */
-int inotify_set_param (int fd, int param, intptr_t value) __THROW;
+int libinotify_set_param (int fd, int param, intptr_t value) __THROW;
+#define inotify_set_param(fd, p, v)	libinotify_set_param(fd, p, v)
 
 __END_DECLS
 

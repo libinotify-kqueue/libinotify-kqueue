@@ -34,7 +34,7 @@
 .Nm inotify_init1 ,
 .Nm inotify_add_watch ,
 .Nm inotify_rm_watch ,
-.Nm inotify_set_param ,
+.Nm libinotify_set_param ,
 .Nm inotify_event ,
 .Nd monitor file system events
 .Sh SYNOPSIS
@@ -48,7 +48,7 @@
 .Ft int
 .Fn inotify_rm_watch "int fd" "int wd"
 .Ft int
-.Fn inotify_set_param "int fd" "int param" "intptr_t value"
+.Fn libinotify_set_param "int fd" "int param" "intptr_t value"
 .Sh DESCRIPTION
 The
 .Fn inotify_init
@@ -117,7 +117,7 @@ Invalid file descriptor fd.
 Invalid watch descriptor wd.
 .El
 .Pp
-.Fn inotify_set_param
+.Fn libinotify_set_param
 Libinotify specific. Replacement for Linux procfs interface.
 Set inotify parameter for the instance described by file descriptor fd.
 fd value of -1 is used for setting of global parameters. Possible param

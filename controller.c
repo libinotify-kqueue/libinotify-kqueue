@@ -223,7 +223,7 @@ inotify_rm_watch (int fd,
  * @return 0 on success, -1 on failure.
  **/
 int
-inotify_set_param (int fd, int param, intptr_t value)
+libinotify_set_param (int fd, int param, intptr_t value)
 {
     struct worker_cmd cmd;
 
