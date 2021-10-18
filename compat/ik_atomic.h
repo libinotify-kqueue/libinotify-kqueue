@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright (c) 2015 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2015-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,6 +21,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <sys/types.h>
+#include <assert.h>
 #include <pthread.h>
 
 #include "config.h"
@@ -31,26 +33,39 @@ extern pthread_mutex_t ik_atomic_mutex;
 typedef	_Atomic(unsigned int)		atomic_uint;
 #define ATOMIC_VAR_INIT(value)          (value)
 #define	atomic_init(object, value)	(*(object) = (value))
-#define atomic_load(object) ({ \
-    typeof (*(object)) ret_; \
-    pthread_mutex_lock (&ik_atomic_mutex); \
-    ret_ = *(object); \
-    pthread_mutex_unlock (&ik_atomic_mutex); \
-    ret_; \
-})
-#define atomic_fetch_add(object, operand) ({ \
-    typeof (*(object)) ret_; \
-    pthread_mutex_lock (&ik_atomic_mutex); \
-    ret_ = *(object); \
-    *(object) += (operand); \
-    pthread_mutex_unlock (&ik_atomic_mutex); \
-    ret_; \
-})
-#define atomic_fetch_sub(object, operand) ({ \
-    typeof (*(object)) ret_; \
-    pthread_mutex_lock (&ik_atomic_mutex); \
-    ret_ = *(object); \
-    *(object) -= (operand); \
-    pthread_mutex_unlock (&ik_atomic_mutex); \
-    ret_; \
-})
+#define atomic_load(object) ((typeof (*(object))) \
+    atomic_fetch_add_impl((object), 0, sizeof (*(object))))
+#define atomic_fetch_add(object, operand) ((typeof (*(object))) \
+    atomic_fetch_add_impl((object), (operand), sizeof (*(object))))
+#define atomic_fetch_sub(object, operand) ((typeof (*(object))) \
+    atomic_fetch_add_impl((object), -(operand), sizeof (*(object))))
+
+static inline uint64_t
+atomic_fetch_add_impl (volatile void *object, uint64_t operand, int bytes)
+{
+    uint64_t ret = 0;
+    pthread_mutex_lock (&ik_atomic_mutex);
+    switch (bytes) {
+    case 8:
+        ret = *((uint64_t *)object);
+        *((uint64_t *)object) += operand;
+        break;
+    case 4:
+        ret = *((uint32_t *)object);
+        *((uint32_t *)object) += operand;
+        break;
+    case 2:
+        ret = *((uint16_t *)object);
+        *((uint16_t *)object) += operand;
+        break;
+    case 1:
+        ret = *((uint8_t *)object);
+        *((uint8_t *)object) += operand;
+        break;
+    default:
+        /* Not implemented */
+        assert (0);
+    }
+    pthread_mutex_unlock (&ik_atomic_mutex);
+    return ret;
+}
