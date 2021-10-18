@@ -180,7 +180,7 @@ typedef enum {
  */
 
 static __inline void
-atomic_thread_fence(memory_order __order __unused)
+atomic_thread_fence(memory_order __order)
 {
 
 #ifdef __CLANG_ATOMICS
@@ -193,7 +193,7 @@ atomic_thread_fence(memory_order __order __unused)
 }
 
 static __inline void
-atomic_signal_fence(memory_order __order __unused)
+atomic_signal_fence(memory_order __order)
 {
 
 #ifdef __CLANG_ATOMICS
