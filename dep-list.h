@@ -85,14 +85,7 @@ struct traverse_cbs {
     dual_entry_cb    moved;
 };
 
-struct dep_item* di_create  (const char *path, ino_t inode, mode_t type);
-void             di_free    (struct dep_item *di);
-struct dep_list* dl_alloc   (void);
 void             dl_init    (struct dep_list *dl);
-struct dep_list* dl_create  (void);
-void             dl_insert  (struct dep_list *dl, struct dep_item *di);
-void             dl_remove  (struct dep_list *dl, struct dep_item *di);
-void             dl_print   (struct dep_list *dl);
 void             dl_free    (struct dep_list *dl);
 void             dl_join    (struct dep_list *dl_target,
                              struct chg_list *dl_source);

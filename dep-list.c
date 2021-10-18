@@ -29,7 +29,6 @@
 #include <stdbool.h> /* bool */
 #include <stddef.h>  /* offsetof */
 #include <stdlib.h>  /* calloc */
-#include <stdio.h>   /* printf */
 #include <dirent.h>  /* opendir, readdir, closedir */
 #include <string.h>  /* strcmp */
 #include <fcntl.h>   /* open */
@@ -40,36 +39,7 @@
 #include "utils.h"
 #include "dep-list.h"
 
-/**
- * Print a list to stdout.
- *
- * @param[in] dl A pointer to a list.
- **/
-void
-dl_print (struct dep_list *dl)
-{
-    struct dep_item *di;
-
-    DL_FOREACH (di, dl) {
-        printf ("%lld:%s ", (long long int) di->inode, di->path);
-    }
-    printf ("\n");
-}
-
-/**
- * Allocate memory for dependency list head.
- *
- * @return A pointer to a new list or NULL in the case of error.
- **/
-struct dep_list*
-dl_alloc (void)
-{
-    struct dep_list *dl = calloc (1, sizeof (struct dep_list));
-    if (dl == NULL) {
-        perror_msg ("Failed to allocate new dep-list");
-    }
-    return dl;
-}
+static inline void di_free (struct dep_item *di);
 
 /**
  * Initialize a rb-tree based list.
@@ -84,22 +54,6 @@ dl_init (struct dep_list* dl)
 }
 
 /**
- * Create a new list and initialize its fields.
- *
- * @return A pointer to a new list or NULL in the case of error.
- **/
-struct dep_list*
-dl_create (void)
-{
-    struct dep_list *dl = dl_alloc ();
-    if (dl == NULL) {
-        return NULL;
-    }
-    dl_init (dl);
-    return dl;
-}
-
-/**
  * Create a new list item.
  *
  * Create a new list item and initialize its fields.
@@ -109,7 +63,7 @@ dl_create (void)
  * @param[in] type  A file`s type (compatible with mode_t values)
  * @return A pointer to a new item or NULL in the case of error.
  **/
-struct dep_item*
+static inline struct dep_item*
 di_create (const char *path, ino_t inode, mode_t type)
 {
     size_t pathlen = strlen (path) + 1;
@@ -132,7 +86,7 @@ di_create (const char *path, ino_t inode, mode_t type)
  * @param[in] dl A pointer to a list.
  * @param[in] di A pointer to a list item to be inserted.
  **/
-void
+static inline void
 dl_insert (struct dep_list* dl, struct dep_item* di)
 {
     assert (dl != NULL);
@@ -148,7 +102,7 @@ dl_insert (struct dep_list* dl, struct dep_item* di)
  * @param[in] dl A pointer to a list.
  * @param[in] di A pointer to a list item to remove.
  **/
-void
+static inline void
 dl_remove (struct dep_list* dl, struct dep_item* di)
 {
     assert (dl != NULL);
@@ -166,7 +120,7 @@ dl_remove (struct dep_list* dl, struct dep_item* di)
  *
  * @param[in] dn A pointer to a list item. May be NULL.
  **/
-void
+static inline void
 di_free (struct dep_item *di)
 {
     free (di);
@@ -223,7 +177,7 @@ dl_join (struct dep_list *dl_target, struct chg_list *dl_source)
  *
  * @param[in] dl A pointer to a list.
  **/
-static void
+static inline void
 dl_clearflags (struct dep_list *dl)
 {
     assert (dl != NULL);
