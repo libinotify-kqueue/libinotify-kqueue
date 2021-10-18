@@ -36,6 +36,7 @@
 #include <assert.h>
 #include <errno.h>  /* EINTR */
 #include <fcntl.h>  /* fcntl */
+#include <stddef.h> /* offsetof */
 #include <stdio.h>
 #include <stdlib.h> /* malloc */
 #include <string.h> /* strlen */
@@ -66,7 +67,7 @@ create_inotify_event (int         wd,
 {
     struct inotify_event *event = NULL;
     size_t name_len = name ? strlen (name) + 1 : 0;
-    *event_len = sizeof (struct inotify_event) + name_len;
+    *event_len = offsetof (struct inotify_event, name) + name_len;
     event = calloc (1, *event_len);
 
     if (event == NULL) {

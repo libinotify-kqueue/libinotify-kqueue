@@ -1,7 +1,13 @@
 #ifndef __BSD_INOTIFY_H__
 #define __BSD_INOTIFY_H__
 
+#if defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
 #include <stdint.h>
+#define LIBINOTIFY_FLEXIBLE_ARRAY_MEMBER /**/
+#else
+#include <inttypes.h>
+#define LIBINOTIFY_FLEXIBLE_ARRAY_MEMBER 0
+#endif
 
 #ifndef __THROW
   #ifdef __cplusplus
@@ -31,13 +37,13 @@
 
 
 /* Structure describing an inotify event. */
-struct inotify_event
+__extension__ struct inotify_event
 {
     int wd;          /* Watch descriptor.  */
     uint32_t mask;   /* Watch mask.  */
     uint32_t cookie; /* Cookie to synchronize two events.  */
     uint32_t len;    /* Length (including NULLs) of name.  */
-    char name[];     /* Name.  */
+    char name[LIBINOTIFY_FLEXIBLE_ARRAY_MEMBER];  /* Name.  */
 };
 
 
