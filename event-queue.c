@@ -49,6 +49,7 @@ void
 event_queue_init (struct event_queue *eq)
 {
     eq->allocated = 0;
+    eq->sb_events = 0;
     eq->count = 0;
     eq->iov = NULL;
     eq->last = NULL;
@@ -249,6 +250,7 @@ void event_queue_flush (struct event_queue *eq, size_t sbspace)
              &eq->iov[iovcnt],
              sizeof(struct iovec) * (eq->count - iovcnt));
     eq->count -= iovcnt;
+    eq->sb_events += iovcnt;
 }
 
 /**
@@ -263,4 +265,5 @@ event_queue_reset_last (struct event_queue *eq)
 
     free (eq->last);
     eq->last = NULL;
+    eq->sb_events = 0;
 }
