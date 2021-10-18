@@ -4,12 +4,19 @@ AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 AC_PROG_LIBTOOL
+AC_PROG_CC
 AC_PROG_CXX
 AC_CONFIG_FILES([Makefile libinotify.pc])
 AC_C_INLINE
 AC_C_TYPEOF
 AC_C_FLEXIBLE_ARRAY_MEMBER
 AC_HEADER_STDBOOL
+
+
+if [test "$ac_cv_prog_cc_c89" = "no"]; then
+    AC_MSG_ERROR(C89 compiler support required)
+fi
+
 
 case "$host_os" in
 *linux*)
