@@ -67,7 +67,7 @@ dirpath_cmp (dirpath_t *dp1, dirpath_t *dp2)
         return ((dp1->dev > dp2->dev) - (dp1->dev < dp2->dev));
 }
 
-RB_GENERATE(dp, dirpath_t, link, dirpath_cmp);
+RB_GENERATE(dp, dirpath_t, link, dirpath_cmp)
 
 /**
  * Returns a pointer to the absolute pathname of the directory by filedes

@@ -129,4 +129,4 @@ watch_set_cmp (struct watch *w1, struct watch *w2)
         return ((w1->dev > w2->dev) - (w1->dev < w2->dev));
 }
 
-RB_GENERATE(watch_set, watch, link, watch_set_cmp);
+RB_GENERATE(watch_set, watch, link, watch_set_cmp)

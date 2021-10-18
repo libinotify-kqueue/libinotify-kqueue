@@ -490,4 +490,4 @@ dep_item_cmp (struct dep_item *di1, struct dep_item *di2)
     return strcmp (path1, path2);
 }
 
-RB_GENERATE(dep_list, dep_item, u.tree_link, dep_item_cmp);
+RB_GENERATE(dep_list, dep_item, u.tree_link, dep_item_cmp)
