@@ -100,9 +100,11 @@ dl_calculate (dep_list            *before,
               const traverse_cbs  *cbs,
               void                *udata);
 
-#define di_settype(di, tp) do { \
-    (di)->type = ((di)->type & ~S_IFMT) | ((tp) & S_IFMT); \
-} while (0)
+static inline void
+di_settype (dep_item *di, mode_t type)
+{
+    di->type = (di->type & ~S_IFMT) | (type & S_IFMT);
+}
 
 RB_PROTOTYPE(dep_tree, dep_item, tree_link, dep_item_cmp);
 

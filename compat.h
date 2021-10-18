@@ -71,32 +71,41 @@ typedef struct {
     pthread_mutex_t mutex;
     pthread_cond_t cond;
 } ik_sem_t;
-#define ik_sem_init(sem, pshared, value) ({ \
-    pthread_mutex_init(&(sem)->mutex, NULL); \
-    pthread_cond_init(&(sem)->cond, NULL); \
-    (sem)->val = value; \
-    0; \
-})
-#define ik_sem_wait(sem) ({ \
-    pthread_mutex_lock(&(sem)->mutex); \
-    while ((sem)->val == 0) { \
-        pthread_cond_wait(&(sem)->cond, &(sem)->mutex); \
-    } \
-    --(sem)->val; \
-    pthread_mutex_unlock(&(sem)->mutex); \
-    0; \
-})
-#define ik_sem_post(sem) ({ \
-    pthread_mutex_lock(&(sem)->mutex); \
-    ++(sem)->val; \
-    pthread_cond_broadcast(&(sem)->cond); \
-    pthread_mutex_unlock(&(sem)->mutex); \
-    0; \
-})
-#define ik_sem_destroy(sem) ({ \
-    pthread_cond_destroy(&(sem)->cond); \
-    pthread_mutex_destroy(&(sem)->mutex); \
-})
+static inline int
+ik_sem_init (ik_sem_t *sem, int pshared, int value)
+{
+    pthread_mutex_init (&sem->mutex, NULL);
+    pthread_cond_init (&sem->cond, NULL);
+    sem->val = value;
+    return 0;
+}
+static inline int
+ik_sem_wait (ik_sem_t *sem)
+{
+    pthread_mutex_lock (&sem->mutex);
+    while (sem->val == 0) {
+        pthread_cond_wait (&sem->cond, &sem->mutex);
+    }
+    --sem->val;
+    pthread_mutex_unlock (&sem->mutex);
+    return 0;
+}
+static inline int
+ik_sem_post (ik_sem_t *sem)
+{
+    pthread_mutex_lock (&sem->mutex);
+    ++sem->val;
+    pthread_cond_broadcast (&sem->cond);
+    pthread_mutex_unlock (&sem->mutex);
+    return 0;
+}
+static inline int
+ik_sem_destroy (ik_sem_t *sem)
+{
+    pthread_cond_destroy (&sem->cond);
+    pthread_mutex_destroy (&sem->mutex);
+    return 0;
+}
 
 #ifndef DTTOIF
 #define DTTOIF(dirtype) ((dirtype) << 12)

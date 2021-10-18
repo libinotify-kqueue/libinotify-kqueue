@@ -53,9 +53,23 @@ static worker dummy_wrk = {
 #define WRK_FREE (&dummy_wrk)
 #define WRK_RESV NULL
 
-#define WORKERSET_RLOCK()  pthread_rwlock_rdlock (&workers_rwlock)
-#define WORKERSET_WLOCK()  pthread_rwlock_wrlock (&workers_rwlock)
-#define WORKERSET_UNLOCK() pthread_rwlock_unlock (&workers_rwlock)
+static inline void
+workerset_rlock (void)
+{
+    pthread_rwlock_rdlock (&workers_rwlock);
+}
+
+static inline void
+workerset_wlock (void)
+{
+    pthread_rwlock_wrlock (&workers_rwlock);
+}
+
+static inline void
+workerset_unlock (void)
+{
+    pthread_rwlock_unlock (&workers_rwlock);
+}
 
 static int     worker_exec (int fd, worker_cmd *cmd);
 static void    workers_init (void);
@@ -99,7 +113,7 @@ inotify_init1 (int flags) __THROW
         return -1;
     }
 
-    WORKERSET_WLOCK ();
+    workerset_wlock ();
 
     if (!initialized) {
         workers_init();
@@ -113,7 +127,7 @@ inotify_init1 (int flags) __THROW
         }
     }
 
-    WORKERSET_UNLOCK ();
+    workerset_unlock ();
 
     if (i == WORKER_SZ) {
         errno = EMFILE;
@@ -276,20 +290,20 @@ worker_exec (int fd, worker_cmd *cmd)
         return -1;
     }
 
-    WORKERSET_RLOCK ();
+    workerset_rlock ();
 
     /* look up for an appropriate worker */
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
         worker *wrk = workers[i];
         if (wrk != WRK_FREE && wrk != WRK_RESV && wrk->io[INOTIFY_FD] == fd) {
-            WORKER_LOCK (wrk);
+            worker_lock (wrk);
             if (wrk != workers[i]) {
                 /* RACE: worker thread overwrote worker pointer in between
                    obtaining pointer on wrk and locking its mutex. */
                 perror_msg ("race detected. fd: %d", fd);
-                WORKER_UNLOCK (wrk);
-                WORKERSET_UNLOCK ();
+                worker_unlock (wrk);
+                workerset_unlock ();
                 errno = EBADF;
                 return -1;
             }
@@ -313,8 +327,8 @@ worker_exec (int fd, worker_cmd *cmd)
                 worker_wait (wrk);
             }
 
-            WORKER_UNLOCK (wrk);
-            WORKERSET_UNLOCK ();
+            worker_unlock (wrk);
+            workerset_unlock ();
             if (cmd->retval == -1) {
                 errno = cmd->error;
             }
@@ -322,7 +336,7 @@ worker_exec (int fd, worker_cmd *cmd)
         }
     }
 
-    WORKERSET_UNLOCK ();
+    workerset_unlock ();
     errno = EINVAL;
     return -1;
 }

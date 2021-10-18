@@ -143,8 +143,7 @@ void
 worker_wait (worker *wrk)
 {
     assert (wrk != NULL);
-    do { /* NOTHING */
-    } while (ik_sem_wait(&wrk->sync_sem) == -1 && errno == EINTR);
+    ik_sem_wait(&wrk->sync_sem);
 }
 
 /**
@@ -352,8 +351,8 @@ worker_free (worker *wrk)
 
     /* Wait for user thread(s) to release worker`s mutex */
     while (atomic_load (&wrk->mutex_rc) > 0) {
-        WORKER_LOCK (wrk);
-        WORKER_UNLOCK (wrk);
+        worker_lock (wrk);
+        worker_unlock (wrk);
     }
     pthread_mutex_destroy (&wrk->mutex);
     /* And only after that destroy worker_cmd sync primitives */

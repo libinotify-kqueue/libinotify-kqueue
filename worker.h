@@ -91,16 +91,6 @@ struct worker {
     event_queue eq;        /* inotify events queue */
 };
 
-#define WORKER_LOCK(wrk) do { \
-    atomic_fetch_add (&(wrk)->mutex_rc, 1); \
-    pthread_mutex_lock (&(wrk)->mutex); \
-} while (0)
-#define WORKER_UNLOCK(wrk) do { \
-    assert (atomic_load (&(wrk)->mutex_rc) > 0); \
-    pthread_mutex_unlock (&(wrk)->mutex); \
-    atomic_fetch_sub (&(wrk)->mutex_rc, 1); \
-} while (0)
-
 #define container_of(p, s, f) ((s *)(((uint8_t *)(p)) - offsetof(s, f)))
 #define EQ_TO_WRK(eqp) container_of((eqp), struct worker, eq)
 
@@ -112,5 +102,20 @@ void    worker_wait           (worker *wrk);
 int     worker_add_or_modify  (worker *wrk, const char *path, uint32_t flags);
 int     worker_remove         (worker *wrk, int id);
 int     worker_set_param      (worker *wrk, int param, intptr_t value);
+
+static inline void
+worker_lock (worker *wrk)
+{
+    atomic_fetch_add (&wrk->mutex_rc, 1);
+    pthread_mutex_lock (&wrk->mutex);
+}
+
+static inline void
+worker_unlock (worker *wrk)
+{
+    assert (atomic_load (&wrk->mutex_rc) > 0);
+    pthread_mutex_unlock (&wrk->mutex);
+    atomic_fetch_sub (&wrk->mutex_rc, 1);
+}
 
 #endif /* __WORKER_H__ */
