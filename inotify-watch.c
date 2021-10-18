@@ -354,32 +354,30 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
 
     iw->flags = flags;
 
-    watch *w, *tmpw;
-    /* update kwatches or close those we dont need to watch */
-    RB_FOREACH_SAFE (w, watch_set, &iw->watches, tmpw) {
-        uint32_t fflags = inotify_to_kqueue (flags,
-                                             w->flags,
-                                             w->inode == iw->inode);
-        if (fflags == 0) {
-            watch_set_delete (&iw->watches, w);
-        } else {
-            watch_register_event (w, fflags);
-        }
-    }
+    /* update parent kqueue watch */
+    watch *w = watch_set_find (&iw->watches, iw->inode);
+    assert (w != NULL);
+    assert (!watch_deps_empty (w));
+    uint32_t fflags = inotify_to_kqueue (flags, w->flags, true);
+    watch_register_event (w, fflags);
 
-    /* Mark unwatched subfiles */
+    /* update kqueue subwatches or close those we dont need to watch */
     dep_item *iter;
     DL_FOREACH (iter, &iw->deps) {
-        if (watch_set_find (&iw->watches, iter->inode) == NULL) {
-            iter->type |= DI_UNCHANGED;
-        }
-    }
-
-    /* And finally try to watch marked items */
-    DL_FOREACH (iter, &iw->deps) {
-        if (iter->type & DI_UNCHANGED) {
+        w = watch_set_find (&iw->watches, iter->inode);
+        if (w == NULL || watch_find_dep (w, iter) == NULL) {
+            /* try to watch  unwatched subfiles */
             iwatch_add_subwatch (iw, iter);
-            iter->type &= ~DI_UNCHANGED;
+        } else {
+            fflags = inotify_to_kqueue (flags, w->flags, false);
+            if (fflags == 0) {
+                watch_del_dep (w, iter);
+                if (watch_deps_empty (w)) {
+                    watch_set_delete (&iw->watches, w);
+                }
+            } else {
+                watch_register_event (w, fflags);
+            }
         }
     }
 }
