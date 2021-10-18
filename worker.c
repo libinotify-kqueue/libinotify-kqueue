@@ -199,6 +199,7 @@ worker_set_sockbufsize (struct worker *wrk, int bufsize)
         perror_msg (("Failed to set send buffer size for socket"));
         return -1;
     }
+#ifndef EVFILT_EMPTY
     {
         struct kevent ev;
         EV_SET (&ev,
@@ -218,6 +219,7 @@ worker_set_sockbufsize (struct worker *wrk, int bufsize)
             return -1;
         }
     }
+#endif
     wrk->sockbufsize = bufsize;
 
     return 0;
@@ -284,9 +286,9 @@ struct worker*
 worker_create (int flags)
 {
     pthread_attr_t attr;
-    struct kevent ev[1];
+    struct kevent ev[3];
     sigset_t set, oset;
-    int result;
+    int result, nevents = 1;
 
     struct worker* wrk = calloc (1, sizeof (struct worker));
 
@@ -327,8 +329,27 @@ worker_create (int flags)
             1,
             0);
 #endif
+#ifdef EVFILT_EMPTY
+    /*
+     * Modern FreeBSDs always report full sendbuffer size in data field of
+     * EVFILT_WRITE kevent so we can not determine amount of data remaining in
+     * it reliably. As we want to know exact amount of bytes to avoid partial
+     * inotify event reads as much as possible, start using of EVFILT_EMPTY
+     * to check available send buffer space. Note that we still use
+     * EVFILT_WRITE with NOTE_LOWAT set too high to check EOF conditions.
+     */
+    EV_SET (&ev[1],
+            wrk->io[KQUEUE_FD],
+            EVFILT_WRITE,
+            EV_ADD | EV_ENABLE | EV_CLEAR,
+            NOTE_LOWAT,
+            INT_MAX,
+            0);
+    EV_SET (&ev[2], wrk->io[KQUEUE_FD], EVFILT_EMPTY, EV_ADD | EV_CLEAR, 0, 0, 0);
+    nevents = 3;
+#endif
 
-    if (kevent (wrk->kq, ev, 1, NULL, 0, zero_tsp) == -1) {
+    if (kevent (wrk->kq, ev, nevents, NULL, 0, zero_tsp) == -1) {
         perror_msg (("Failed to register kqueue event on pipe"));
         goto failure;
     }

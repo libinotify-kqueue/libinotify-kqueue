@@ -462,8 +462,12 @@ worker_thread (void *arg)
                     worker_free (wrk);
                     return NULL;
 
+#ifdef EVFILT_EMPTY
+                } else if (received[i].filter == EVFILT_EMPTY) {
+#else
                 } else if (received[i].filter == EVFILT_WRITE) {
                     assert (received[i].data >= wrk->sockbufsize);
+#endif
                     sbspace = SBEMPTY;
                     /* Tell event queue about empty communication pipe */
                     event_queue_reset_last (&wrk->eq);
