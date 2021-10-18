@@ -91,7 +91,9 @@ struct worker {
 
     pthread_mutex_t cmd_mtx;  /* worker command execution serializer */
     atomic_uint mutex_rc;     /* worker mutexes sleepers/holders refcount */
-    struct ik_sem sync_sem;   /* worker <-> user syncronization semaphore */
+    int sema;                 /* worker <-> user syncronization semaphore */
+    pthread_mutex_t mutex;    /* worker data access serializer */
+    pthread_cond_t cv;        /* worker <-> user syncronization condvar */
     struct event_queue eq;    /* inotify events queue */
     struct watch_set watches; /* kqueue watches */
 };
@@ -122,6 +124,18 @@ static inline void
 worker_cmd_unlock (struct worker *wrk)
 {
     pthread_mutex_unlock (&wrk->cmd_mtx);
+}
+
+static inline void
+worker_lock (struct worker *wrk)
+{
+    pthread_mutex_lock (&wrk->mutex);
+}
+
+static inline void
+worker_unlock (struct worker *wrk)
+{
+    pthread_mutex_unlock (&wrk->mutex);
 }
 
 static inline void

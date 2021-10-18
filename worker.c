@@ -132,7 +132,12 @@ void
 worker_post (struct worker *wrk)
 {
     assert (wrk != NULL);
-    ik_sem_post(&wrk->sync_sem);
+
+    worker_lock (wrk);
+    ++wrk->sema;
+    pthread_cond_broadcast (&wrk->cv);
+    worker_unlock (wrk);
+
 }
 
 /**
@@ -144,7 +149,13 @@ void
 worker_wait (struct worker *wrk)
 {
     assert (wrk != NULL);
-    ik_sem_wait(&wrk->sync_sem);
+
+    worker_lock (wrk);
+    while (wrk->sema == 0) {
+        pthread_cond_wait (&wrk->cv, &wrk->mutex);
+    }
+    --wrk->sema;
+    worker_unlock (wrk);
 }
 
 /**
@@ -320,7 +331,9 @@ worker_create (int flags)
 
     pthread_mutex_init (&wrk->cmd_mtx, NULL);
     atomic_init (&wrk->mutex_rc, 0);
-    ik_sem_init (&wrk->sync_sem, 0, 0);
+    pthread_mutex_init (&wrk->mutex, NULL);
+    pthread_cond_init (&wrk->cv, NULL);
+    wrk->sema = 0;
     event_queue_init (&wrk->eq);
     watch_set_init (&wrk->watches);
 
@@ -388,7 +401,8 @@ worker_free (struct worker *wrk)
     }
     pthread_mutex_destroy (&wrk->cmd_mtx);
     /* And only after that destroy worker_cmd sync primitives */
-    ik_sem_destroy (&wrk->sync_sem);
+    pthread_cond_destroy (&wrk->cv);
+    pthread_mutex_destroy (&wrk->mutex);
     event_queue_free (&wrk->eq);
     free (wrk);
 }
