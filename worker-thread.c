@@ -74,7 +74,7 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
     }
 
     if (iw->flags & IN_ONESHOT) {
-        iw->is_closed = 1;
+        iw->is_closed = true;
     }
 
     const char *name = NULL;

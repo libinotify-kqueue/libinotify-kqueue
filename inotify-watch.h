@@ -37,9 +37,9 @@ struct i_watch {
     int wd;                    /* watch descriptor */
     int fd;                    /* file descriptor of parent kqueue watch */
     worker *wrk;               /* pointer to a parent worker structure */
-    int is_closed;             /* inotify watch is stopped but not freed yet */
+    bool is_closed;            /* inotify watch is stopped but not freed yet */
 #ifdef SKIP_SUBFILES
-    int skip_subfiles;         /* Fs is not safe to start subwatches */
+    bool skip_subfiles;        /* Fs is not safe to start subwatches */
 #endif
     uint32_t flags;            /* flags in the inotify format */
     mode_t mode;               /* File status of the watched inode */

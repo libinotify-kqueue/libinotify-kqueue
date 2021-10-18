@@ -289,7 +289,7 @@ worker_create (int flags)
     }
 
     wrk->wd_last = 0;
-    wrk->wd_overflow = 0;
+    wrk->wd_overflow = false;
 
     pthread_mutex_init (&wrk->mutex, NULL);
     atomic_init (&wrk->mutex_rc, 0);
@@ -416,18 +416,18 @@ worker_add_or_modify (worker     *wrk,
     }
 
     /* Allocate watch descriptor */
-    int allocated;
+    bool allocated;
     do {
         if (wrk->wd_last == INT_MAX) {
             wrk->wd_last = 0;
-            wrk->wd_overflow = 1;
+            wrk->wd_overflow = true;
         }
-        allocated = 1;
+        allocated = true;
         ++wrk->wd_last;
         if (wrk->wd_overflow) {
             SLIST_FOREACH (iw, &wrk->head, next) {
                 if (iw->wd == wrk->wd_last) {
-                    allocated = 0;
+                    allocated = false;
                     break;
                 }
             }

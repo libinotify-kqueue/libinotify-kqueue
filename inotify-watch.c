@@ -49,9 +49,9 @@ static const char *skip_fs_types[] = { SKIP_SUBFILES };
  * where opening of subfiles is inwanted.
  *
  * @param[in] fd A file descriptor of a watched entry.
- * @return 1 if watching for subfiles is unwanted, 0 otherwise.
+ * @return true if watching for subfiles is unwanted, false otherwise.
  **/
-static int
+static bool
 iwatch_want_skip_subfiles (int fd)
 {
     struct STATFS st;
@@ -65,11 +65,11 @@ iwatch_want_skip_subfiles (int fd)
 
     for (i = 0; i < nitems (skip_fs_types); i++) {
         if (strcmp (st.f_fstypename, skip_fs_types[i]) == 0) {
-            return 1;
+            return true;
         }
     }
 
-    return 0;
+    return false;
 }
 #endif
 
@@ -125,7 +125,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
     iw->mode = st.st_mode & S_IFMT;
     iw->inode = st.st_ino;
     iw->dev = st.st_dev;
-    iw->is_closed = 0;
+    iw->is_closed = false;
 
     dl_init (&iw->deps);
 

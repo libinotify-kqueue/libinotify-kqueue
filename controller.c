@@ -30,6 +30,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #include <sys/types.h>
 #include <sys/event.h>
@@ -44,7 +45,7 @@
 #define WORKER_SZ 100
 static worker* volatile workers[WORKER_SZ];
 static pthread_rwlock_t workers_rwlock = PTHREAD_RWLOCK_INITIALIZER;
-static int initialized = 0;
+static bool initialized = false;
 static worker dummy_wrk = {
     .io = { -1, -1 },
     .mutex = PTHREAD_MUTEX_INITIALIZER
@@ -351,5 +352,5 @@ workers_init (void)
     for (i = 0; i < WORKER_SZ; i++) {
         workers[i] = WRK_FREE;
     }
-    initialized = 1;
+    initialized = true;
 }
