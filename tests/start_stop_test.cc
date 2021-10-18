@@ -74,6 +74,10 @@ void start_stop_test::run ()
     cons.input.setup (wid);
     cons.output.wait ();
 
+    wid2 = cons.output.added_watch_id ();
+    should ("inotify_rm_watch returned 0 on stop "
+            "watching an valid watch descriptor", wid2 == 0);
+
     /* Linux inotify sends IN_IGNORED on stop */
     cons.output.reset ();
     cons.input.receive ();

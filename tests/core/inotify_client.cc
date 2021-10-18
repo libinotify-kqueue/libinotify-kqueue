@@ -53,12 +53,14 @@ int inotify_client::watch (const std::string &filename, uint32_t flags)
     return retval;
 }
 
-void inotify_client::cancel (int watch_id)
+int inotify_client::cancel (int watch_id)
 {
     assert (fd != -1);
-    if (inotify_rm_watch (fd, watch_id) != 0) {
+    int retval = inotify_rm_watch (fd, watch_id);
+    if (retval != 0) {
         LOG ("INO: rm watch failed " << VAR (fd) << VAR (watch_id));
     }
+    return retval;
 }
 
 #ifdef IN_DEF_SOCKBUFSIZE

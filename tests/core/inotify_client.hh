@@ -37,7 +37,7 @@ public:
     inotify_client ();
     ~inotify_client ();
     int watch (const std::string &filename, uint32_t flags);
-    void cancel (int wid);
+    int cancel (int wid);
     events receive_during (int timeout) const;
     int get_fd ();
 
