@@ -22,6 +22,7 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <cerrno>
 #include <cstdlib>
 #include "start_stop_test.hh"
 

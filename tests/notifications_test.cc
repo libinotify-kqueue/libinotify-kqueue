@@ -21,6 +21,7 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <cerrno>
 #include <cstdlib>
 
 #include "notifications_test.hh"
