@@ -89,7 +89,6 @@ void notifications_dir_test::run ()
             iter != received.end() && iter->flags & IN_ISDIR);
 
 
-#if defined(__linux__) || defined(NOTE_READ)
     cons.output.reset ();
     cons.input.receive ();
 
@@ -97,6 +96,7 @@ void notifications_dir_test::run ()
 
     cons.output.wait ();
     received = cons.output.registered ();
+#if defined(__linux__) || defined(NOTE_READ)
     should ("receive IN_ACCESS event on reading of directory contents",
             contains (received, event ("", wid, IN_ACCESS)));
 #else
@@ -292,7 +292,6 @@ void notifications_dir_test::run ()
             iter != received.end() && iter->flags & IN_ISDIR);
 
     
-#if defined(__linux__) || defined(NOTE_READ)
     cons.output.reset ();
     cons.input.receive ();
 
@@ -304,6 +303,7 @@ void notifications_dir_test::run ()
     iter = std::find_if (received.begin(),
                          received.end(),
                          event_matcher (event ("dir", wid, IN_ACCESS)));
+#if defined(__linux__) || defined(NOTE_READ)
     should ("receive IN_ACCESS with IN_ISDIR on reading of subdirectory contents",
             iter != received.end() && iter->flags & IN_ISDIR);
 #else

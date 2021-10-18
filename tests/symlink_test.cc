@@ -193,7 +193,6 @@ void symlink_test::run ()
         cons.input.interrupt ();
     }
     /* Test IN_DONT_FOLLOW */
-#if defined(__linux__) || defined(O_SYMLINK)
     {   consumer cons;
         events received;
         events::iterator iter;
@@ -207,8 +206,13 @@ void symlink_test::run ()
                           | IN_DONT_FOLLOW);
         cons.output.wait ();
         wid = cons.output.added_watch_id ();
+#if defined(__linux__) || defined(O_SYMLINK)
         should ("Start watch successfully on a symlink file with IN_DONT_FOLLOW",
                 wid != -1);
+#else
+        skip ("Start watch successfully on a symlink file with IN_DONT_FOLLOW"
+              " (O_SYMLINK open() flag missed)");
+#endif
 
         cons.output.reset ();
         cons.input.receive ();
@@ -217,8 +221,13 @@ void symlink_test::run ()
 
         cons.output.wait ();
         received = cons.output.registered ();
+#if defined(__linux__) || defined(O_SYMLINK)
         should ("Receive IN_ATTRIB after touching symlink itself",
                 contains (received, event ("", wid, IN_ATTRIB)));
+#else
+        skip ("Receive IN_ATTRIB after touching symlink itself"
+              " (O_SYMLINK open() flag missed)");
+#endif
 
 
         cons.output.reset ();
@@ -228,8 +237,13 @@ void symlink_test::run ()
 
         cons.output.wait ();
         received = cons.output.registered ();
+#if defined(__linux__) || defined(O_SYMLINK)
         should ("No IN_MODIFY after modifying symlink source file",
                 !contains (received, event ("", wid, IN_MODIFY)));
+#else
+        skip ("No IN_MODIFY after modifying symlink source file"
+              " (O_SYMLINK open() flag missed)");
+#endif
 
 
         cons.output.reset ();
@@ -239,9 +253,13 @@ void symlink_test::run ()
 
         cons.output.wait ();
         received = cons.output.registered ();
+#if defined(__linux__) || defined(O_SYMLINK)
         should ("No IN_MODIFY after modifying file via symlink",
                 !contains (received, event ("", wid, IN_MODIFY)));
-
+#else
+        skip ("No IN_MODIFY after modifying file via symlink"
+              " (O_SYMLINK open() flag missed)");
+#endif
 
         cons.output.reset ();
         cons.input.receive ();
@@ -250,8 +268,13 @@ void symlink_test::run ()
 
         cons.output.wait ();
         received = cons.output.registered ();
+#if defined(__linux__) || defined(O_SYMLINK)
         should ("Receive IN_MOVE_SELF after moving the symlink",
                 contains (received, event ("", wid, IN_MOVE_SELF)));
+#else
+        skip ("Receive IN_MOVE_SELF after moving the symlink"
+              " (O_SYMLINK open() flag missed)");
+#endif
 
 
         cons.output.reset ();
@@ -261,25 +284,16 @@ void symlink_test::run ()
 
         cons.output.wait ();
         received = cons.output.registered ();
+#if defined(__linux__) || defined(O_SYMLINK)
         should ("Receive IN_DELETE_SELF after removing the symlink",
                 contains (received, event ("", wid, IN_DELETE_SELF)));
+#else
+        skip ("Receive IN_DELETE_SELF after removing the symlink"
+              " (O_SYMLINK open() flag missed)");
+#endif
 
         cons.input.interrupt ();
     }
-#else
-    skip ("Start watch successfully on a symlink file with IN_DONT_FOLLOW"
-          " (O_SYMLINK open() flag missed)");
-    skip ("Receive IN_ATTRIB after touching symlink itself"
-          " (O_SYMLINK open() flag missed)");
-    skip ("No IN_MODIFY after modifying symlink source file"
-          " (O_SYMLINK open() flag missed)");
-    skip ("No IN_MODIFY after modifying file via symlink"
-          " (O_SYMLINK open() flag missed)");
-    skip ("Receive IN_MOVE_SELF after moving the symlink"
-          " (O_SYMLINK open() flag missed)");
-    skip ("Receive IN_DELETE_SELF after removing the symlink"
-          " (O_SYMLINK open() flag missed)");
-#endif
 }
 
 void symlink_test::cleanup ()
