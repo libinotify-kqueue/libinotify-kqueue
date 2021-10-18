@@ -30,11 +30,15 @@
 #include <sys/types.h> /* ino_t */
 #include <sys/stat.h>  /* mode_t */
 
+#include <stdbool.h>
+
 #define DI_UNCHANGED S_IXOTH /* dep_item remained unchanged between listings */
 #define DI_REPLACED  S_IROTH /* dep_item was replaced by other item */
 #define DI_READDED   DI_REPLACED /* dep_item replaced other item */
 #define DI_MOVED     S_IWOTH /* dep_item was renamed between listings */
 #define DI_EXT_PATH  S_IRWXO /* special dep_item intended for search only */
+
+#define DI_PARENT    NULL    /* Faked dependency item for parent watch */
 
 #define S_IFUNK 0000000 /* mode_t extension. File type is unknown */
 #define S_ISUNK(m) (((m) & S_IFMT) == S_IFUNK)

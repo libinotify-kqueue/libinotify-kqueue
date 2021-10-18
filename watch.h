@@ -101,4 +101,16 @@ watch_deps_empty (watch *w)
     return (SLIST_EMPTY (&w->deps));
 }
 
+/**
+ * Checks if #watch_dep is pointing to virtual parent dependency item.
+ *
+ * @param[in] w A pointer to the #watch_dep.
+ * @return true if A #watch_set is pointing to parent. false otherwise.
+ **/
+static inline bool
+watch_dep_is_parent (const struct watch_dep *wd)
+{
+    return (wd->di == DI_PARENT);
+}
+
 #endif /* __WATCH_H__ */

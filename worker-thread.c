@@ -78,7 +78,7 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
 
     const char *name = NULL;
     uint32_t cookie = 0;
-    if (di != NULL) {
+    if (di != DI_PARENT) {
         name = di->path;
         if (mask & IN_MOVE) {
             cookie = di->inode & 0x00000000FFFFFFFF;
@@ -351,36 +351,31 @@ produce_notifications (worker *wrk, struct kevent *event)
     /* Deaggregate inotify events  */
     for (i = 0; i < nitems (ie_order); i++) {
 
-        if (!(w->flags & WF_ISSUBWATCH) && ie_order[i] == IN_MODIFY &&
-            flags & NOTE_WRITE && S_ISDIR (w->flags)) {
+        assert (!watch_deps_empty (w));
+
+        struct watch_dep *wd;
+        WD_FOREACH (wd, w) {
+
+            if (watch_dep_is_parent (wd) && ie_order[i] == IN_MODIFY &&
+                flags & NOTE_WRITE && S_ISDIR (w->flags)) {
 #ifdef __OpenBSD__
-            /* OpenBSD notifies user with kevent about file moved in/out
-             * watched directory slightly BEFORE change hits directory
-             * content. Workaround it with adding a small delay. */
-            struct timespec timeout = { 0, 5 };
-            nanosleep (&timeout, NULL);
+                /* OpenBSD notifies user with kevent about file moved in/out
+                 * watched directory slightly BEFORE change hits directory
+                 * content. Workaround it with adding a small delay. */
+                struct timespec timeout = { 0, 5 };
+                nanosleep (&timeout, NULL);
 #endif
-            produce_directory_diff (iw, event);
-            w->flags |= WF_SKIP_NEXT;
+                produce_directory_diff (iw, event);
+                w->flags |= WF_SKIP_NEXT;
 
-        } else if (i_flags & ie_order[i]) {
+            } else if (i_flags & ie_order[i]) {
 
-            if (!(w->flags & WF_ISSUBWATCH)) {
                 /* Report deaggregated items */
+                assert (watch_dep_is_parent (wd) || (w->inode == wd->di->inode
+                        && wd->di == dl_find (&iw->deps, wd->di->path)));
                 enqueue_event (iw,
                                ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
-                               NULL);
-            } else {
-                /* Report subfiles(dependency) list changes */
-                uint32_t i_flag = ie_order[i] | (i_flags & ~IN_ALL_EVENTS);
-
-                assert (!watch_deps_empty (w));
-                struct watch_dep *wd;
-                WD_FOREACH (wd, w) {
-                    assert (w->inode == wd->di->inode);
-                    assert (wd->di == dl_find (&iw->deps, wd->di->path));
-                    enqueue_event (iw, i_flag, wd->di);
-                }
+                               wd->di);
             }
         }
     }

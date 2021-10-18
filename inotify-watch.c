@@ -148,6 +148,11 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
         return NULL;
     }
 
+    if (watch_add_dep (parent, DI_PARENT) == NULL) {
+        iwatch_free (iw);
+        return NULL;
+    }
+
     watch_set_insert (&iw->watches, parent);
 
     if (S_ISDIR (st.st_mode)) {
