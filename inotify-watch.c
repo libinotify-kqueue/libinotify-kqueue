@@ -104,16 +104,19 @@ iwatch_open (const char *path, uint32_t flags)
 struct i_watch *
 iwatch_init (struct worker *wrk, int fd, uint32_t flags)
 {
+    struct stat st;
+    struct i_watch *iw;
+    struct watch *parent;
+
     assert (wrk != NULL);
     assert (fd != -1);
 
-    struct stat st;
     if (fstat (fd, &st) == -1) {
         perror_msg (("fstat failed on %d", fd));
         return NULL;
     }
 
-    struct i_watch *iw = calloc (1, sizeof (struct i_watch));
+    iw = calloc (1, sizeof (struct i_watch));
     if (iw == NULL) {
         perror_msg (("Failed to allocate inotify watch"));
         return NULL;
@@ -142,7 +145,7 @@ iwatch_init (struct worker *wrk, int fd, uint32_t flags)
 #endif
     }
 
-    struct watch *parent = watch_set_find (&wrk->watches, iw->dev, iw->inode);
+    parent = watch_set_find (&wrk->watches, iw->dev, iw->inode);
     if (parent == NULL) {
         parent = watch_init (fd, &st);
         if (parent == NULL) {
@@ -178,16 +181,18 @@ iwatch_init (struct worker *wrk, int fd, uint32_t flags)
 void
 iwatch_free (struct i_watch *iw)
 {
+    struct dep_item *iter;
+    struct watch *w;
+
     assert (iw != NULL);
 
     /* unwatch subfiles */
-    struct dep_item *iter;
     DL_FOREACH (iter, &iw->deps) {
         iwatch_del_subwatch (iw, iter);
     }
 
     /* unwatch parent */
-    struct watch *w = watch_set_find (&iw->wrk->watches, iw->dev, iw->inode);
+    w = watch_set_find (&iw->wrk->watches, iw->dev, iw->inode);
     if (w != NULL) {
         assert (!watch_deps_empty (w));
         watch_del_dep (w, iw, DI_PARENT);
@@ -207,6 +212,10 @@ iwatch_free (struct i_watch *iw)
 struct watch*
 iwatch_add_subwatch (struct i_watch *iw, struct dep_item *di)
 {
+    struct stat st;
+    struct watch *w;
+    int fd;
+
     assert (iw != NULL);
     assert (di != NULL);
 
@@ -220,11 +229,14 @@ iwatch_add_subwatch (struct i_watch *iw, struct dep_item *di)
     }
 #endif
 
-    struct watch *w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
+    w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
     if (w != NULL) {
+        mode_t mode;
+
         assert (!watch_deps_empty (w));
+
         /* Inherit dep-item type from other associated dep-items */
-        mode_t mode = watch_get_mode (w);
+        mode = watch_get_mode (w);
         if (!S_ISUNK (di->type) && (di->type & S_IFMT) != (mode & S_IFMT)) {
             perror_msg (("File modes taken with readdir and fstat are different"
                 " %d != %d", (int)di->type, (int)mode));
@@ -243,13 +255,12 @@ iwatch_add_subwatch (struct i_watch *iw, struct dep_item *di)
         return NULL;
     }
 
-    int fd = watch_open (iw->fd, di->path, IN_DONT_FOLLOW);
+    fd = watch_open (iw->fd, di->path, IN_DONT_FOLLOW);
     if (fd == -1) {
         perror_msg (("Failed to open file %s", di->path));
         goto lstat;
     }
 
-    struct stat st;
     if (fstat (fd, &st) == -1) {
         perror_msg (("Failed to stat subwatch %s", di->path));
         close (fd);
@@ -315,10 +326,12 @@ lstat:
 void
 iwatch_del_subwatch (struct i_watch *iw, const struct dep_item *di)
 {
+    struct watch *w;
+
     assert (iw != NULL);
     assert (di != NULL);
 
-    struct watch *w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
+    w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
     if (w != NULL) {
         assert (!watch_deps_empty (w));
         watch_del_dep (w, iw, di);
@@ -337,12 +350,14 @@ iwatch_move_subwatch (struct i_watch *iw,
                       const struct dep_item *di_from,
                       const struct dep_item *di_to)
 {
+    struct watch *w;
+
     assert (iw != NULL);
     assert (di_from != NULL);
     assert (di_to != NULL);
     assert (di_from->inode == di_to->inode);
 
-    struct watch *w = watch_set_find (&iw->wrk->watches, iw->dev, di_to->inode);
+    w = watch_set_find (&iw->wrk->watches, iw->dev, di_to->inode);
     if (w != NULL && !watch_deps_empty (w)) {
         watch_chg_dep (w, iw, di_from, di_to);
     }
@@ -360,6 +375,9 @@ iwatch_move_subwatch (struct i_watch *iw,
 void
 iwatch_update_flags (struct i_watch *iw, uint32_t flags)
 {
+    struct watch *parent;
+    struct dep_item *iter;
+
     assert (iw != NULL);
 
     /* merge flags if IN_MASK_ADD flag is set */
@@ -370,15 +388,14 @@ iwatch_update_flags (struct i_watch *iw, uint32_t flags)
     iw->flags = flags;
 
     /* update parent kqueue watch */
-    struct watch *w = watch_set_find (&iw->wrk->watches, iw->dev, iw->inode);
-    assert (w != NULL);
-    assert (!watch_deps_empty (w));
-    watch_update_event (w);
+    parent = watch_set_find (&iw->wrk->watches, iw->dev, iw->inode);
+    assert (parent != NULL);
+    assert (!watch_deps_empty (parent));
+    watch_update_event (parent);
 
     /* update kqueue subwatches or close those we dont need to watch */
-    struct dep_item *iter;
     DL_FOREACH (iter, &iw->deps) {
-        w = watch_set_find (&iw->wrk->watches, iw->dev, iter->inode);
+        struct watch *w = watch_set_find (&iw->wrk->watches, iw->dev, iter->inode);
         if (w == NULL || watch_find_dep (w, iw, iter) == NULL) {
             /* try to watch  unwatched subfiles */
             iwatch_add_subwatch (iw, iter);

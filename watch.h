@@ -123,10 +123,12 @@ watch_dep_get_mode (struct watch_dep *wd)
 static inline mode_t
 watch_get_mode (struct watch *w)
 {
+    mode_t mode;
+
     assert (w != NULL);
     assert (!watch_deps_empty (w));
 
-    mode_t mode = watch_dep_get_mode (SLIST_FIRST(&w->deps));
+    mode = watch_dep_get_mode (SLIST_FIRST(&w->deps));
     assert (!S_ISUNK (mode));
 
     return (mode);

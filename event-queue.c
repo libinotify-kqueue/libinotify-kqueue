@@ -163,13 +163,15 @@ event_queue_enqueue (struct event_queue *eq,
         prev_ie->cookie == cookie &&
       ((prev_ie->len == 0 && name == NULL) ||
        (prev_ie->len > 0 && name != NULL && !strcmp (prev_ie->name, name)))) {
+
+            int fd = EQ_TO_WRK(eq)->io[INOTIFY_FD];
+            int buffered = 0;
+
             /* Events are identical and queue is not empty. Skip current. */
             if (eq->count > 0) {
                 return retval;
             }
             /* Event queue is empty. Check if any events remain in the pipe */
-            int fd = EQ_TO_WRK(eq)->io[INOTIFY_FD];
-            int buffered;
             if (ioctl (fd, FIONREAD, &buffered) == 0 && buffered > 0) {
                 return retval;
             }
@@ -197,7 +199,10 @@ event_queue_enqueue (struct event_queue *eq,
 void event_queue_flush (struct event_queue *eq, size_t sbspace)
 {
     int iovcnt, iovmax;
+    int send_flags = 0;
+    int fd = EQ_TO_WRK(eq)->io[KQUEUE_FD];
     size_t iovlen = 0;
+    int i;
 
     iovmax = eq->count;
     if (iovmax > IOV_MAX) {
@@ -215,12 +220,10 @@ void event_queue_flush (struct event_queue *eq, size_t sbspace)
         return;
     }
 
-    int send_flags = 0;
 #if defined (MSG_NOSIGNAL)
     send_flags |= MSG_NOSIGNAL;
 #endif
 
-    int fd = EQ_TO_WRK(eq)->io[KQUEUE_FD];
     if (safe_sendv (fd, eq->iov, iovcnt, send_flags) == -1) {
         perror_msg (("Sending of inotify events to socket failed"));
     }
@@ -229,7 +232,6 @@ void event_queue_flush (struct event_queue *eq, size_t sbspace)
     free (eq->last);
     eq->last = (void *)eq->iov[iovcnt - 1].iov_base;
 
-    int i;
     for (i = 0; i < iovcnt - 1; i++) {
         free (eq->iov[i].iov_base);
     }

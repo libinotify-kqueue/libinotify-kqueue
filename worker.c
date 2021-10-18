@@ -224,8 +224,14 @@ pipe_init (int fildes[2], int flags)
     }
 
 #ifdef SO_NOSIGPIPE
-     int on = 1;
-     setsockopt (fildes[KQUEUE_FD], SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+    {
+        int on = 1;
+        setsockopt (fildes[KQUEUE_FD],
+                    SOL_SOCKET,
+                    SO_NOSIGPIPE,
+                    &on,
+                    sizeof(on));
+    }
 #endif
 
     if (set_cloexec_flag (fildes[KQUEUE_FD], 1) == -1) {
@@ -368,9 +374,9 @@ failure:
 void
 worker_free (struct worker *wrk)
 {
-    assert (wrk != NULL);
-
     struct i_watch *iw;
+
+    assert (wrk != NULL);
 
     if (wrk->io[KQUEUE_FD] != -1) {
         close (wrk->io[KQUEUE_FD]);
@@ -414,16 +420,21 @@ worker_add_or_modify (struct worker *wrk,
                       const char    *path,
                       uint32_t       flags)
 {
+    int fd;
+    struct stat st;
+    struct watch *w;
+    struct i_watch *iw;
+    bool allocated;
+
     assert (path != NULL);
     assert (wrk != NULL);
 
     /* Open inotify watch descriptor */
-    int fd = iwatch_open (path, flags);
+    fd = iwatch_open (path, flags);
     if (fd == -1) {
         return -1;
     }
 
-    struct stat st;
     if (fstat (fd, &st) == -1) {
         perror_msg (("Failed to stat file %s", path));
         close (fd);
@@ -431,7 +442,7 @@ worker_add_or_modify (struct worker *wrk,
     }
 
     /* look up for an entry with these inode&device numbers */
-    struct watch *w = watch_set_find (&wrk->watches, st.st_dev, st.st_ino);
+    w = watch_set_find (&wrk->watches, st.st_dev, st.st_ino);
     if (w != NULL) {
         struct watch_dep *wd;
         close (fd);
@@ -445,13 +456,12 @@ worker_add_or_modify (struct worker *wrk,
     }
 
     /* create a new entry if watch is not found */
-    struct i_watch *iw = iwatch_init (wrk, fd, flags);
+    iw = iwatch_init (wrk, fd, flags);
     if (iw == NULL) {
         return -1;
     }
 
     /* Allocate watch descriptor */
-    bool allocated;
     do {
         if (wrk->wd_last == INT_MAX) {
             wrk->wd_last = 0;
@@ -486,10 +496,11 @@ worker_add_or_modify (struct worker *wrk,
 int
 worker_remove (struct worker *wrk, int id)
 {
+    struct i_watch *iw;
+
     assert (wrk != NULL);
     assert (id >= 0);
 
-    struct i_watch *iw;
     SLIST_FOREACH (iw, &wrk->head, next) {
 
         if (iw->wd == id) {

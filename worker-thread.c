@@ -58,9 +58,11 @@ static void handle_moved (void *udata,
 static int
 enqueue_event (struct i_watch *iw, uint32_t mask, const struct dep_item *di)
 {
+    const char *name = NULL;
+    uint32_t cookie = 0;
+
     assert (iw != NULL);
-    struct worker *wrk = iw->wrk;
-    assert (wrk != NULL);
+    assert (iw->wrk != NULL);
 
     /*
      * Only IN_ALL_EVENTS, IN_UNMOUNT and IN_ISDIR events are allowed to be
@@ -77,8 +79,6 @@ enqueue_event (struct i_watch *iw, uint32_t mask, const struct dep_item *di)
         iw->is_closed = true;
     }
 
-    const char *name = NULL;
-    uint32_t cookie = 0;
     if (di != DI_PARENT) {
         name = di->path;
         if (mask & IN_MOVE) {
@@ -89,7 +89,7 @@ enqueue_event (struct i_watch *iw, uint32_t mask, const struct dep_item *di)
         }
     }
 
-    if (event_queue_enqueue (&wrk->eq, iw->wd, mask, cookie, name) == -1) {
+    if (event_queue_enqueue (&iw->wrk->eq, iw->wd, mask, cookie, name) == -1) {
         perror_msg (("Failed to enqueue a inotify event %x", mask));
         return -1;
     }
@@ -157,9 +157,9 @@ struct handle_context {
 static void
 handle_added (void *udata, struct dep_item *di)
 {
-    assert (udata != NULL);
-
     struct handle_context *ctx = (struct handle_context *) udata;
+
+    assert (ctx != NULL);
     assert (ctx->iw != NULL);
 
     iwatch_add_subwatch (ctx->iw, di);
@@ -183,9 +183,9 @@ handle_added (void *udata, struct dep_item *di)
 static void
 handle_removed (void *udata, struct dep_item *di)
 {
-    assert (udata != NULL);
-
     struct handle_context *ctx = (struct handle_context *) udata;
+
+    assert (ctx != NULL);
     assert (ctx->iw != NULL);
 
 #ifdef HAVE_NOTE_EXTEND_ON_MOVE_FROM
@@ -211,9 +211,9 @@ handle_removed (void *udata, struct dep_item *di)
 static void
 handle_replaced (void *udata, struct dep_item *di)
 {
-    assert (udata != NULL);
-
     struct handle_context *ctx = (struct handle_context *) udata;
+
+    assert (ctx != NULL);
     assert (ctx->iw != NULL);
 
     iwatch_del_subwatch (ctx->iw, di);
@@ -232,9 +232,9 @@ handle_replaced (void *udata, struct dep_item *di)
 static void
 handle_moved (void *udata, struct dep_item *from_di, struct dep_item *to_di)
 {
-    assert (udata != NULL);
-
     struct handle_context *ctx = (struct handle_context *) udata;
+
+    assert (ctx != NULL);
     assert (ctx->iw != NULL);
 
     if (S_ISUNK (to_di->type)) {
@@ -266,16 +266,18 @@ static const struct traverse_cbs cbs = {
 void
 produce_directory_diff (struct i_watch *iw, struct kevent *event)
 {
+    struct handle_context ctx;
+    struct chg_list *changes;
+
     assert (iw != NULL);
     assert (event != NULL);
 
-    struct chg_list *changes = dl_listing (iw->fd, &iw->deps);
+    changes = dl_listing (iw->fd, &iw->deps);
     if (changes == NULL) {
         perror_msg (("Failed to create a listing for watch %d", iw->wd));
         return;
     }
 
-    struct handle_context ctx;
     memset (&ctx, 0, sizeof (ctx));
     ctx.iw = iw;
     ctx.fflags = event->fflags;
@@ -313,18 +315,24 @@ produce_notifications (struct worker *wrk, struct kevent *event)
         IN_UNMOUNT
     };
 
+    struct watch *w;
+    struct watch_dep *wd, *wd2;
+    uint32_t flags;
+    bool deleted = false;
+    bool reiterate;
+    mode_t mode;
+    size_t i;
+
     assert (wrk != NULL);
     assert (event != NULL);
 
-    struct watch *w = (struct watch *)event->udata;
+    w = (struct watch *)event->udata;
     assert (w != NULL);
     assert (w->fd == event->ident);
     assert (!watch_deps_empty (w));
 
-    struct watch_dep *wd, *wd2;
-    uint32_t flags = event->fflags;
-    bool deleted = false;
-    mode_t mode = watch_get_mode (w);
+    flags = event->fflags;
+    mode = watch_get_mode (w);
 
     /* Set deleted flag if no more links exist */
     if (flags & NOTE_DELETE && (!S_ISREG (mode) || is_deleted (w->fd))) {
@@ -347,7 +355,6 @@ produce_notifications (struct worker *wrk, struct kevent *event)
 #endif
     w->skip_next = false;
 
-    size_t i;
     /* Deaggregate inotify events  */
     for (i = 0; i < nitems (ie_order); i++) {
 
@@ -355,14 +362,12 @@ produce_notifications (struct worker *wrk, struct kevent *event)
 
             struct i_watch *iw = wd->iw;
             bool is_parent = watch_dep_is_parent (wd);
+            uint32_t i_flags;
 
             assert (watch_set_find (&wrk->watches, w->dev, w->inode) == w);
             assert ((mode & S_IFMT) == (watch_dep_get_mode (wd) & S_IFMT));
 
-            uint32_t i_flags = kqueue_to_inotify (flags,
-                                                  mode,
-                                                  is_parent,
-                                                  deleted);
+            i_flags = kqueue_to_inotify (flags, mode, is_parent, deleted);
 
             if (is_parent && ie_order[i] == IN_MODIFY &&
                 flags & NOTE_WRITE && S_ISDIR (iw->mode)) {
@@ -370,8 +375,10 @@ produce_notifications (struct worker *wrk, struct kevent *event)
                 /* OpenBSD notifies user with kevent about file moved in/out
                  * watched directory slightly BEFORE change hits directory
                  * content. Workaround it with adding a small delay. */
-                struct timespec timeout = { 0, 5 };
-                nanosleep (&timeout, NULL);
+                {
+                    struct timespec timeout = { 0, 5 };
+                    nanosleep (&timeout, NULL);
+                }
 #endif
                 produce_directory_diff (iw, event);
                 w->skip_next = true;
@@ -391,7 +398,6 @@ produce_notifications (struct worker *wrk, struct kevent *event)
    /* worker_remove can free watch deps and watch itself on return so we should
     * reiterate after worker_remove or break loop if watch is associated with
     * only one inotify watch to avoid use after free */
-    bool reiterate;
     do {
         reiterate = false;
         WD_FOREACH (wd, w) {
@@ -420,20 +426,24 @@ produce_notifications (struct worker *wrk, struct kevent *event)
 void*
 worker_thread (void *arg)
 {
-    assert (arg != NULL);
     struct worker* wrk = (struct worker *) arg;
     struct worker_cmd *cmd;
-    size_t i, sbspace = 0;
+    size_t sbspace = 0;
 #define MAXEVENTS 1
     struct kevent received[MAXEVENTS];
 
+    assert (wrk != NULL);
+
     for (;;) {
+        size_t i;
+        int nevents;
+
         if (sbspace > 0 && wrk->eq.count > 0) {
             event_queue_flush (&wrk->eq, sbspace);
             sbspace = 0;
         }
 
-        int nevents = kevent (wrk->kq, NULL, 0, received, MAXEVENTS, NULL);
+        nevents = kevent (wrk->kq, NULL, 0, received, MAXEVENTS, NULL);
         if (nevents == -1) {
             perror_msg (("kevent failed"));
             continue;

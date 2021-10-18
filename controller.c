@@ -93,6 +93,7 @@ inotify_init (void)
 int
 inotify_init1 (int flags)
 {
+    struct worker *wrk, *iter;
     int lfd = -1;
 
 #ifdef O_CLOEXEC
@@ -110,7 +111,7 @@ inotify_init1 (int flags)
         return -1;
     }
 
-    struct worker *wrk = worker_create (flags);
+    wrk = worker_create (flags);
     if (wrk == NULL) {
         atomic_fetch_sub (&nworkers, 1);
         return -1;
@@ -124,7 +125,6 @@ inotify_init1 (int flags)
      * when we create a new worker, we can * receive the same fd. So check
      * for duplicates and remove them now. */
     workerset_wlock ();
-    struct worker *iter;
     SLIST_FOREACH (iter, &workers, next) {
         if (iter->io[INOTIFY_FD] == lfd) {
             iter->io[INOTIFY_FD] = -1;
@@ -263,10 +263,11 @@ worker_erase (struct worker *wrk)
 static int
 worker_exec (int fd, struct worker_cmd *cmd)
 {
+    struct worker *wrk;
+
     workerset_rlock ();
 
     /* look up for an appropriate worker */
-    struct worker *wrk;
     SLIST_FOREACH (wrk, &workers, next) {
         if (wrk->io[INOTIFY_FD] == fd) {
             worker_ref (wrk);

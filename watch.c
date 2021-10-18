@@ -172,11 +172,11 @@ kqueue_to_inotify (uint32_t flags,
 int
 watch_register_event (struct watch *w, int kq, uint32_t fflags)
 {
-    assert (w != NULL);
-    assert (kq != -1);
-
     struct kevent ev;
     int result;
+
+    assert (w != NULL);
+    assert (kq != -1);
 
     if (fflags == w->fflags) {
         return 0;
@@ -209,13 +209,16 @@ watch_register_event (struct watch *w, int kq, uint32_t fflags)
 int
 watch_update_event (struct watch *w)
 {
+    int kq;
+    mode_t mode;
+    uint32_t fflags = 0;
+    struct watch_dep *wd;
+
     assert (w != NULL);
     assert (!watch_deps_empty (w));
 
-    int kq = SLIST_FIRST(&w->deps)->iw->wrk->kq;
-    mode_t mode = watch_get_mode (w);
-    uint32_t fflags = 0;
-    struct watch_dep *wd;
+    kq = SLIST_FIRST(&w->deps)->iw->wrk->kq;
+    mode = watch_get_mode (w);
 
     WD_FOREACH (wd, w) {
         assert ((mode & S_IFMT) == (watch_dep_get_mode (wd) & S_IFMT));
@@ -239,9 +242,11 @@ watch_update_event (struct watch *w)
 int
 watch_open (int dirfd, const char *path, uint32_t flags)
 {
+    int openflags = O_NONBLOCK;
+    int fd;
+
     assert (path != NULL);
 
-    int openflags = O_NONBLOCK;
 #ifdef O_EVTONLY
     openflags |= O_EVTONLY;
 #else
@@ -263,7 +268,7 @@ watch_open (int dirfd, const char *path, uint32_t flags)
     }
 #endif
 
-    int fd = openat (dirfd, path, openflags);
+    fd = openat (dirfd, path, openflags);
     if (fd == -1) {
         return -1;
     }
@@ -305,9 +310,11 @@ watch_open (int dirfd, const char *path, uint32_t flags)
 struct watch *
 watch_init (int fd, struct stat *st)
 {
+    struct watch *w;
+
     assert (fd != -1);
 
-    struct watch *w = calloc (1, sizeof (struct watch));
+    w = calloc (1, sizeof (struct watch));
     if (w == NULL) {
         perror_msg (("Failed to allocate watch"));
         return NULL;
@@ -361,10 +368,10 @@ watch_free (struct watch *w)
 struct watch_dep *
 watch_find_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
 {
+    struct watch_dep *wd;
+
     assert (w != NULL);
     assert (iw != NULL);
-
-    struct watch_dep *wd;
 
     WD_FOREACH (wd, w) {
         if (wd->iw == iw && wd->di == di) {
@@ -386,17 +393,20 @@ watch_find_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
 struct watch_dep *
 watch_add_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
 {
+    struct watch_dep *wd;
+
     assert (w != NULL);
     assert (iw != NULL);
 
-    struct watch_dep *wd = calloc (1, sizeof (struct watch_dep));
+    wd = calloc (1, sizeof (struct watch_dep));
     if (wd != NULL) {
+        uint32_t fflags;
         wd->iw = iw;
         wd->di = di;
 
-        uint32_t fflags = inotify_to_kqueue (iw->flags,
-                                             watch_dep_get_mode (wd),
-                                             watch_dep_is_parent (wd));
+        fflags = inotify_to_kqueue (iw->flags,
+                                    watch_dep_get_mode (wd),
+                                    watch_dep_is_parent (wd));
         /* It's too late to skip watches with empty kqueue filter flags here */
         assert (fflags != 0);
 
@@ -422,10 +432,12 @@ watch_add_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
 struct watch_dep *
 watch_del_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
 {
+    struct watch_dep *wd;
+
     assert (w != NULL);
     assert (iw != NULL);
 
-    struct watch_dep *wd = watch_find_dep (w, iw, di);
+    wd = watch_find_dep (w, iw, di);
     if (wd != NULL) {
         SLIST_REMOVE (&w->deps, wd, watch_dep, next);
         free (wd);
@@ -453,13 +465,15 @@ watch_chg_dep (struct watch *w,
                const struct dep_item *di_from,
                const struct dep_item *di_to)
 {
+    struct watch_dep *wd;
+
     assert (w != NULL);
     assert (iw != NULL);
     assert (di_from != NULL);
     assert (di_to != NULL);
     assert (di_from->inode == di_to->inode);
 
-    struct watch_dep *wd = watch_find_dep (w, iw, di_from);
+    wd = watch_find_dep (w, iw, di_from);
     if (wd != NULL) {
         wd->di = di_to;
     }

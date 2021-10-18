@@ -39,6 +39,7 @@ void handle_error (int error);
 int main (int argc, char *argv[])
 {
     char target[FILENAME_MAX];
+    int ev_count = 0;
     int fd;
     int wd;   /* watch descriptor */
 
@@ -69,8 +70,6 @@ int main (int argc, char *argv[])
         handle_error (errno);
         return 1;
     }
-
-    int ev_count = 0;
 
     while (1) {
         /* if (ev_count == 3) { */

@@ -133,9 +133,9 @@ di_free (struct dep_item *di)
 void
 dl_free (struct dep_list *dl)
 {
-    assert (dl != NULL);
-
     struct dep_item *di;
+
+    assert (dl != NULL);
 
     while (!RB_EMPTY (dl)) {
         di = RB_MIN (dep_list, dl);
@@ -156,10 +156,10 @@ dl_free (struct dep_list *dl)
 void
 dl_join (struct dep_list *dl_target, struct chg_list *dl_source)
 {
+    struct dep_item *di;
+
     assert (dl_target != NULL);
     assert (dl_source != NULL);
-
-    struct dep_item *di;
 
     while (!SLIST_EMPTY (dl_source)) {
         di = SLIST_FIRST (dl_source);
@@ -177,9 +177,10 @@ dl_join (struct dep_list *dl_target, struct chg_list *dl_source)
 static inline void
 dl_clearflags (struct dep_list *dl)
 {
+    struct dep_item *di;
+
     assert (dl != NULL);
 
-    struct dep_item *di;
     DL_FOREACH (di, dl) {
         di->type &= S_IFMT;
     }
@@ -195,10 +196,11 @@ dl_clearflags (struct dep_list *dl)
 struct dep_item*
 dl_find (struct dep_list *dl, const char *path)
 {
+    struct dep_item find;
+
     assert (dl != NULL);
     assert (path != NULL);
 
-    struct dep_item find;
     find.type = DI_EXT_PATH;
     find.u.ext_path = path;
 
@@ -217,13 +219,14 @@ dl_find (struct dep_list *dl, const char *path)
 struct chg_list*
 dl_readdir (DIR *dir, struct dep_list* before)
 {
-    assert (dir != NULL);
-
     struct dirent *ent;
     struct dep_item *item, *before_item;
+    struct chg_list *head;
     mode_t type;
 
-    struct chg_list *head = calloc (1, sizeof (struct dep_list));
+    assert (dir != NULL);
+
+    head = calloc (1, sizeof (struct dep_list));
     if (head == NULL) {
         perror_msg (("Failed to allocate list during directory listing"));
         return NULL;
@@ -343,11 +346,11 @@ dl_calculate (struct dep_list           *before,
               const struct traverse_cbs *cbs,
               void                      *udata)
 {
-    assert (before != NULL);
-    assert (cbs != NULL);
-
     struct dep_item *di_from, *di_to, *tmp;
     size_t n_moves = 0;
+
+    assert (before != NULL);
+    assert (cbs != NULL);
 
     /*
      * Some terminology. Between 2 consecutive directory scans file can be:

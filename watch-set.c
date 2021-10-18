@@ -53,9 +53,9 @@ watch_set_init (struct watch_set *ws)
 void
 watch_set_free (struct watch_set *ws)
 {
-    assert (ws != NULL);
-
     struct watch *w, *tmp;
+
+    assert (ws != NULL);
 
     RB_FOREACH_SAFE (w, watch_set, ws, tmp) {
         watch_set_delete (ws, w);
@@ -103,9 +103,12 @@ watch_set_insert (struct watch_set *ws, struct watch *w)
 struct watch *
 watch_set_find (struct watch_set *ws, dev_t dev, ino_t inode)
 {
+    struct watch find;
+
     assert (ws != NULL);
 
-    struct watch find = { .dev = dev, .inode = inode };
+    find.dev = dev;
+    find.inode = inode;
     return RB_FIND (watch_set, ws, &find);
 }
 /**

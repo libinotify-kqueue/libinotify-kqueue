@@ -79,10 +79,10 @@ RB_GENERATE(dp, dirpath_t, link, dirpath_cmp);
 static char *
 fd_getpath (int fd)
 {
-    assert (fd != -1);
-
     char *path = NULL;
     struct stat st;
+
+    assert (fd != -1);
 
     if (fstat (fd, &st) == -1) {
         return NULL;
@@ -111,21 +111,23 @@ fd_getpath (int fd)
      * via fchdir call. Consider renaming of watched directory as relatively
      * rare operation so catching such a race is unlikely
      */
-    DIR *save = opendir(".");
+    {
+        DIR *save = opendir(".");
 
-    if (fchdir (fd) == 0) {
-        path = malloc (PATH_MAX);
-        if (path != NULL && getcwd (path, PATH_MAX) == NULL) {
-            free (path);
-            path = NULL;
+        if (fchdir (fd) == 0) {
+            path = malloc (PATH_MAX);
+            if (path != NULL && getcwd (path, PATH_MAX) == NULL) {
+                free (path);
+                path = NULL;
+            }
         }
-    }
 
-    if (save != NULL) {
-        int saved_errno = errno;
-        fchdir (dirfd (save));
-        closedir (save);
-        errno = saved_errno;
+        if (save != NULL) {
+            int saved_errno = errno;
+            fchdir (dirfd (save));
+            closedir (save);
+            errno = saved_errno;
+        }
     }
 #endif /* ENABLE_UNSAFE_FCHDIR && F_GETPATH */
 
@@ -160,9 +162,9 @@ dir_remove (dirpath_t *dir)
 static dirpath_t *
 dir_insert (const char* path, ino_t inode, dev_t dev)
 {
-    assert (path != NULL);
-
     dirpath_t *newdp, *olddp;
+
+    assert (path != NULL);
 
     newdp = calloc (1, sizeof (dirpath_t));
     if (newdp == NULL) {
@@ -202,11 +204,11 @@ dir_insert (const char* path, ino_t inode, dev_t dev)
 char *
 fd_getpath_cached (int fd)
 {
-    assert (fd != -1);
-
     dirpath_t find, *dir;
     struct stat st1, st2;
     char *path;
+
+    assert (fd != -1);
 
     if (fstat (fd, &st1) == -1) {
         return NULL;
@@ -253,11 +255,11 @@ fd_getpath_cached (int fd)
 static char*
 path_concat (const char *dir, const char *file)
 {
-    assert (dir != NULL);
-    assert (file != NULL);
-
     size_t dir_len, file_len, alloc_sz;
     char *path;
+
+    assert (dir != NULL);
+    assert (file != NULL);
 
     dir_len = strlen (dir);
     file_len = strlen (file);

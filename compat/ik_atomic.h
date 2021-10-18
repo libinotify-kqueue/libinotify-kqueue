@@ -32,21 +32,24 @@ typedef	_Atomic(unsigned int)		atomic_uint;
 #define ATOMIC_VAR_INIT(value)          (value)
 #define	atomic_init(object, value)	(*(object) = (value))
 #define atomic_load(object) ({ \
+    typeof (*(object)) ret_; \
     pthread_mutex_lock (&ik_atomic_mutex); \
-    typeof (*(object)) ret_ = *(object); \
+    ret_ = *(object); \
     pthread_mutex_unlock (&ik_atomic_mutex); \
     ret_; \
 })
 #define atomic_fetch_add(object, operand) ({ \
+    typeof (*(object)) ret_; \
     pthread_mutex_lock (&ik_atomic_mutex); \
-    typeof (*(object)) ret_ = *(object); \
+    ret_ = *(object); \
     *(object) += (operand); \
     pthread_mutex_unlock (&ik_atomic_mutex); \
     ret_; \
 })
 #define atomic_fetch_sub(object, operand) ({ \
+    typeof (*(object)) ret_; \
     pthread_mutex_lock (&ik_atomic_mutex); \
-    typeof (*(object)) ret_ = *(object); \
+    ret_ = *(object); \
     *(object) -= (operand); \
     pthread_mutex_unlock (&ik_atomic_mutex); \
     ret_; \
