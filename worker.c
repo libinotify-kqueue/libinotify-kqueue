@@ -453,20 +453,35 @@ worker_remove (worker *wrk,
                int     id)
 {
     assert (wrk != NULL);
-    assert (id != -1);
+    assert (id >= 0);
 
     i_watch *iw;
     SLIST_FOREACH (iw, &wrk->head, next) {
 
         if (iw->wd == id) {
-            event_queue_enqueue (&wrk->eq, id, IN_IGNORED, 0, NULL);
-            SLIST_REMOVE (&wrk->head, iw, i_watch, next);
-            iwatch_free (iw);
+            worker_remove_iwatch (wrk, iw);
             return 0;
         }
     }
     errno = EINVAL;
     return -1;
+}
+
+/**
+ * Stop and remove a watch.
+ *
+ * @param[in] wrk A pointer to #worker.
+ * @param[in] iw  A pointer to #i_watch to remove.
+ **/
+void
+worker_remove_iwatch (worker *wrk, i_watch *iw)
+{
+    assert (wrk != NULL);
+    assert (iw != NULL);
+
+    event_queue_enqueue (&wrk->eq, iw->wd, IN_IGNORED, 0, NULL);
+    SLIST_REMOVE (&wrk->head, iw, i_watch, next);
+    iwatch_free (iw);
 }
 
 /**

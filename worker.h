@@ -105,6 +105,7 @@ void    worker_wait           (worker *wrk);
 
 int     worker_add_or_modify  (worker *wrk, const char *path, uint32_t flags);
 int     worker_remove         (worker *wrk, int id);
+void    worker_remove_iwatch  (worker *wrk, i_watch *iw);
 int     worker_set_param      (worker *wrk, int param, intptr_t value);
 
 static inline void

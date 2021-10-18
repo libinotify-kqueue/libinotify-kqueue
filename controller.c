@@ -224,6 +224,11 @@ inotify_rm_watch (int fd,
 {
     worker_cmd cmd;
 
+    if (wd < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
     if (!is_opened (fd)) {
         return -1;	/* errno = EBADF */
     }

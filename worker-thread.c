@@ -402,7 +402,7 @@ produce_notifications (worker *wrk, struct kevent *event)
                         break;
                     }
                 }
-                worker_remove (wrk, wd->iw->wd);
+                worker_remove_iwatch (wrk, wd->iw);
                 break;
             }
         }
