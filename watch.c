@@ -343,6 +343,25 @@ watch_free (watch *w)
 }
 
 /**
+ * Calculates #watch file status with traversing depedencies.
+ *
+ * @param[in] w  A pointer to the #watch.
+ * @return mode in stat() format.
+ **/
+mode_t
+watch_get_mode (watch *w)
+{
+    assert (w != NULL);
+    assert (!watch_deps_empty (w));
+
+    mode_t mode = watch_dep_get_mode (SLIST_FIRST(&w->deps));
+    assert (!S_ISUNK (mode));
+
+    return (mode);
+}
+
+
+/**
  * Find a file dependency associated with a #watch.
  *
  * @param[in] w  A pointer to the #watch.

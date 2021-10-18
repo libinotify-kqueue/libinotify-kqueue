@@ -67,6 +67,7 @@ uint32_t kqueue_to_inotify (uint32_t flags,
 int    watch_open (int dirfd, const char *path, uint32_t flags);
 watch *watch_init (int fd, struct stat *st);
 void   watch_free (watch *w);
+mode_t watch_get_mode (watch *w);
 
 struct watch_dep *watch_find_dep (watch *w, i_watch *iw, const dep_item *di);
 struct watch_dep *watch_add_dep  (watch *w, i_watch *iw, const dep_item *di);

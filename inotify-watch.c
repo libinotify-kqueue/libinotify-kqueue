@@ -223,6 +223,18 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
 
     watch *w = watch_set_find (&iw->watches, iw->dev, di->inode);
     if (w != NULL) {
+        assert (!watch_deps_empty (w));
+        /* Inherit dep-item type from other associated dep-items */
+        mode_t mode = watch_get_mode (w);
+        if (!S_ISUNK (di->type) && (di->type & S_IFMT) != (mode & S_IFMT)) {
+            perror_msg ("File modes taken with readdir and fstat are different"
+                " %d != %d", (int)di->type, (int)mode);
+        }
+        di_settype (di, mode);
+        /* Don`t open a watches with empty kqueue filter flags */
+        if (inotify_to_kqueue (iw->flags, di->type, false) == 0) {
+            return NULL;
+        }
         goto hold;
     }
 
@@ -246,6 +258,12 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
     }
 
     di_settype (di, st.st_mode);
+
+    /* Don`t open a watches with empty kqueue filter flags */
+    if (inotify_to_kqueue (iw->flags, di->type, false) == 0) {
+        close (fd);
+        return NULL;
+    }
 
     /* Correct inode number if opened file is not a listed one */
     if (di->inode != st.st_ino) {
