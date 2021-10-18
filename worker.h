@@ -29,8 +29,6 @@
 
 #include <pthread.h>
 
-typedef struct worker worker;
-
 #include "worker-thread.h"
 #include "dep-list.h"
 #include "event-queue.h"
@@ -54,7 +52,7 @@ typedef enum {
  * This structure represents a user call to the inotify API.
  * It is also used to synchronize a user thread with a worker thread.
  **/
-typedef struct worker_cmd {
+struct worker_cmd {
     worker_cmd_type_t type;
     int retval;
     int error;
@@ -73,11 +71,13 @@ typedef struct worker_cmd {
         } param;
     };
 
-} worker_cmd;
+};
 
-void worker_cmd_add     (worker_cmd *cmd, const char *filename, uint32_t mask);
-void worker_cmd_remove  (worker_cmd *cmd, int watch_id);
-void worker_cmd_param   (worker_cmd *cmd, int param, intptr_t value);
+void worker_cmd_add    (struct worker_cmd *cmd,
+                        const char *filename,
+                        uint32_t mask);
+void worker_cmd_remove (struct worker_cmd *cmd, int watch_id);
+void worker_cmd_param  (struct worker_cmd *cmd, int param, intptr_t value);
 
 struct worker {
     int kq;                /* kqueue descriptor */
@@ -90,33 +90,35 @@ struct worker {
 
     pthread_mutex_t mutex; /* worker mutex */
     atomic_uint mutex_rc;  /* worker mutex sleepers/holders refcount */
-    ik_sem_t sync_sem;     /* worker <-> user syncronization semaphore */
-    event_queue eq;        /* inotify events queue */
-    watch_set watches;     /* kqueue watches */
+    struct ik_sem sync_sem;   /* worker <-> user syncronization semaphore */
+    struct event_queue eq;    /* inotify events queue */
+    struct watch_set watches; /* kqueue watches */
 };
 
 #define container_of(p, s, f) ((s *)(((uint8_t *)(p)) - offsetof(s, f)))
 #define EQ_TO_WRK(eqp) container_of((eqp), struct worker, eq)
 
-worker* worker_create         (int flags);
-void    worker_free           (worker *wrk);
-void    worker_post           (worker *wrk);
-void    worker_wait           (worker *wrk);
+struct worker* worker_create  (int flags);
+void           worker_free    (struct worker *wrk);
+void           worker_post    (struct worker *wrk);
+void           worker_wait    (struct worker *wrk);
 
-int     worker_add_or_modify  (worker *wrk, const char *path, uint32_t flags);
-int     worker_remove         (worker *wrk, int id);
-void    worker_remove_iwatch  (worker *wrk, i_watch *iw);
-int     worker_set_param      (worker *wrk, int param, intptr_t value);
+int     worker_add_or_modify  (struct worker *wrk,
+                               const char *path,
+                               uint32_t flags);
+int     worker_remove         (struct worker *wrk, int id);
+void    worker_remove_iwatch  (struct worker *wrk, struct i_watch *iw);
+int     worker_set_param      (struct worker *wrk, int param, intptr_t value);
 
 static inline void
-worker_lock (worker *wrk)
+worker_lock (struct worker *wrk)
 {
     atomic_fetch_add (&wrk->mutex_rc, 1);
     pthread_mutex_lock (&wrk->mutex);
 }
 
 static inline void
-worker_unlock (worker *wrk)
+worker_unlock (struct worker *wrk)
 {
     assert (atomic_load (&wrk->mutex_rc) > 0);
     pthread_mutex_unlock (&wrk->mutex);

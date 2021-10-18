@@ -76,13 +76,13 @@
  * Minimal pthread condition variable-based POSIX semaphore shim.
  * Used as neither Darwin nor valgrind supports POSIX semafores.
  */
-typedef struct {
+struct ik_sem {
     int val;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
-} ik_sem_t;
+};
 static inline int
-ik_sem_init (ik_sem_t *sem, int pshared, int value)
+ik_sem_init (struct ik_sem *sem, int pshared, int value)
 {
     pthread_mutex_init (&sem->mutex, NULL);
     pthread_cond_init (&sem->cond, NULL);
@@ -90,7 +90,7 @@ ik_sem_init (ik_sem_t *sem, int pshared, int value)
     return 0;
 }
 static inline int
-ik_sem_wait (ik_sem_t *sem)
+ik_sem_wait (struct ik_sem *sem)
 {
     pthread_mutex_lock (&sem->mutex);
     while (sem->val == 0) {
@@ -101,7 +101,7 @@ ik_sem_wait (ik_sem_t *sem)
     return 0;
 }
 static inline int
-ik_sem_post (ik_sem_t *sem)
+ik_sem_post (struct ik_sem *sem)
 {
     pthread_mutex_lock (&sem->mutex);
     ++sem->val;
@@ -110,7 +110,7 @@ ik_sem_post (ik_sem_t *sem)
     return 0;
 }
 static inline int
-ik_sem_destroy (ik_sem_t *sem)
+ik_sem_destroy (struct ik_sem *sem)
 {
     pthread_cond_destroy (&sem->cond);
     pthread_mutex_destroy (&sem->mutex);

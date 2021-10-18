@@ -26,8 +26,6 @@
 
 #include "compat.h"
 
-typedef struct i_watch i_watch;
-
 #include "dep-list.h"
 #include "watch-set.h"
 #include "watch.h"
@@ -36,7 +34,7 @@ typedef struct i_watch i_watch;
 struct i_watch {
     int wd;                    /* watch descriptor */
     int fd;                    /* file descriptor of parent kqueue watch */
-    worker *wrk;               /* pointer to a parent worker structure */
+    struct worker *wrk;        /* pointer to a parent worker structure */
     bool is_closed;            /* inotify watch is stopped but not freed yet */
 #ifdef SKIP_SUBFILES
     bool skip_subfiles;        /* Fs is not safe to start subwatches */
@@ -45,20 +43,21 @@ struct i_watch {
     mode_t mode;               /* File status of the watched inode */
     ino_t inode;               /* inode number of watched inode */
     dev_t dev;                 /* device number of watched inode */
-    dep_list deps;             /* dependence list of inotify watch */
+    struct dep_list deps;      /* dependence list of inotify watch */
     SLIST_ENTRY(i_watch) next; /* pointer to the next inotify watch in list */
 };
 
-int      iwatch_open (const char *path, uint32_t flags);
-i_watch *iwatch_init (worker *wrk, int fd, uint32_t flags);
-void     iwatch_free (i_watch *iw);
+int             iwatch_open (const char *path, uint32_t flags);
+struct i_watch *iwatch_init (struct worker *wrk, int fd, uint32_t flags);
+void            iwatch_free (struct i_watch *iw);
 
-void     iwatch_update_flags    (i_watch *iw, uint32_t flags);
+void     iwatch_update_flags    (struct i_watch *iw, uint32_t flags);
 
-watch*   iwatch_add_subwatch    (i_watch *iw, dep_item *di);
-void     iwatch_del_subwatch    (i_watch *iw, const dep_item *di);
-void     iwatch_move_subwatch   (i_watch *iw,
-                                 const dep_item *di_from,
-                                 const dep_item *di_to);
+struct watch* iwatch_add_subwatch  (struct i_watch *iw, struct dep_item *di);
+void          iwatch_del_subwatch  (struct i_watch *iw,
+                                    const struct dep_item *di);
+void          iwatch_move_subwatch (struct i_watch *iw,
+                                    const struct dep_item *di_from,
+                                    const struct dep_item *di_to);
 
 #endif /* __INOTIFY_WATCH_H__ */

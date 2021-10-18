@@ -45,7 +45,7 @@
  * @param[in] eq A pointer to #event_queue.
  **/
 void
-event_queue_init (event_queue *eq)
+event_queue_init (struct event_queue *eq)
 {
     eq->allocated = 0;
     eq->count = 0;
@@ -60,7 +60,7 @@ event_queue_init (event_queue *eq)
  * @param[in] eq A pointer to #event_queue.
  **/
 void
-event_queue_free (event_queue *eq)
+event_queue_free (struct event_queue *eq)
 {
     int i;
 
@@ -79,7 +79,7 @@ event_queue_free (event_queue *eq)
  * @return 0 on success, -1 otherwise.
  **/
 int
-event_queue_set_max_events (event_queue *eq, int max_events)
+event_queue_set_max_events (struct event_queue *eq, int max_events)
 {
     if (max_events <= 0) {
         errno = EINVAL;
@@ -96,7 +96,7 @@ event_queue_set_max_events (event_queue *eq, int max_events)
  * @param[in] eq A pointer to #event_queue.
  **/
 static int
-event_queue_extend (event_queue *eq)
+event_queue_extend (struct event_queue *eq)
 {
     if (eq->count >= eq->allocated) {
         int to_allocate = eq->count + 1;
@@ -123,11 +123,11 @@ event_queue_extend (event_queue *eq)
  * @return 0 on success, -1 otherwise.
  **/
 int
-event_queue_enqueue (event_queue *eq,
-                     int          wd,
-                     uint32_t     mask,
-                     uint32_t     cookie,
-                     const char  *name)
+event_queue_enqueue (struct event_queue *eq,
+                     int                 wd,
+                     uint32_t            mask,
+                     uint32_t            cookie,
+                     const char         *name)
 {
     struct inotify_event *prev_ie;
     int retval = 0;
@@ -193,7 +193,7 @@ event_queue_enqueue (event_queue *eq,
  * @param[in] sbspace Amount of space in socket buffer available to write
  *                    w/o blocking
  **/
-void event_queue_flush (event_queue *eq, size_t sbspace)
+void event_queue_flush (struct event_queue *eq, size_t sbspace)
 {
     int iovcnt, iovmax;
     size_t iovlen = 0;
@@ -245,7 +245,7 @@ void event_queue_flush (event_queue *eq, size_t sbspace)
  * @param[in] eq A pointer to #event_queue.
  **/
 void
-event_queue_reset_last (event_queue *eq)
+event_queue_reset_last (struct event_queue *eq)
 {
     assert (eq != NULL);
 

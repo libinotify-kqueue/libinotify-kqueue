@@ -50,7 +50,7 @@
 #define DL_FOREACH_SAFE(di, dl, tmp_di) \
     RB_FOREACH_SAFE ((di), dep_tree, &(dl)->head, (tmp_di))
 
-typedef struct dep_item {
+struct dep_item {
     union {
         RB_ENTRY(dep_item) tree_link;
         struct {
@@ -63,50 +63,51 @@ typedef struct dep_item {
     ino_t inode;
     mode_t type;
     char path[];
-} dep_item;
+};
 
-typedef struct dep_list {
+struct dep_list {
     RB_HEAD(dep_tree, dep_item) head;
-} dep_list;
+};
 
-typedef struct chg_list {
+struct chg_list {
     SLIST_HEAD(, dep_item) head;
-} chg_list;
+};
 
-typedef void (* single_entry_cb) (void *udata, dep_item *di);
+typedef void (* single_entry_cb) (void *udata, struct dep_item *di);
 typedef void (* dual_entry_cb)   (void *udata,
-                                  dep_item *from_di,
-                                  dep_item *to_di);
+                                  struct dep_item *from_di,
+                                  struct dep_item *to_di);
 
-typedef struct traverse_cbs {
+struct traverse_cbs {
     single_entry_cb  added;
     single_entry_cb  removed;
     single_entry_cb  replaced;
     dual_entry_cb    moved;
-} traverse_cbs;
+};
 
-dep_item* di_create       (const char *path, ino_t inode, mode_t type);
-void      di_free         (dep_item *di);
-dep_list* dl_alloc        ();
-void      dl_init         (dep_list *dl);
-dep_list* dl_create       ();
-void      dl_insert       (dep_list *dl, dep_item *di);
-void      dl_remove       (dep_list *dl, dep_item *di);
-void      dl_print        (dep_list *dl);
-void      dl_free         (dep_list *dl);
-void      dl_join         (dep_list *dl_target, chg_list *dl_source);
-dep_item* dl_find         (dep_list *dl, const char *path);
-chg_list* dl_readdir      (DIR *dir, dep_list *before);
-chg_list* dl_listing      (int fd, struct dep_list *before);
+struct dep_item* di_create  (const char *path, ino_t inode, mode_t type);
+void             di_free    (struct dep_item *di);
+struct dep_list* dl_alloc   (void);
+void             dl_init    (struct dep_list *dl);
+struct dep_list* dl_create  (void);
+void             dl_insert  (struct dep_list *dl, struct dep_item *di);
+void             dl_remove  (struct dep_list *dl, struct dep_item *di);
+void             dl_print   (struct dep_list *dl);
+void             dl_free    (struct dep_list *dl);
+void             dl_join    (struct dep_list *dl_target,
+                             struct chg_list *dl_source);
+struct dep_item* dl_find    (struct dep_list *dl, const char *path);
+struct chg_list* dl_readdir (DIR *dir, struct dep_list *before);
+struct chg_list* dl_listing (int fd, struct dep_list *before);
 
 void
-dl_calculate (dep_list            *before,
-              chg_list            *after,
-              const traverse_cbs  *cbs,
-              void                *udata);
+dl_calculate (struct dep_list           *before,
+              struct chg_list           *after,
+              const struct traverse_cbs *cbs,
+              void                      *udata);
 
 static inline void
-di_settype (dep_item *di, mode_t type)
+di_settype (struct dep_item *di, mode_t type)
 {
     di->type = (di->type & ~S_IFMT) | (type & S_IFMT);
 }

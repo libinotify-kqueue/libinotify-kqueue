@@ -30,15 +30,15 @@
 #include <sys/types.h> /* size_t */
 #include <sys/stat.h>  /* ino_t */
 
-typedef RB_HEAD(watch_set, watch) watch_set;
+RB_HEAD(watch_set, watch);
 
 #include "watch.h"
 
-void   watch_set_init   (watch_set *ws);
-void   watch_set_free   (watch_set *ws);
-void   watch_set_delete (watch_set *ws, watch *w);
-void   watch_set_insert (watch_set *ws, watch *w);
-watch *watch_set_find   (watch_set *ws, dev_t dev, ino_t inode);
+void          watch_set_init   (struct watch_set *ws);
+void          watch_set_free   (struct watch_set *ws);
+void          watch_set_delete (struct watch_set *ws, struct watch *w);
+void          watch_set_insert (struct watch_set *ws, struct watch *w);
+struct watch *watch_set_find   (struct watch_set *ws, dev_t dev, ino_t inode);
 
 RB_PROTOTYPE(watch_set, watch, link, watch_cmp);
 

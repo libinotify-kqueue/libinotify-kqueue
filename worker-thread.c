@@ -44,8 +44,10 @@
 #include "worker.h"
 #include "worker-thread.h"
 
-void worker_erase (worker *wrk);
-static void handle_moved (void *udata, dep_item *from_di, dep_item *to_di);
+void worker_erase (struct worker *wrk);
+static void handle_moved (void *udata,
+                          struct dep_item *from_di,
+                          struct dep_item *to_di);
 
 /**
  * Create a new inotify event and place it to event queue.
@@ -56,10 +58,10 @@ static void handle_moved (void *udata, dep_item *from_di, dep_item *to_di);
  * @return 0 on success, -1 otherwise.
  **/
 static int
-enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
+enqueue_event (struct i_watch *iw, uint32_t mask, const struct dep_item *di)
 {
     assert (iw != NULL);
-    worker *wrk = iw->wrk;
+    struct worker *wrk = iw->wrk;
     assert (wrk != NULL);
 
     /*
@@ -104,7 +106,7 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
  * @param[in] cmd A pointer to #worker_cmd.
  **/
 void
-process_command (worker *wrk, worker_cmd *cmd)
+process_command (struct worker *wrk, struct worker_cmd *cmd)
 {
     assert (wrk != NULL);
 
@@ -140,10 +142,10 @@ process_command (worker *wrk, worker_cmd *cmd)
  * It is passed to dl_calculate as user data and then is used in all
  * the callbacks.
  **/
-typedef struct {
-    i_watch *iw;
+struct handle_context {
+    struct i_watch *iw;
     uint32_t fflags;
-} handle_context;
+};
 
 /**
  * Produce an IN_CREATE notification for a new file and start wathing on it.
@@ -155,11 +157,11 @@ typedef struct {
  * @param[in] di     File name & inode number of a new file.
  **/
 static void
-handle_added (void *udata, dep_item *di)
+handle_added (void *udata, struct dep_item *di)
 {
     assert (udata != NULL);
 
-    handle_context *ctx = (handle_context *) udata;
+    struct handle_context *ctx = (struct handle_context *) udata;
     assert (ctx->iw != NULL);
 
     iwatch_add_subwatch (ctx->iw, di);
@@ -181,11 +183,11 @@ handle_added (void *udata, dep_item *di)
  * @param[in] di     File name & inode number of the removed file.
  **/
 static void
-handle_removed (void *udata, dep_item *di)
+handle_removed (void *udata, struct dep_item *di)
 {
     assert (udata != NULL);
 
-    handle_context *ctx = (handle_context *) udata;
+    struct handle_context *ctx = (struct handle_context *) udata;
     assert (ctx->iw != NULL);
 
 #ifdef HAVE_NOTE_EXTEND_ON_MOVE_FROM
@@ -209,11 +211,11 @@ handle_removed (void *udata, dep_item *di)
  * @param[in] di    A file name & inode number of the replaced file.
  **/
 static void
-handle_replaced (void *udata, dep_item *di)
+handle_replaced (void *udata, struct dep_item *di)
 {
     assert (udata != NULL);
 
-    handle_context *ctx = (handle_context *) udata;
+    struct handle_context *ctx = (struct handle_context *) udata;
     assert (ctx->iw != NULL);
 
     iwatch_del_subwatch (ctx->iw, di);
@@ -230,11 +232,11 @@ handle_replaced (void *udata, dep_item *di)
  * @param[in] to_di   A new name & inode number of the file.
  **/
 static void
-handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
+handle_moved (void *udata, struct dep_item *from_di, struct dep_item *to_di)
 {
     assert (udata != NULL);
 
-    handle_context *ctx = (handle_context *) udata;
+    struct handle_context *ctx = (struct handle_context *) udata;
     assert (ctx->iw != NULL);
 
     if (S_ISUNK (to_di->type)) {
@@ -247,7 +249,7 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
 }
 
 
-static const traverse_cbs cbs = {
+static const struct traverse_cbs cbs = {
     handle_added,
     handle_removed,
     handle_replaced,
@@ -264,18 +266,18 @@ static const traverse_cbs cbs = {
  * @param[in] event A pointer to the received kqueue event.
  **/
 void
-produce_directory_diff (i_watch *iw, struct kevent *event)
+produce_directory_diff (struct i_watch *iw, struct kevent *event)
 {
     assert (iw != NULL);
     assert (event != NULL);
 
-    chg_list *changes = dl_listing (iw->fd, &iw->deps);
+    struct chg_list *changes = dl_listing (iw->fd, &iw->deps);
     if (changes == NULL) {
         perror_msg ("Failed to create a listing for watch %d", iw->wd);
         return;
     }
 
-    handle_context ctx;
+    struct handle_context ctx;
     memset (&ctx, 0, sizeof (ctx));
     ctx.iw = iw;
     ctx.fflags = event->fflags;
@@ -290,7 +292,7 @@ produce_directory_diff (i_watch *iw, struct kevent *event)
  * @param[in] event A pointer to the associated received kqueue event.
  **/
 void
-produce_notifications (worker *wrk, struct kevent *event)
+produce_notifications (struct worker *wrk, struct kevent *event)
 {
     /* Heuristic order of dearrgegated inotify events */
     static uint32_t ie_order[] = {
@@ -316,7 +318,7 @@ produce_notifications (worker *wrk, struct kevent *event)
     assert (wrk != NULL);
     assert (event != NULL);
 
-    watch *w = (watch *)event->udata;
+    struct watch *w = (struct watch *)event->udata;
     assert (w != NULL);
     assert (w->fd == event->ident);
     assert (!watch_deps_empty (w));
@@ -353,7 +355,7 @@ produce_notifications (worker *wrk, struct kevent *event)
 
         WD_FOREACH (wd, w) {
 
-            i_watch *iw = wd->iw;
+            struct i_watch *iw = wd->iw;
             bool is_parent = watch_dep_is_parent (wd);
 
             assert (watch_set_find (&wrk->watches, w->dev, w->inode) == w);
@@ -421,8 +423,8 @@ void*
 worker_thread (void *arg)
 {
     assert (arg != NULL);
-    worker* wrk = (worker *) arg;
-    worker_cmd *cmd;
+    struct worker* wrk = (struct worker *) arg;
+    struct worker_cmd *cmd;
     size_t i, sbspace = 0;
 #define MAXEVENTS 1
     struct kevent received[MAXEVENTS];
@@ -456,7 +458,7 @@ worker_thread (void *arg)
                     }
 #ifdef EVFILT_USER
                 } else if (received[i].filter == EVFILT_USER) {
-                    cmd = (worker_cmd *)(intptr_t)received[i].data;
+                    cmd = (struct worker_cmd *)(intptr_t)received[i].data;
                     process_command (wrk, cmd);
 #else
                 } else if (received[i].filter == EVFILT_READ) {

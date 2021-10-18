@@ -170,7 +170,7 @@ kqueue_to_inotify (uint32_t flags,
  * @return 1 on success, -1 on error and 0 if no events have been registered
  **/
 int
-watch_register_event (watch *w, int kq, uint32_t fflags)
+watch_register_event (struct watch *w, int kq, uint32_t fflags)
 {
     assert (w != NULL);
     assert (kq != -1);
@@ -207,7 +207,7 @@ watch_register_event (watch *w, int kq, uint32_t fflags)
  * @return 1 on success, -1 on error and 0 if no events have been registered
  **/
 int
-watch_update_event (watch *w)
+watch_update_event (struct watch *w)
 {
     assert (w != NULL);
     assert (!watch_deps_empty (w));
@@ -302,12 +302,12 @@ watch_open (int dirfd, const char *path, uint32_t flags)
  * @param[in] st A stat structure of watch.
  * @return A pointer to a watch on success, NULL on failure.
  **/
-watch *
+struct watch *
 watch_init (int fd, struct stat *st)
 {
     assert (fd != -1);
 
-    watch *w = calloc (1, sizeof (struct watch));
+    struct watch *w = calloc (1, sizeof (struct watch));
     if (w == NULL) {
         perror_msg ("Failed to allocate watch");
         return NULL;
@@ -331,7 +331,7 @@ watch_init (int fd, struct stat *st)
  * @param[in] w A pointer to a watch.
  **/
 void
-watch_free (watch *w)
+watch_free (struct watch *w)
 {
     assert (w != NULL);
     if (w->fd != -1) {
@@ -356,7 +356,7 @@ watch_free (watch *w)
  * @return mode in stat() format.
  **/
 mode_t
-watch_get_mode (watch *w)
+watch_get_mode (struct watch *w)
 {
     assert (w != NULL);
     assert (!watch_deps_empty (w));
@@ -377,7 +377,7 @@ watch_get_mode (watch *w)
  * @return A pointer to a dependency record if found. NULL otherwise.
  **/
 struct watch_dep *
-watch_find_dep (watch *w, i_watch *iw, const dep_item *di)
+watch_find_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
 {
     assert (w != NULL);
     assert (iw != NULL);
@@ -402,7 +402,7 @@ watch_find_dep (watch *w, i_watch *iw, const dep_item *di)
  * @return A pointer to a created dependency record. NULL on failure.
  **/
 struct watch_dep *
-watch_add_dep (watch *w, i_watch *iw, const dep_item *di)
+watch_add_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
 {
     assert (w != NULL);
     assert (iw != NULL);
@@ -438,7 +438,7 @@ watch_add_dep (watch *w, i_watch *iw, const dep_item *di)
  * @return A pointer to a diassociated dependency record. NULL if not found.
  **/
 struct watch_dep *
-watch_del_dep (watch *w, i_watch *iw, const dep_item *di)
+watch_del_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
 {
     assert (w != NULL);
     assert (iw != NULL);
@@ -466,10 +466,10 @@ watch_del_dep (watch *w, i_watch *iw, const dep_item *di)
  * @return A pointer to a updated dependency record. NULL if not found.
  **/
 struct watch_dep *
-watch_chg_dep (watch *w,
-               i_watch *iw,
-               const dep_item *di_from,
-               const dep_item *di_to)
+watch_chg_dep (struct watch *w,
+               struct i_watch *iw,
+               const struct dep_item *di_from,
+               const struct dep_item *di_to)
 {
     assert (w != NULL);
     assert (iw != NULL);

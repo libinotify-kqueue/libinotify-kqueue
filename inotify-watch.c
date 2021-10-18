@@ -101,8 +101,8 @@ iwatch_open (const char *path, uint32_t flags)
  * @param[in] flags  A combination of inotify event flags.
  * @return A pointer to a created #i_watch on success NULL otherwise
  **/
-i_watch *
-iwatch_init (worker *wrk, int fd, uint32_t flags)
+struct i_watch *
+iwatch_init (struct worker *wrk, int fd, uint32_t flags)
 {
     assert (wrk != NULL);
     assert (fd != -1);
@@ -113,7 +113,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
         return NULL;
     }
 
-    i_watch *iw = calloc (1, sizeof (i_watch));
+    struct i_watch *iw = calloc (1, sizeof (struct i_watch));
     if (iw == NULL) {
         perror_msg ("Failed to allocate inotify watch");
         return NULL;
@@ -142,7 +142,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
 #endif
     }
 
-    watch *parent = watch_set_find (&wrk->watches, iw->dev, iw->inode);
+    struct watch *parent = watch_set_find (&wrk->watches, iw->dev, iw->inode);
     if (parent == NULL) {
         parent = watch_init (fd, &st);
         if (parent == NULL) {
@@ -162,7 +162,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
 
     if (S_ISDIR (st.st_mode)) {
 
-        dep_item *iter;
+        struct dep_item *iter;
         DL_FOREACH (iter, &iw->deps) {
             iwatch_add_subwatch (iw, iter);
         }
@@ -176,18 +176,18 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
  * @param[in] iw      A pointer to #i_watch to remove.
  **/
 void
-iwatch_free (i_watch *iw)
+iwatch_free (struct i_watch *iw)
 {
     assert (iw != NULL);
 
     /* unwatch subfiles */
-    dep_item *iter;
+    struct dep_item *iter;
     DL_FOREACH (iter, &iw->deps) {
         iwatch_del_subwatch (iw, iter);
     }
 
     /* unwatch parent */
-    watch *w = watch_set_find (&iw->wrk->watches, iw->dev, iw->inode);
+    struct watch *w = watch_set_find (&iw->wrk->watches, iw->dev, iw->inode);
     if (w != NULL) {
         assert (!watch_deps_empty (w));
         watch_del_dep (w, iw, DI_PARENT);
@@ -204,8 +204,8 @@ iwatch_free (i_watch *iw)
  * @param[in] di A dependency item with relative path to watch.
  * @return A pointer to a created watch.
  **/
-watch*
-iwatch_add_subwatch (i_watch *iw, dep_item *di)
+struct watch*
+iwatch_add_subwatch (struct i_watch *iw, struct dep_item *di)
 {
     assert (iw != NULL);
     assert (di != NULL);
@@ -220,7 +220,7 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
     }
 #endif
 
-    watch *w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
+    struct watch *w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
     if (w != NULL) {
         assert (!watch_deps_empty (w));
         /* Inherit dep-item type from other associated dep-items */
@@ -313,12 +313,12 @@ lstat:
  * @param[in] di A dependency list item to remove watch.
  **/
 void
-iwatch_del_subwatch (i_watch *iw, const dep_item *di)
+iwatch_del_subwatch (struct i_watch *iw, const struct dep_item *di)
 {
     assert (iw != NULL);
     assert (di != NULL);
 
-    watch *w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
+    struct watch *w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
     if (w != NULL) {
         assert (!watch_deps_empty (w));
         watch_del_dep (w, iw, di);
@@ -333,16 +333,16 @@ iwatch_del_subwatch (i_watch *iw, const dep_item *di)
  * @param[in] di_to   A new name & inode number of the file.
  **/
 void
-iwatch_move_subwatch (i_watch *iw,
-                      const dep_item *di_from,
-                      const dep_item *di_to)
+iwatch_move_subwatch (struct i_watch *iw,
+                      const struct dep_item *di_from,
+                      const struct dep_item *di_to)
 {
     assert (iw != NULL);
     assert (di_from != NULL);
     assert (di_to != NULL);
     assert (di_from->inode == di_to->inode);
 
-    watch *w = watch_set_find (&iw->wrk->watches, iw->dev, di_to->inode);
+    struct watch *w = watch_set_find (&iw->wrk->watches, iw->dev, di_to->inode);
     if (w != NULL && !watch_deps_empty (w)) {
         watch_chg_dep (w, iw, di_from, di_to);
     }
@@ -358,7 +358,7 @@ iwatch_move_subwatch (i_watch *iw,
  * @param[in] flags A combination of the inotify watch flags.
  **/
 void
-iwatch_update_flags (i_watch *iw, uint32_t flags)
+iwatch_update_flags (struct i_watch *iw, uint32_t flags)
 {
     assert (iw != NULL);
 
@@ -370,13 +370,13 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
     iw->flags = flags;
 
     /* update parent kqueue watch */
-    watch *w = watch_set_find (&iw->wrk->watches, iw->dev, iw->inode);
+    struct watch *w = watch_set_find (&iw->wrk->watches, iw->dev, iw->inode);
     assert (w != NULL);
     assert (!watch_deps_empty (w));
     watch_update_event (w);
 
     /* update kqueue subwatches or close those we dont need to watch */
-    dep_item *iter;
+    struct dep_item *iter;
     DL_FOREACH (iter, &iw->deps) {
         w = watch_set_find (&iw->wrk->watches, iw->dev, iter->inode);
         if (w == NULL || watch_find_dep (w, iw, iter) == NULL) {

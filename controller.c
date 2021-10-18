@@ -43,10 +43,10 @@
 
 
 #define WORKER_SZ 100
-static worker* volatile workers[WORKER_SZ];
+static struct worker* volatile workers[WORKER_SZ];
 static pthread_rwlock_t workers_rwlock = PTHREAD_RWLOCK_INITIALIZER;
 static bool initialized = false;
-static worker dummy_wrk = {
+static struct worker dummy_wrk = {
     .io = { -1, -1 },
     .mutex = PTHREAD_MUTEX_INITIALIZER
 };
@@ -72,7 +72,7 @@ workerset_unlock (void)
     pthread_rwlock_unlock (&workers_rwlock);
 }
 
-static int     worker_exec (int fd, worker_cmd *cmd);
+static int     worker_exec (int fd, struct worker_cmd *cmd);
 static void    workers_init (void);
 
 /**
@@ -135,7 +135,7 @@ inotify_init1 (int flags) __THROW
         return -1;
     }
 
-    worker *wrk = worker_create (flags);
+    struct worker *wrk = worker_create (flags);
     if (wrk == NULL) {
         workers[i] = WRK_FREE;
         return -1;
@@ -151,7 +151,7 @@ inotify_init1 (int flags) __THROW
      * for duplicates and remove them now. */
     int j;
     for (j = 0; j < WORKER_SZ; j++) {
-        worker *jw = workers[j];
+        struct worker *jw = workers[j];
         if (jw != WRK_FREE && jw != WRK_RESV && jw->io[INOTIFY_FD] == lfd &&
             jw != wrk) {
             workers[j] = WRK_FREE;
@@ -180,7 +180,7 @@ inotify_add_watch (int         fd,
                    uint32_t    mask) __THROW
 {
     struct stat st;
-    worker_cmd cmd;
+    struct worker_cmd cmd;
 
     if (!is_opened (fd)) {
         return -1;	/* errno = EBADF */
@@ -222,7 +222,7 @@ int
 inotify_rm_watch (int fd,
                   int wd) __THROW
 {
-    worker_cmd cmd;
+    struct worker_cmd cmd;
 
     if (wd < 0) {
         errno = EINVAL;
@@ -248,7 +248,7 @@ inotify_rm_watch (int fd,
 int
 inotify_set_param (int fd, int param, intptr_t value)
 {
-    worker_cmd cmd;
+    struct worker_cmd cmd;
 
     if (!is_opened (fd)) {
         return -1;	/* errno = EBADF */
@@ -268,7 +268,7 @@ inotify_set_param (int fd, int param, intptr_t value)
  * @param[in] wrk A pointer to a worker
  **/
 void
-worker_erase (worker *wrk)
+worker_erase (struct worker *wrk)
 {
     assert (wrk != NULL);
 
@@ -289,7 +289,7 @@ worker_erase (worker *wrk)
  * @return 0 on success, -1 on failure with errno set.
  **/
 static int
-worker_exec (int fd, worker_cmd *cmd)
+worker_exec (int fd, struct worker_cmd *cmd)
 {
     if (!initialized) {
         errno = EINVAL;
@@ -301,7 +301,7 @@ worker_exec (int fd, worker_cmd *cmd)
     /* look up for an appropriate worker */
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
-        worker *wrk = workers[i];
+        struct worker *wrk = workers[i];
         if (wrk != WRK_FREE && wrk != WRK_RESV && wrk->io[INOTIFY_FD] == fd) {
             worker_lock (wrk);
             if (wrk != workers[i]) {

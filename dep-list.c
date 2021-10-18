@@ -46,9 +46,9 @@
  * @param[in] dl A pointer to a list.
  **/
 void
-dl_print (dep_list *dl)
+dl_print (struct dep_list *dl)
 {
-    dep_item *di;
+    struct dep_item *di;
 
     DL_FOREACH (di, dl) {
         printf ("%lld:%s ", (long long int) di->inode, di->path);
@@ -61,10 +61,10 @@ dl_print (dep_list *dl)
  *
  * @return A pointer to a new list or NULL in the case of error.
  **/
-dep_list*
-dl_alloc ()
+struct dep_list*
+dl_alloc (void)
 {
-    dep_list *dl = calloc (1, sizeof (dep_list));
+    struct dep_list *dl = calloc (1, sizeof (struct dep_list));
     if (dl == NULL) {
         perror_msg ("Failed to allocate new dep-list");
     }
@@ -77,7 +77,7 @@ dl_alloc ()
  * @param[in] dl A pointer to a list.
  **/
 void
-dl_init (dep_list* dl)
+dl_init (struct dep_list* dl)
 {
     assert (dl != NULL);
     RB_INIT (&dl->head);
@@ -88,10 +88,10 @@ dl_init (dep_list* dl)
  *
  * @return A pointer to a new list or NULL in the case of error.
  **/
-dep_list*
-dl_create ()
+struct dep_list*
+dl_create (void)
 {
-    dep_list *dl = dl_alloc ();
+    struct dep_list *dl = dl_alloc ();
     if (dl == NULL) {
         return NULL;
     }
@@ -109,12 +109,12 @@ dl_create ()
  * @param[in] type  A file`s type (compatible with mode_t values)
  * @return A pointer to a new item or NULL in the case of error.
  **/
-dep_item*
+struct dep_item*
 di_create (const char *path, ino_t inode, mode_t type)
 {
     size_t pathlen = strlen (path) + 1;
 
-    dep_item *di = calloc (1, offsetof (dep_item, path) + pathlen);
+    struct dep_item *di = calloc (1, offsetof (struct dep_item, path) + pathlen);
     if (di == NULL) {
         perror_msg ("Failed to create a new dep-list item");
         return NULL;
@@ -133,7 +133,7 @@ di_create (const char *path, ino_t inode, mode_t type)
  * @param[in] di A pointer to a list item to be inserted.
  **/
 void
-dl_insert (dep_list* dl, dep_item* di)
+dl_insert (struct dep_list* dl, struct dep_item* di)
 {
     assert (dl != NULL);
     assert (di != NULL);
@@ -149,7 +149,7 @@ dl_insert (dep_list* dl, dep_item* di)
  * @param[in] di A pointer to a list item to remove.
  **/
 void
-dl_remove (dep_list* dl, dep_item* di)
+dl_remove (struct dep_list* dl, struct dep_item* di)
 {
     assert (dl != NULL);
     assert (di != NULL);
@@ -167,7 +167,7 @@ dl_remove (dep_list* dl, dep_item* di)
  * @param[in] dn A pointer to a list item. May be NULL.
  **/
 void
-di_free (dep_item *di)
+di_free (struct dep_item *di)
 {
     free (di);
 }
@@ -180,11 +180,11 @@ di_free (dep_item *di)
  * @param[in] dl A pointer to a list.
  **/
 void
-dl_free (dep_list *dl)
+dl_free (struct dep_list *dl)
 {
     assert (dl != NULL);
 
-    dep_item *di;
+    struct dep_item *di;
 
     while (!RB_EMPTY (&dl->head)) {
         di = RB_MIN (dep_tree, &dl->head);
@@ -203,12 +203,12 @@ dl_free (dep_list *dl)
  * @param[in] dl_source A pointer to a source list (linked list based).
  **/
 void
-dl_join (dep_list *dl_target, chg_list *dl_source)
+dl_join (struct dep_list *dl_target, struct chg_list *dl_source)
 {
     assert (dl_target != NULL);
     assert (dl_source != NULL);
 
-    dep_item *di;
+    struct dep_item *di;
 
     while (!SLIST_EMPTY (&dl_source->head)) {
         di = SLIST_FIRST (&dl_source->head);
@@ -224,11 +224,11 @@ dl_join (dep_list *dl_target, chg_list *dl_source)
  * @param[in] dl A pointer to a list.
  **/
 static void
-dl_clearflags (dep_list *dl)
+dl_clearflags (struct dep_list *dl)
 {
     assert (dl != NULL);
 
-    dep_item *di;
+    struct dep_item *di;
     DL_FOREACH (di, dl) {
         di->type &= S_IFMT;
     }
@@ -241,13 +241,13 @@ dl_clearflags (dep_list *dl)
  * @param[in] path  A name of a file.
  * @return A pointer to a dep_item if item is found, NULL otherwise.
  */
-dep_item*
-dl_find (dep_list *dl, const char *path)
+struct dep_item*
+dl_find (struct dep_list *dl, const char *path)
 {
     assert (dl != NULL);
     assert (path != NULL);
 
-    dep_item find;
+    struct dep_item find;
     find.type = DI_EXT_PATH;
     find.ext_path = path;
 
@@ -263,16 +263,16 @@ dl_find (dep_list *dl, const char *path)
  *                   resulting list but marked as unchanged in before list.
  * @return A pointer to a list. May return NULL, check errno in this case.
  **/
-chg_list*
-dl_readdir (DIR *dir, dep_list* before)
+struct chg_list*
+dl_readdir (DIR *dir, struct dep_list* before)
 {
     assert (dir != NULL);
 
     struct dirent *ent;
-    dep_item *item, *before_item;
+    struct dep_item *item, *before_item;
     mode_t type;
 
-    chg_list *head = calloc (1, sizeof (dep_list));
+    struct chg_list *head = calloc (1, sizeof (struct dep_list));
     if (head == NULL) {
         perror_msg ("Failed to allocate list during directory listing");
         return NULL;
@@ -340,11 +340,11 @@ error:
  *
  * @return A pointer to a list. May return NULL, check errno in this case.
  **/
-chg_list*
-dl_listing (int fd, dep_list* before)
+struct chg_list*
+dl_listing (int fd, struct dep_list* before)
 {
     DIR *dir = NULL;
-    chg_list *head;
+    struct chg_list *head;
 
     assert (fd >= 0);
 
@@ -352,7 +352,7 @@ dl_listing (int fd, dep_list* before)
     if (dir == NULL) {
         if (errno == ENOENT) {
             /* ENOENT is skipped as the directory could be just deleted */
-            head = calloc (1, sizeof (chg_list));
+            head = calloc (1, sizeof (struct chg_list));
             if (head != NULL) {
                 SLIST_INIT (&head->head);
                 return (head);
@@ -395,15 +395,15 @@ dl_listing (int fd, dep_list* before)
  * @param[in] udata  A pointer to user data.
  **/
 void
-dl_calculate (dep_list           *before,
-              chg_list           *after,
-              const traverse_cbs *cbs,
-              void               *udata)
+dl_calculate (struct dep_list           *before,
+              struct chg_list           *after,
+              const struct traverse_cbs *cbs,
+              void                      *udata)
 {
     assert (before != NULL);
     assert (cbs != NULL);
 
-    dep_item *di_from, *di_to, *tmp;
+    struct dep_item *di_from, *di_to, *tmp;
     size_t n_moves = 0;
 
     /*
@@ -536,7 +536,7 @@ dl_calculate (dep_list           *before,
  *     less than, equal to, or greater than the second one.
  **/
 static int
-dep_item_cmp (dep_item *di1, dep_item *di2)
+dep_item_cmp (struct dep_item *di1, struct dep_item *di2)
 {
     const char *path1 = (di1->type == DI_EXT_PATH) ? di1->ext_path : di1->path;
     const char *path2 = (di2->type == DI_EXT_PATH) ? di2->ext_path : di2->path;

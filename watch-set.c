@@ -38,7 +38,7 @@
  * @param[in] ws A pointer to the watch set.
  **/
 void
-watch_set_init (watch_set *ws)
+watch_set_init (struct watch_set *ws)
 {
     assert (ws != NULL);
 
@@ -51,11 +51,11 @@ watch_set_init (watch_set *ws)
  * @param[in] ws A pointer the the watch set.
  **/
 void
-watch_set_free (watch_set *ws)
+watch_set_free (struct watch_set *ws)
 {
     assert (ws != NULL);
 
-    watch *w, *tmp;
+    struct watch *w, *tmp;
 
     RB_FOREACH_SAFE (w, watch_set, ws, tmp) {
         watch_set_delete (ws, w);
@@ -69,7 +69,7 @@ watch_set_free (watch_set *ws)
  * @param[in] w  A pointer to watch to remove.
  **/
 void
-watch_set_delete (watch_set *ws, watch *w)
+watch_set_delete (struct watch_set *ws, struct watch *w)
 {
     assert (ws != NULL);
     assert (w != NULL);
@@ -85,7 +85,7 @@ watch_set_delete (watch_set *ws, watch *w)
  * @param[in] w  A pointer to inserted watch.
  **/
 void
-watch_set_insert (watch_set *ws, watch *w)
+watch_set_insert (struct watch_set *ws, struct watch *w)
 {
     assert (ws != NULL);
     assert (w != NULL);
@@ -100,12 +100,12 @@ watch_set_insert (watch_set *ws, watch *w)
  * @param[in] inode A inode number of watch
  * @return A pointer to kqueue watch if found NULL otherwise
  **/
-watch *
-watch_set_find (watch_set *ws, dev_t dev, ino_t inode)
+struct watch *
+watch_set_find (struct watch_set *ws, dev_t dev, ino_t inode)
 {
     assert (ws != NULL);
 
-    watch find = { .dev = dev, .inode = inode };
+    struct watch find = { .dev = dev, .inode = inode };
     return RB_FIND (watch_set, ws, &find);
 }
 /**
@@ -118,7 +118,7 @@ watch_set_find (watch_set *ws, dev_t dev, ino_t inode)
  * less than, equal to, or greater than the second one.
  **/
 static int
-watch_set_cmp (watch *w1, watch *w2)
+watch_set_cmp (struct watch *w1, struct watch *w2)
 {
     if (w1->dev == w2->dev)
         return ((w1->inode > w2->inode) - (w1->inode < w2->inode));

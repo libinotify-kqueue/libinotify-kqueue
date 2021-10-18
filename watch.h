@@ -35,16 +35,14 @@
 #include <sys/queue.h>
 #include <sys/stat.h>  /* stat */
 
-typedef struct watch watch;
-
 #include "inotify-watch.h"
 
 #define WD_FOREACH(wd, w) SLIST_FOREACH ((wd), &(w)->deps, next)
 
 SLIST_HEAD(watch_dep_list, watch_dep);
 struct watch_dep {
-    i_watch *iw;              /* A pointer to parent inotify watch */
-    const dep_item *di;
+    struct i_watch *iw;          /* A pointer to parent inotify watch */
+    const struct dep_item *di;
     SLIST_ENTRY(watch_dep) next;
 };
 
@@ -64,21 +62,27 @@ uint32_t kqueue_to_inotify (uint32_t flags,
                             bool is_parent,
                             bool is_deleted);
 
-int    watch_open (int dirfd, const char *path, uint32_t flags);
-watch *watch_init (int fd, struct stat *st);
-void   watch_free (watch *w);
-mode_t watch_get_mode (watch *w);
+int           watch_open     (int dirfd, const char *path, uint32_t flags);
+struct watch* watch_init     (int fd, struct stat *st);
+void          watch_free     (struct watch *w);
+mode_t        watch_get_mode (struct watch *w);
 
-struct watch_dep *watch_find_dep (watch *w, i_watch *iw, const dep_item *di);
-struct watch_dep *watch_add_dep  (watch *w, i_watch *iw, const dep_item *di);
-struct watch_dep *watch_del_dep  (watch *w, i_watch *iw, const dep_item *di);
-struct watch_dep *watch_chg_dep  (watch *w,
-                                  i_watch *iw,
-                                  const dep_item *di_from,
-                                  const dep_item *di_to);
+struct watch_dep *watch_find_dep (struct watch *w,
+                                  struct i_watch *iw,
+                                  const struct dep_item *di);
+struct watch_dep *watch_add_dep  (struct watch *w,
+                                  struct i_watch *iw,
+                                  const struct dep_item *di);
+struct watch_dep *watch_del_dep  (struct watch *w,
+                                  struct i_watch *iw,
+                                  const struct dep_item *di);
+struct watch_dep *watch_chg_dep  (struct watch *w,
+                                  struct i_watch *iw,
+                                  const struct dep_item *di_from,
+                                  const struct dep_item *di_to);
 
-int    watch_register_event (watch *w, int kq, uint32_t fflags);
-int    watch_update_event   (watch *w);
+int    watch_register_event (struct watch *w, int kq, uint32_t fflags);
+int    watch_update_event   (struct watch *w);
 
 /**
  * Checks if #watch is associated with any file dependency or not.
@@ -87,7 +91,7 @@ int    watch_update_event   (watch *w);
  * @return true if A #watch has associated dependency records. false otherwise.
  **/
 static inline bool
-watch_deps_empty (watch *w)
+watch_deps_empty (struct watch *w)
 {
     assert (w != NULL);
     return (SLIST_EMPTY (&w->deps));

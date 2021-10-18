@@ -48,7 +48,7 @@
 #include "worker.h"
 
 static void
-worker_cmd_reset (worker_cmd *cmd);
+worker_cmd_reset (struct worker_cmd *cmd);
 
 
 /**
@@ -59,7 +59,7 @@ worker_cmd_reset (worker_cmd *cmd);
  * @param[in] mask     A combination of the inotify watch flags.
  **/
 void
-worker_cmd_add (worker_cmd *cmd, const char *filename, uint32_t mask)
+worker_cmd_add (struct worker_cmd *cmd, const char *filename, uint32_t mask)
 {
     assert (cmd != NULL);
     worker_cmd_reset (cmd);
@@ -77,7 +77,7 @@ worker_cmd_add (worker_cmd *cmd, const char *filename, uint32_t mask)
  * @param[in] watch_id  The identificator of a watch to remove.
  **/
 void
-worker_cmd_remove (worker_cmd *cmd, int watch_id)
+worker_cmd_remove (struct worker_cmd *cmd, int watch_id)
 {
     assert (cmd != NULL);
     worker_cmd_reset (cmd);
@@ -94,7 +94,7 @@ worker_cmd_remove (worker_cmd *cmd, int watch_id)
  * @param[in] value  Worker-thread parameter value to set.
  **/
 void
-worker_cmd_param (worker_cmd *cmd, int param, intptr_t value)
+worker_cmd_param (struct worker_cmd *cmd, int param, intptr_t value)
 {
     assert (cmd != NULL);
     worker_cmd_reset (cmd);
@@ -110,7 +110,7 @@ worker_cmd_param (worker_cmd *cmd, int param, intptr_t value)
  * @param[in] cmd A pointer to #worker_cmd.
  **/
 static void
-worker_cmd_reset (worker_cmd *cmd)
+worker_cmd_reset (struct worker_cmd *cmd)
 {
     assert (cmd != NULL);
 
@@ -129,7 +129,7 @@ worker_cmd_reset (worker_cmd *cmd)
  * @param[in] cmd A pointer to #worker_cmd.
  **/
 void
-worker_post (worker *wrk)
+worker_post (struct worker *wrk)
 {
     assert (wrk != NULL);
     ik_sem_post(&wrk->sync_sem);
@@ -141,7 +141,7 @@ worker_post (worker *wrk)
  * @param[in] cmd A pointer to #worker_cmd.
  **/
 void
-worker_wait (worker *wrk)
+worker_wait (struct worker *wrk)
 {
     assert (wrk != NULL);
     ik_sem_wait(&wrk->sync_sem);
@@ -154,7 +154,7 @@ worker_wait (worker *wrk)
  * @return 0 on success, -1 otherwise
  **/
 int
-worker_set_sockbufsize (worker *wrk, int bufsize)
+worker_set_sockbufsize (struct worker *wrk, int bufsize)
 {
     assert (wrk != NULL);
 
@@ -227,7 +227,7 @@ pipe_init (int fildes[2], int flags)
  *
  * @return A pointer to a new worker.
  **/
-worker*
+struct worker*
 worker_create (int flags)
 {
     pthread_attr_t attr;
@@ -235,7 +235,7 @@ worker_create (int flags)
     sigset_t set, oset;
     int result;
 
-    worker* wrk = calloc (1, sizeof (worker));
+    struct worker* wrk = calloc (1, sizeof (struct worker));
 
     if (wrk == NULL) {
         perror_msg ("Failed to create a new worker");
@@ -332,11 +332,11 @@ failure:
  * @param[in] wrk A pointer to #worker.
  **/
 void
-worker_free (worker *wrk)
+worker_free (struct worker *wrk)
 {
     assert (wrk != NULL);
 
-    i_watch *iw;
+    struct i_watch *iw;
 
     if (wrk->io[KQUEUE_FD] != -1) {
         close (wrk->io[KQUEUE_FD]);
@@ -375,9 +375,9 @@ worker_free (worker *wrk)
  * @return An id of an added watch on success, -1 on failure.
 **/
 int
-worker_add_or_modify (worker     *wrk,
-                      const char *path,
-                      uint32_t    flags)
+worker_add_or_modify (struct worker *wrk,
+                      const char    *path,
+                      uint32_t       flags)
 {
     assert (path != NULL);
     assert (wrk != NULL);
@@ -410,7 +410,7 @@ worker_add_or_modify (worker     *wrk,
     }
 
     /* create a new entry if watch is not found */
-    i_watch *iw = iwatch_init (wrk, fd, flags);
+    struct i_watch *iw = iwatch_init (wrk, fd, flags);
     if (iw == NULL) {
         return -1;
     }
@@ -449,13 +449,12 @@ worker_add_or_modify (worker     *wrk,
  * @return 0 on success, -1 of failure.
  **/
 int
-worker_remove (worker *wrk,
-               int     id)
+worker_remove (struct worker *wrk, int id)
 {
     assert (wrk != NULL);
     assert (id >= 0);
 
-    i_watch *iw;
+    struct i_watch *iw;
     SLIST_FOREACH (iw, &wrk->head, next) {
 
         if (iw->wd == id) {
@@ -474,7 +473,7 @@ worker_remove (worker *wrk,
  * @param[in] iw  A pointer to #i_watch to remove.
  **/
 void
-worker_remove_iwatch (worker *wrk, i_watch *iw)
+worker_remove_iwatch (struct worker *wrk, struct i_watch *iw)
 {
     assert (wrk != NULL);
     assert (iw != NULL);
@@ -493,7 +492,7 @@ worker_remove_iwatch (worker *wrk, i_watch *iw)
  * @return 0 on success, -1 on failure.
  **/
 int
-worker_set_param (worker *wrk, int param, intptr_t value)
+worker_set_param (struct worker *wrk, int param, intptr_t value)
 {
     assert (wrk != NULL);
 
