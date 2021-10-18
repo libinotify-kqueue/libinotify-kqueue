@@ -72,6 +72,7 @@ pkgconfigdir = $(libdir)/pkgconfig
 nodist_pkgconfig_DATA = libinotify.pc
 
 EXTRA_DIST = \
+    LICENSE \
     libinotify.sym
 
 dist_man_MANS = libinotify.3
