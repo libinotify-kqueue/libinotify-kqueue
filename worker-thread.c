@@ -340,21 +340,21 @@ produce_notifications (struct worker *wrk, struct kevent *event)
         deleted = true;
     }
 
-#if (READDIR_DOES_OPENDIR == 2) && \
-    defined (NOTE_OPEN) && defined (NOTE_CLOSE)
-    /* Mask events produced by open/closedir calls while directory diffing.
-     * Kqueue coalesces both events as kevent is not called that time */
+    /* Mask events produced by opendir, readdir and closedir calls while
+     * directory diffing. Kqueue always aggregates all 3 events into single
+     * event as working thread is not calling kevent() that time. */
     if (w->skip_next) {
-        flags &= ~(NOTE_OPEN | NOTE_CLOSE);
-    }
+#if defined (NOTE_OPEN) && (READDIR_DOES_OPENDIR == 2)
+        flags &= ~NOTE_OPEN;
 #endif
-#ifdef NOTE_READ
-    /* Mask event produced by readdir call while directory diffing. */
-    if (w->skip_next) {
+#if defined (NOTE_READ)
         flags &= ~NOTE_READ;
-    }
 #endif
-    w->skip_next = false;
+#if defined (NOTE_CLOSE) && (READDIR_DOES_OPENDIR == 2)
+        flags &= ~NOTE_CLOSE;
+#endif
+        w->skip_next = false;
+    }
 
     /* Deaggregate inotify events  */
     for (i = 0; i < nitems (ie_order); i++) {
