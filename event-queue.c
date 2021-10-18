@@ -100,8 +100,17 @@ static int
 event_queue_extend (struct event_queue *eq)
 {
     if (eq->count >= eq->allocated) {
-        int to_allocate = eq->count + 1;
-        void *ptr = realloc (eq->iov, sizeof (struct iovec) * to_allocate);
+        int to_allocate = eq->count * 3 / 2;
+        void *ptr;
+
+        if (to_allocate < 10) {
+            to_allocate = 10;
+        }
+        if (to_allocate > eq->max_events) {
+            to_allocate = eq->max_events + 1;
+        }
+
+        ptr = realloc (eq->iov, sizeof (struct iovec) * to_allocate);
         if (ptr == NULL) {
             perror_msg (("Failed to extend events to %d items", to_allocate));
             return -1;
