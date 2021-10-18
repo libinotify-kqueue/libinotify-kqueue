@@ -82,6 +82,43 @@ If you will get any other results, please feel free to report it at:
 
 
 
+Building under linuxolator (FreeBSD 13+)
+----------------------------------------
+
+It is possible to use libinotify with binary Linux applications. To do
+that, download, build and install linux-libbsd which makes BSD kqueue
+syscall available to linuxolator: https://github.com/wulf7/linux-libbsd
+Install devel/linux-c7-devtools port, than compile libinotify.so
+library and install it somewhere under /compat/linux.
+
+To build and install 64-bit library:
+
+  $ env CC="/compat/linux/bin/gcc" \
+        CFLAGS="--sysroot /compat/linux -include bsd.h" \
+        LDFLAGS="-lbsd" \
+        ./configure --libdir=/usr/lib64
+  $ make
+  $ sudo make install-exec DESTDIR=/compat/linux
+
+To build and install 32-bit library:
+
+  $ env CC="/compat/linux/bin/gcc" \
+        CFLAGS="--sysroot /compat/linux -m32 -include bsd.h" \
+        LDFLAGS="-lbsd" \
+        ./configure --libdir=/usr/lib
+  $ make
+  $ sudo make install-exec DESTDIR=/compat/linux
+
+To run my_64bit_app or my_32bit_app with inotify support use
+
+  $ LD_PRELOAD=/usr/lib64/libinotify.so my_64bit_app
+
+or
+
+  $ LD_PRELOAD=/usr/lib/libinotify.so my_32bit_app
+
+
+
 Using
 -----
 
