@@ -223,33 +223,6 @@ fi
 
 AC_STRUCT_DIRENT_D_TYPE
 
-AC_MSG_CHECKING(for O_SYMLINK in fcntl.h)
-AC_COMPILE_IFELSE(
-    [AC_LANG_PROGRAM([@%:@include <fcntl.h>], [int a = O_SYMLINK;])],
-    have_o_symlink=yes,
-    have_o_symlink=no
-)
-AC_MSG_RESULT($have_o_symlink)
-
-if test "$have_o_symlink" = "no"; then
-    AC_MSG_WARN([O_SYMLINK open(2) flag is not supported on your system. Watching for symbolic links is unavailable])
-fi
-
-
-AC_MSG_CHECKING(for O_EVTONLY in fcntl.h)
-AC_COMPILE_IFELSE(
-    [AC_LANG_PROGRAM([@%:@include <fcntl.h>], [int a = O_EVTONLY;])],
-    have_o_evtonly=yes,
-    have_o_evtonly=no
-)
-AC_MSG_RESULT($have_o_evtonly)
-
-if test "$have_o_evtonly" = "yes"; then
-    AC_DEFINE([HAVE_O_EVTONLY],[1],[Define to 1 if O_EVTONLY defined in fcntl.h])
-else
-    AC_MSG_WARN([O_EVTONLY open(2) flag is not supported on your system. Unmounting of fs where watch located is unavailable])
-fi
-
 
 AC_MSG_CHECKING(for NOTE_OPEN in sys/event.h)
 AC_COMPILE_IFELSE(
@@ -373,8 +346,50 @@ AC_RUN_IFELSE(
 ],
     AC_MSG_RESULT(no)
 )
+
+
+dnl Need a run-time check to build under linuxolator
+AC_MSG_CHECKING(for O_PATH in fcntl.h)
+AC_RUN_IFELSE(
+[
+    AC_LANG_PROGRAM(
+    [
+        @%:@include <fcntl.h>
+        @%:@include <unistd.h>
+    ],
+    [
+        int fd;
+        if ((fd = open("iktestdir", O_PATH)) == -1) return 1;
+        return lseek(fd, 0, SEEK_SET) != -1;
+    ])
+],
+[
+    AC_DEFINE([HAVE_O_PATH],[1],[Define to 1 if open supports O_PATH flag])
+    have_o_path=yes
+],
+    have_o_path=no
+)
+AC_MSG_RESULT($have_o_path)
 rm -rf iktestdir
 rm iktestfile
+
+
+AC_MSG_CHECKING(for O_SYMLINK in fcntl.h)
+AC_COMPILE_IFELSE(
+    [AC_LANG_PROGRAM([@%:@include <fcntl.h>], [int a = O_SYMLINK;])],
+    have_o_symlink=yes,
+    have_o_symlink=no
+)
+AC_MSG_RESULT($have_o_symlink)
+
+
+AC_MSG_CHECKING(for O_EVTONLY in fcntl.h)
+AC_COMPILE_IFELSE(
+    [AC_LANG_PROGRAM([@%:@include <fcntl.h>], [int a = O_EVTONLY;])],
+    have_o_evtonly=yes,
+    have_o_evtonly=no
+)
+AC_MSG_RESULT($have_o_evtonly)
 
 
 # There are three ways we can reread directory opened already. Namely:
@@ -390,14 +405,17 @@ rm iktestfile
 AC_ARG_ENABLE([opendir],
     AS_HELP_STRING([--enable-opendir=no|dup|open], [Do opendir on each directory read @<:@default=dup@:>@]),
     ,
-    AS_IF([test "$ac_cv_func_fdopendir" = "yes" -a "$ac_cv_func_fdclosedir" = "yes"],
-          [enable_opendir=no],
-          AS_IF([test "$ac_cv_func_fdopendir" = "no"],
-                AS_IF([test "$atfuncs_are_broken" = "yes"],
-                      [enable_opendir=no],
-                      [enable_opendir=open]
-                ),
-                [enable_opendir=dup]
+    AS_IF([test "$have_o_path" = "yes"],
+          [enable_opendir=open],
+          AS_IF([test "$ac_cv_func_fdopendir" = "yes" -a "$ac_cv_func_fdclosedir" = "yes"],
+                [enable_opendir=no],
+                AS_IF([test "$ac_cv_func_fdopendir" = "no"],
+                      AS_IF([test "$atfuncs_are_broken" = "yes"],
+                            [enable_opendir=no],
+                            [enable_opendir=open]
+                      ),
+                      [enable_opendir=dup]
+                )
           )
     )
 )
@@ -419,6 +437,19 @@ AC_DEFINE_UNQUOTED([READDIR_DOES_OPENDIR],
     [$readdir_does_opendir],
     [Define to 1/2 if opendir is necessary for each directory read]
 )
+
+if test "$have_o_path" = "yes" -a "$readdir_does_opendir" != "2"; then
+    AC_MSG_WARN([Setting opendir to other value than open effectivelly disables O_PATH support])
+    have_o_path=no
+fi
+
+if test "$have_o_symlink" = "no" -a "$have_o_path" = "no"; then
+    AC_MSG_WARN([Neither O_PATH nor O_SYMLINK open(2) flags are supported on your system. Watching for symbolic links is unavailable])
+fi
+
+if test "$have_o_evtonly" = "no" -a "$have_o_path" = "no"; then
+    AC_MSG_WARN([Neither O_PATH nor O_EVTONLY open(2) flags are supported on your system. Unmounting of fs where watch located is unavailable])
+fi
 
 
 AC_ARG_ENABLE([skip-subfiles],

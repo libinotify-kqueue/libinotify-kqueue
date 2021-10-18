@@ -247,10 +247,14 @@ watch_open (int dirfd, const char *path, uint32_t flags)
 
     assert (path != NULL);
 
+#if defined(HAVE_O_PATH) && READDIR_DOES_OPENDIR == 2
+    openflags |= O_PATH;
+#else
 #ifdef O_EVTONLY
     openflags |= O_EVTONLY;
 #else
     openflags |= O_RDONLY;
+#endif
 #endif
 #ifdef O_CLOEXEC
     openflags |= O_CLOEXEC;
@@ -412,6 +416,12 @@ watch_add_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
 
         fflags |= w->fflags;
         if (watch_register_event (w, iw->wrk->kq, fflags) == -1) {
+#if defined(HAVE_O_PATH) && READDIR_DOES_OPENDIR == 2
+            /* Files opened with O_PATH skip access control at open, but kevent
+             * rejects unaccessible files with EBADF. Convert it to EACCES */
+            if (watch_dep_is_parent (wd) && errno == EBADF)
+                errno = EACCES;
+#endif
             free (wd);
             return NULL;
         }

@@ -27,6 +27,11 @@
 #include <algorithm>
 #include "symlink_test.hh"
 
+#if (defined(__linux__) && !defined(HAVE_SYS_EVENT_H)) || \
+    defined(O_SYMLINK) || (defined(HAVE_O_PATH) && READDIR_DOES_OPENDIR == 2)
+#define CAN_OPEN_SYMLINK
+#endif
+
 symlink_test::symlink_test (journal &j)
 : test ("Symbolic links", j)
 {
@@ -206,7 +211,7 @@ void symlink_test::run ()
                           | IN_DONT_FOLLOW);
         cons.output.wait ();
         wid = cons.output.added_watch_id ();
-#if defined(__linux__) || defined(O_SYMLINK)
+#ifdef CAN_OPEN_SYMLINK
         should ("Start watch successfully on a symlink file with IN_DONT_FOLLOW",
                 wid != -1);
 #else
@@ -221,7 +226,7 @@ void symlink_test::run ()
 
         cons.output.wait ();
         received = cons.output.registered ();
-#if defined(__linux__) || defined(O_SYMLINK)
+#ifdef CAN_OPEN_SYMLINK
         should ("Receive IN_ATTRIB after touching symlink itself",
                 contains (received, event ("", wid, IN_ATTRIB)));
 #else
@@ -237,7 +242,7 @@ void symlink_test::run ()
 
         cons.output.wait ();
         received = cons.output.registered ();
-#if defined(__linux__) || defined(O_SYMLINK)
+#ifdef CAN_OPEN_SYMLINK
         should ("No IN_MODIFY after modifying symlink source file",
                 !contains (received, event ("", wid, IN_MODIFY)));
 #else
@@ -253,7 +258,7 @@ void symlink_test::run ()
 
         cons.output.wait ();
         received = cons.output.registered ();
-#if defined(__linux__) || defined(O_SYMLINK)
+#ifdef CAN_OPEN_SYMLINK
         should ("No IN_MODIFY after modifying file via symlink",
                 !contains (received, event ("", wid, IN_MODIFY)));
 #else
@@ -268,7 +273,7 @@ void symlink_test::run ()
 
         cons.output.wait ();
         received = cons.output.registered ();
-#if defined(__linux__) || defined(O_SYMLINK)
+#ifdef CAN_OPEN_SYMLINK
         should ("Receive IN_MOVE_SELF after moving the symlink",
                 contains (received, event ("", wid, IN_MOVE_SELF)));
 #else
@@ -284,7 +289,7 @@ void symlink_test::run ()
 
         cons.output.wait ();
         received = cons.output.registered ();
-#if defined(__linux__) || defined(O_SYMLINK)
+#ifdef CAN_OPEN_SYMLINK
         should ("Receive IN_DELETE_SELF after removing the symlink",
                 contains (received, event ("", wid, IN_DELETE_SELF)));
 #else
