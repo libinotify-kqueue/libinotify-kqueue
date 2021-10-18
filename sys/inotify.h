@@ -30,6 +30,9 @@
 /* linux`s /proc/sys/fs/inotify/max_queued_events counterpart */
 #define IN_MAX_QUEUED_EVENTS		1
 #define IN_DEF_MAX_QUEUED_EVENTS	16384
+/* linux`s /proc/sys/fs/inotify/max_user_instances counterpart */
+#define IN_MAX_USER_INSTANCES		2
+#define IN_DEF_MAX_USER_INSTANCES	2147483646
 
 /* Flags for the parameter of inotify_init1. */
 #define IN_CLOEXEC	02000000	/* Linux x86 O_CLOEXEC */

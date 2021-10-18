@@ -119,7 +119,9 @@ Invalid watch descriptor wd.
 .Pp
 .Fn inotify_set_param
 Libinotify specific. Replacement for Linux procfs interface.
-Set inotify instance parameter. Possible param values are -
+Set inotify parameter for the instance described by file descriptor fd.
+fd value of -1 is used for setting of global parameters. Possible param
+values are -
 .Bl -tag -width Er
 .It IN_SOCKBUFSIZE
 Size of communication socket buffer in bytes. Should match
@@ -135,6 +137,10 @@ Default value 4096 (exported as IN_DEF_SOCKBUFSIZE)
 Upper limit on the queue length per inotify handle.
 linux`s /proc/sys/fs/inotify/max_queued_events counterpart.
 Default value 16384 (exported as IN_DEF_MAX_QUEUED_EVENTS)
+.It IN_MAX_USER_INSTANCES
+Global upper limit on the number of inotify instances that can be created.
+linux`s /proc/sys/fs/inotify/max_user_instances counterpart.
+Default value 2147483646 (exported as IN_DEF_MAX_USER_INSTANCES)
 .El
 .Pp
 .Sh inotify_event structure 

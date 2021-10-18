@@ -40,10 +40,10 @@
 #include "worker.h"
 
 
-#define WORKER_SZ 100
 static struct workers_list workers = SLIST_HEAD_INITIALIZER (&workers);
 static atomic_uint nworkers = ATOMIC_VAR_INIT (0);
 static pthread_rwlock_t workers_rwlock = PTHREAD_RWLOCK_INITIALIZER;
+static unsigned int max_workers = IN_DEF_MAX_USER_INSTANCES;
 
 static inline void
 workerset_rlock (void)
@@ -105,7 +105,7 @@ inotify_init1 (int flags)
         return -1;
     }
 
-    if (atomic_fetch_add (&nworkers, 1) >= WORKER_SZ) {
+    if (atomic_fetch_add (&nworkers, 1) >= max_workers) {
         errno = EMFILE;
         atomic_fetch_sub (&nworkers, 1);
         return -1;
@@ -227,12 +227,30 @@ inotify_set_param (int fd, int param, intptr_t value)
 {
     struct worker_cmd cmd;
 
-    if (!is_opened (fd)) {
-        return -1;	/* errno = EBADF */
+    /* Apply global parameter right here */
+    switch (param) {
+    case IN_MAX_USER_INSTANCES:
+        if (value < 0 || value > INT_MAX - 1 || fd != -1) {
+            errno = EINVAL;
+            return -1;
+        }
+        max_workers = value;
+        return 0;
+
+    case IN_SOCKBUFSIZE:
+    case IN_MAX_QUEUED_EVENTS:
+        /* Or pass per-instance parameters to workers */
+        if (!is_opened (fd)) {
+            return -1;	/* errno = EBADF */
+        }
+        worker_cmd_param (&cmd, param, value);
+        return worker_exec (fd, &cmd);
+
+    default:
+        errno = EINVAL;
     }
 
-    worker_cmd_param (&cmd, param, value);
-    return worker_exec (fd, &cmd);
+    return -1;
 }
 
 /**
