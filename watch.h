@@ -35,6 +35,7 @@
 #include <sys/queue.h>
 #include <sys/stat.h>  /* stat */
 
+#include "dep-list.h"
 #include "inotify-watch.h"
 
 #define WD_FOREACH(wd, w) SLIST_FOREACH ((wd), &(w)->deps, next)
@@ -65,7 +66,6 @@ uint32_t kqueue_to_inotify (uint32_t flags,
 int           watch_open     (int dirfd, const char *path, uint32_t flags);
 struct watch* watch_init     (int fd, struct stat *st);
 void          watch_free     (struct watch *w);
-mode_t        watch_get_mode (struct watch *w);
 
 struct watch_dep *watch_find_dep (struct watch *w,
                                   struct i_watch *iw,
@@ -109,8 +109,29 @@ watch_dep_is_parent (const struct watch_dep *wd)
     return (wd->di == DI_PARENT);
 }
 
-/* Leave this as macro to break circular header depedency chain */
-#define watch_dep_get_mode(wd) \
-    (watch_dep_is_parent (wd) ? (wd)->iw->mode : (wd)->di->type)
+static inline mode_t
+watch_dep_get_mode (struct watch_dep *wd)
+{
+    assert (wd != NULL);
+    return (watch_dep_is_parent (wd) ? wd->iw->mode : wd->di->type);
+}
+
+/**
+ * Calculates #watch file status with traversing depedencies.
+ *
+ * @param[in] w  A pointer to the #watch.
+ * @return mode in stat() format.
+ **/
+static inline mode_t
+watch_get_mode (struct watch *w)
+{
+    assert (w != NULL);
+    assert (!watch_deps_empty (w));
+
+    mode_t mode = watch_dep_get_mode (SLIST_FIRST(&w->deps));
+    assert (!S_ISUNK (mode));
+
+    return (mode);
+}
 
 #endif /* __WATCH_H__ */
