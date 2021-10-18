@@ -49,6 +49,7 @@ void start_stop_test::run ()
     consumer cons;
     int wid = 0;
     int wid2 = 0;
+    int error = 0;
     events received;
 
     /* Add a watch */
@@ -162,6 +163,11 @@ void start_stop_test::run ()
     should ("Stop receiving events after one event have been received "
             "if watch was opened with IN_ONESHOT flag set",
             !contains (received, event ("", wid, IN_ATTRIB)));
+
+    error = inotify_rm_watch (cons.get_fd (), wid);
+    should ("inotify_rm_watch returns -1, errno set to EINVAL after one event "
+            "have been received if watch was opened with IN_ONESHOT flag set",
+            error == -1 && errno == EINVAL);
 
     cons.input.interrupt ();
 }

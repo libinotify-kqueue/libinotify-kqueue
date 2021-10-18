@@ -51,6 +51,7 @@ void start_stop_dir_test::run ()
     consumer cons;
     events received;
     int wid = 0;
+    int error = 0;
 
     /* Add a watch */
     cons.input.setup ("ssdt-working", IN_ATTRIB);
@@ -111,6 +112,11 @@ void start_stop_dir_test::run ()
     cons.output.wait ();
     received = cons.output.registered ();
     should ("items on a stopped watch are unregistered", received.empty ());
+
+    /* Check if watch is really stopped */
+    error = inotify_rm_watch (cons.get_fd (), wid);
+    should ("inotify_rm_watch returns -1, errno set to EINVAL on stopped watch",
+            error == -1 && errno == EINVAL);
 
     /* Now resume watching */
     cons.output.reset ();
@@ -210,6 +216,11 @@ void start_stop_dir_test::run ()
     should ("Stop receiving events after one event have been received "
             "if watch was opened with IN_ONESHOT flag set",
             !contains (received, event ("4", wid, IN_DELETE)));
+
+    error = inotify_rm_watch (cons.get_fd (), wid);
+    should ("inotify_rm_watch returns -1, errno set to EINVAL after one event "
+            "have been received if watch was opened with IN_ONESHOT flag set",
+            error == -1 && errno == EINVAL);
 
     cons.input.interrupt ();
 }
