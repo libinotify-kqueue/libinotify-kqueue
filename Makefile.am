@@ -74,8 +74,7 @@ pkgconfigdir = $(libdir)/pkgconfig
 nodist_pkgconfig_DATA = libinotify.pc
 
 EXTRA_DIST = \
-    libinotify.sym \
-    patches/freebsd11-O_SYMLINK.patch
+    libinotify.sym
 
 dist_man_MANS = libinotify.3
 MAN_LINKS = \
