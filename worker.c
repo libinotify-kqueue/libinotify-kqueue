@@ -345,6 +345,9 @@ worker_free (worker *wrk)
 
     close (wrk->kq);
 
+#ifdef WORKER_FAST_WATCHSET_DESTROY
+   watch_set_free (&wrk->watches);
+#endif
     while (!SLIST_EMPTY (&wrk->head)) {
         iw = SLIST_FIRST (&wrk->head);
         SLIST_REMOVE_HEAD (&wrk->head, next);

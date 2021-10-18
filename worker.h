@@ -37,6 +37,9 @@ typedef struct worker worker;
 #include "inotify-watch.h"
 #include "watch.h"
 
+/* Optimized watch destruction on freeing of worker thread */
+#define WORKER_FAST_WATCHSET_DESTROY 1
+
 #define INOTIFY_FD 0
 #define KQUEUE_FD  1
 

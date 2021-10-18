@@ -38,6 +38,7 @@
 
 #include "utils.h"
 #include "watch.h"
+#include "worker.h"
 #include "sys/inotify.h"
 
 /**
@@ -334,11 +335,15 @@ watch_free (watch *w)
     if (w->fd != -1) {
         close (w->fd);
     }
+#ifdef WORKER_FAST_WATCHSET_DESTROY
     while (!watch_deps_empty (w)) {
         struct watch_dep *wd = SLIST_FIRST (&w->deps);
         SLIST_REMOVE_HEAD (&w->deps, next);
         free (wd);
     }
+#else
+    assert (watch_deps_empty (w));
+#endif
     free (w);
 }
 
