@@ -29,6 +29,7 @@
 #include <stddef.h> /* NULL */
 
 #include "compat.h"
+#include "inotify-watch.h"
 #include "watch-set.h"
 #include "watch.h"
 
@@ -114,12 +115,19 @@ watch_set_insert (struct watch_set *ws, struct watch *w)
 struct watch *
 watch_set_find (struct watch_set *ws, dev_t dev, ino_t inode)
 {
+    struct i_watch iw;
+    struct watch_dep wd;
     struct watch find;
 
     assert (ws != NULL);
 
-    find.dev = dev;
-    find.inode = inode;
+    iw.dev = dev;
+    iw.inode = inode;
+    wd.iw = &iw;
+    wd.di = DI_PARENT;
+    SLIST_INIT (&find.deps);
+    SLIST_INSERT_HEAD (&find.deps, &wd, next);
+
     return RB_FIND (watch_set, ws, &find);
 }
 /**
@@ -134,8 +142,13 @@ watch_set_find (struct watch_set *ws, dev_t dev, ino_t inode)
 static int
 watch_set_cmp (struct watch *w1, struct watch *w2)
 {
-    if (w1->dev == w2->dev)
-        return ((w1->inode > w2->inode) - (w1->inode < w2->inode));
-    else
-        return ((w1->dev > w2->dev) - (w1->dev < w2->dev));
+    dev_t dev1 = watch_get_dev (w1);
+    dev_t dev2 = watch_get_dev (w2);
+
+    if (dev1 == dev2) {
+        ino_t inode1 = watch_get_inode (w1);
+        ino_t inode2 = watch_get_inode (w2);
+        return ((inode1 > inode2) - (inode1 < inode2));
+    }
+    return ((dev1 > dev2) - (dev1 < dev2));
 }

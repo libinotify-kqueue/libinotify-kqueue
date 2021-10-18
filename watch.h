@@ -48,8 +48,6 @@ struct watch_dep {
 struct watch {
     int fd;                   /* file descriptor of a watched entry */
     uint32_t fflags;          /* kqueue vnode filter flags currently applied */
-    dev_t dev;                /* ID of the device containing the watch */
-    ino_t inode;              /* inode number taken from readdir call */
     bool skip_next;           /* next kevent can be produced by readdir call */
     struct watch_dep_list deps; /* An associated dep_items list */
     RB_ENTRY(watch) link;     /* RB tree links */
@@ -62,7 +60,7 @@ uint32_t kqueue_to_inotify (uint32_t flags,
                             bool is_deleted);
 
 int           watch_open     (int dirfd, const char *path, uint32_t flags);
-struct watch* watch_init     (int fd, struct stat *st);
+struct watch* watch_init     (int fd);
 void          watch_free     (struct watch *w);
 
 struct watch_dep *watch_find_dep (struct watch *w,
@@ -114,6 +112,13 @@ watch_dep_get_mode (struct watch_dep *wd)
     return (watch_dep_is_parent (wd) ? wd->iw->mode : wd->di->type);
 }
 
+static inline ino_t
+watch_dep_get_inode (struct watch_dep *wd)
+{
+    assert (wd != NULL);
+    return (watch_dep_is_parent (wd) ? wd->iw->inode : wd->di->inode);
+}
+
 /**
  * Calculates #watch file status with traversing depedencies.
  *
@@ -132,6 +137,36 @@ watch_get_mode (struct watch *w)
     assert (!S_ISUNK (mode));
 
     return (mode);
+}
+
+/**
+ * Calculates #watch inode number with traversing depedencies.
+ *
+ * @param[in] w  A pointer to the #watch.
+ * @return inode number in stat() format.
+ **/
+static inline ino_t
+watch_get_inode (struct watch *w)
+{
+    assert (w != NULL);
+    assert (!watch_deps_empty (w));
+
+    return watch_dep_get_inode (SLIST_FIRST (&w->deps));
+}
+
+/**
+ * Calculates #watch device number with traversing depedencies.
+ *
+ * @param[in] w  A pointer to the #watch.
+ * @return device number in stat() format.
+ **/
+static inline dev_t
+watch_get_dev (struct watch *w)
+{
+    assert (w != NULL);
+    assert (!watch_deps_empty (w));
+
+    return SLIST_FIRST(&w->deps)->iw->dev;
 }
 
 #endif /* __WATCH_H__ */

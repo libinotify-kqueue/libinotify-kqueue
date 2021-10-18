@@ -308,11 +308,10 @@ watch_open (int dirfd, const char *path, uint32_t flags)
  * Initialize a watch.
  *
  * @param[in] fd A file descriptor of a watched entry.
- * @param[in] st A stat structure of watch.
  * @return A pointer to a watch on success, NULL on failure.
  **/
 struct watch *
-watch_init (int fd, struct stat *st)
+watch_init (int fd)
 {
     struct watch *w;
 
@@ -328,10 +327,6 @@ watch_init (int fd, struct stat *st)
     w->fflags = 0;
     w->skip_next = false;
     SLIST_INIT (&w->deps);
-    w->dev = st->st_dev;
-    /* Inode number obtained via fstat call cannot be used here as it
-     * differs from readdir`s one at mount points. */
-    w->inode = st->st_ino;
 
     return w;
 }

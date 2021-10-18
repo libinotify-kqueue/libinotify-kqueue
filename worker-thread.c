@@ -369,8 +369,10 @@ produce_notifications (struct worker *wrk, struct kevent *event)
             bool is_parent = watch_dep_is_parent (wd);
             uint32_t i_flags = is_parent ? i_flags_par : i_flags_chl;
 
-            assert (watch_set_find (&wrk->watches, w->dev, w->inode) == w);
+            assert (watch_set_find (&wrk->watches, watch_get_dev (w), watch_get_inode (w)) == w);
             assert ((mode & S_IFMT) == (watch_dep_get_mode (wd) & S_IFMT));
+            assert (watch_get_inode (w) == watch_dep_get_inode (wd));
+            assert (is_parent || wd->di == dl_find (&iw->deps, wd->di->path));
 
             if (is_parent && ie_order[i] == IN_MODIFY &&
                 flags & NOTE_WRITE && S_ISDIR (iw->mode)) {
@@ -389,8 +391,6 @@ produce_notifications (struct worker *wrk, struct kevent *event)
             } else if (i_flags & ie_order[i]) {
 
                 /* Report deaggregated items */
-                assert (is_parent || (w->inode == wd->di->inode &&
-                        wd->di == dl_find (&iw->deps, wd->di->path)));
                 enqueue_event (iw,
                                ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
                                wd->di);

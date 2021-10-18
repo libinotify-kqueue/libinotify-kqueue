@@ -149,7 +149,7 @@ iwatch_init (struct worker *wrk, int fd, uint32_t flags)
 
     parent = watch_set_find (&wrk->watches, iw->dev, iw->inode);
     if (parent == NULL) {
-        parent = watch_init (fd, &st);
+        parent = watch_init (fd);
         if (parent == NULL) {
             iwatch_free (iw);
             return NULL;
@@ -278,24 +278,20 @@ iwatch_add_subwatch (struct i_watch *iw, struct dep_item *di)
         return NULL;
     }
 
-    /* Correct inode number if opened file is not a listed one */
-    if (di->inode != st.st_ino) {
-        if (iw->dev != st.st_dev) {
-            /* It`s a mountpoint. Keep underlying directory inode number */
-            st.st_ino = di->inode;
-        } else {
-            /* Race detected. Use new inode number and try to find watch again */
-            perror_msg (("%s has been replaced after directory listing", di->path));
-            di->inode = st.st_ino;
-            w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
-            if (w != NULL) {
-                close (fd);
-                goto hold;
-            }
+    /* Check if opened file is not a listed one. If it is a mountpoint, keep
+     * using underlying directory inode number. Otherwise make a new lookup */
+    if (di->inode != st.st_ino && iw->dev == st.st_dev) {
+        /* Race detected. Use new inode number and try to find watch again */
+        perror_msg (("%s has been replaced after directory listing", di->path));
+        di->inode = st.st_ino;
+        w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
+        if (w != NULL) {
+            close (fd);
+            goto hold;
         }
     }
 
-    w = watch_init (fd, &st);
+    w = watch_init (fd);
     if (w == NULL) {
         close (fd);
         return NULL;
