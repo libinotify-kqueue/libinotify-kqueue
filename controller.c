@@ -128,7 +128,7 @@ inotify_init1 (int flags)
     SLIST_FOREACH (iter, &workers, next) {
         if (iter->io[INOTIFY_FD] == lfd) {
             iter->io[INOTIFY_FD] = -1;
-            perror_msg ("Collision found: fd %d", lfd);
+            perror_msg (("Collision found: fd %d", lfd));
             break;
         }
     }
@@ -169,13 +169,13 @@ inotify_add_watch (int         fd,
      * of the process's accessible address space
      */
     if (lstat (name, &st) == -1) {
-        perror_msg("failed to lstat watch %s",
-                   errno != EFAULT ? name : "<bad addr>");
+        perror_msg (("failed to lstat watch %s",
+                     errno != EFAULT ? name : "<bad addr>"));
         return -1;
     }
 
     if (mask == 0) {
-        perror_msg ("Failed to open watch %s. Bad event mask %x", name, mask);
+        perror_msg (("Failed to open watch %s. Bad event mask %x", name, mask));
         errno = EINVAL;
         return -1;
     }
@@ -275,7 +275,7 @@ worker_exec (int fd, struct worker_cmd *cmd)
             if (wrk->io[INOTIFY_FD] != fd) {
                 /* RACE: worker thread overwrote inotify descriptor in between
                    obtaining pointer on wrk and locking its mutex. */
-                perror_msg ("race detected. fd: %d", fd);
+                perror_msg (("race detected. fd: %d", fd));
                 worker_cmd_unlock (wrk);
                 worker_unref (wrk);
                 errno = EBADF;

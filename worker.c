@@ -206,7 +206,7 @@ worker_set_sockbufsize (struct worker *wrk, int bufsize)
                    SO_SNDBUF,
                    &bufsize,
                    sizeof(bufsize))) {
-        perror_msg ("Failed to set send buffer size for socket");
+        perror_msg (("Failed to set send buffer size for socket"));
         return -1;
     }
     wrk->sockbufsize = bufsize;
@@ -225,7 +225,7 @@ static int
 pipe_init (int fildes[2], int flags)
 {
     if (socketpair (AF_UNIX, SOCK_STREAM, 0, fildes) == -1) {
-        perror_msg ("Failed to create a socket pair");
+        perror_msg (("Failed to create a socket pair"));
         return -1;
     }
 
@@ -235,7 +235,7 @@ pipe_init (int fildes[2], int flags)
 #endif
 
     if (set_cloexec_flag (fildes[KQUEUE_FD], 1) == -1) {
-        perror_msg ("Failed to set cloexec flag on socket");
+        perror_msg (("Failed to set cloexec flag on socket"));
         return -1;
     }
 
@@ -246,14 +246,14 @@ pipe_init (int fildes[2], int flags)
 #else
                           flags & IN_CLOEXEC) == -1) {
 #endif
-        perror_msg ("Failed to set cloexec flag on socket");
+        perror_msg (("Failed to set cloexec flag on socket"));
         return -1;
     }
 
     /* Check flags for both linux and BSD NONBLOCK values */
     if (set_nonblock_flag (fildes[INOTIFY_FD],
                            flags & (IN_NONBLOCK|O_NONBLOCK)) == -1) {
-        perror_msg ("Failed to set socket into nonblocking mode");
+        perror_msg (("Failed to set socket into nonblocking mode"));
         return -1;
     }
 
@@ -276,7 +276,7 @@ worker_create (int flags)
     struct worker* wrk = calloc (1, sizeof (struct worker));
 
     if (wrk == NULL) {
-        perror_msg ("Failed to create a new worker");
+        perror_msg (("Failed to create a new worker"));
         goto failure;
     }
 
@@ -285,12 +285,12 @@ worker_create (int flags)
 
     wrk->kq = kqueue ();
     if (wrk->kq == -1) {
-        perror_msg ("Failed to create a new kqueue");
+        perror_msg (("Failed to create a new kqueue"));
         goto failure;
     }
 
     if (pipe_init (wrk->io, flags) == -1) {
-        perror_msg ("Failed to create a pipe");
+        perror_msg (("Failed to create a pipe"));
         goto failure;
     }
 
@@ -322,7 +322,7 @@ worker_create (int flags)
             0);
 
     if (kevent (wrk->kq, ev, 2, NULL, 0, NULL) == -1) {
-        perror_msg ("Failed to register kqueue event on pipe");
+        perror_msg (("Failed to register kqueue event on pipe"));
         goto failure;
     }
 
@@ -350,7 +350,7 @@ worker_create (int flags)
     pthread_sigmask (SIG_SETMASK, &oset, NULL);
 
     if (result != 0) {
-        perror_msg ("Failed to start a new worker thread");
+        perror_msg (("Failed to start a new worker thread"));
         goto failure;
     }
 
@@ -431,7 +431,7 @@ worker_add_or_modify (struct worker *wrk,
 
     struct stat st;
     if (fstat (fd, &st) == -1) {
-        perror_msg ("Failed to stat file %s", path);
+        perror_msg (("Failed to stat file %s", path));
         close (fd);
         return -1;
     }

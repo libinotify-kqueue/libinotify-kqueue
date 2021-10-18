@@ -67,7 +67,7 @@ di_create (const char *path, ino_t inode, mode_t type)
 
     struct dep_item *di = calloc (1, offsetof (struct dep_item, path) + pathlen);
     if (di == NULL) {
-        perror_msg ("Failed to create a new dep-list item");
+        perror_msg (("Failed to create a new dep-list item"));
         return NULL;
     }
 
@@ -225,7 +225,7 @@ dl_readdir (DIR *dir, struct dep_list* before)
 
     struct chg_list *head = calloc (1, sizeof (struct dep_list));
     if (head == NULL) {
-        perror_msg ("Failed to allocate list during directory listing");
+        perror_msg (("Failed to allocate list during directory listing"));
         return NULL;
     }
     SLIST_INIT (head);
@@ -259,7 +259,7 @@ dl_readdir (DIR *dir, struct dep_list* before)
 
         item = di_create (ent->d_name, ent->d_ino, type);
         if (item == NULL) {
-            perror_msg ("Failed to allocate a new item during listing");
+            perror_msg (("Failed to allocate a new item during listing"));
             goto error;
         }
 
@@ -308,9 +308,9 @@ dl_listing (int fd, struct dep_list* before)
                 SLIST_INIT (head);
                 return (head);
             }
-            perror_msg ("Failed to allocate list during directory listing");
+            perror_msg (("Failed to allocate list during directory listing"));
         }
-        perror_msg ("Failed to opendir for listing");
+        perror_msg (("Failed to opendir for listing"));
         return NULL;
     }
 
@@ -324,14 +324,6 @@ dl_listing (int fd, struct dep_list* before)
 
     return head;
 }
-
-
-#define cb_invoke(cbs, name, udata, ...) \
-    do { \
-        if (cbs->name) { \
-            (cbs->name) (udata, ## __VA_ARGS__); \
-        } \
-    } while (0)
 
 
 /**
@@ -410,9 +402,9 @@ dl_calculate (struct dep_list           *before,
     DL_FOREACH (di_from, before) {
         if (!(di_from->type & (DI_UNCHANGED | DI_MOVED))) {
             if (di_from->type & DI_REPLACED) {
-                cb_invoke (cbs, replaced, udata, di_from);
+                cbs->replaced (udata, di_from);
             } else {
-                cb_invoke (cbs, removed, udata, di_from);
+                cbs->removed (udata, di_from);
             }
         }
     }
@@ -437,7 +429,7 @@ dl_calculate (struct dep_list           *before,
                                   di_to->replacee->type & DI_MOVED;
                 if (di_to->type & DI_MOVED && di_to->moved_from != NULL &&
                     (is_overlap == want_overlap)) {
-                    cb_invoke (cbs, moved, udata, di_to->moved_from, di_to);
+                    cbs->moved (udata, di_to->moved_from, di_to);
 
                     /* Mark file as not participating in moves */
                     di_to->moved_from->type &= ~DI_MOVED;
@@ -453,14 +445,14 @@ dl_calculate (struct dep_list           *before,
              * So just break circular chain at random place. :-(
              */
             if (n_moves_prev == n_moves) {
-                perror_msg("Circular rename detected");
+                perror_msg (("Circular rename detected"));
                 want_overlap = true;
             }
         }
         /* Notify about newly created files */
         CL_FOREACH (di_to, after) {
             if (!(di_to->type & DI_MOVED)) {
-                cb_invoke (cbs, added, udata, di_to);
+                cbs->added (udata, di_to);
             }
         }
     }

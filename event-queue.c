@@ -103,7 +103,7 @@ event_queue_extend (struct event_queue *eq)
         int to_allocate = eq->count + 1;
         void *ptr = realloc (eq->iov, sizeof (struct iovec) * to_allocate);
         if (ptr == NULL) {
-            perror_msg ("Failed to extend events to %d items", to_allocate);
+            perror_msg (("Failed to extend events to %d items", to_allocate));
             return -1;
         }
         eq->iov = ptr;
@@ -178,7 +178,7 @@ event_queue_enqueue (struct event_queue *eq,
     eq->iov[eq->count].iov_base = (void *)create_inotify_event (
         wd, mask, cookie, name, &eq->iov[eq->count].iov_len);
     if (eq->iov[eq->count].iov_base == NULL) {
-        perror_msg ("Failed to create a inotify event %x", mask);
+        perror_msg (("Failed to create a inotify event %x", mask));
         return -1;
     }
 
@@ -222,7 +222,7 @@ void event_queue_flush (struct event_queue *eq, size_t sbspace)
 
     int fd = EQ_TO_WRK(eq)->io[KQUEUE_FD];
     if (safe_sendv (fd, eq->iov, iovcnt, send_flags) == -1) {
-        perror_msg ("Sending of inotify events to socket failed");
+        perror_msg (("Sending of inotify events to socket failed"));
     }
 
     /* Save last event sent to communication pipe for coalecsing checks */

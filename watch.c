@@ -272,7 +272,7 @@ watch_open (int dirfd, const char *path, uint32_t flags)
     if (flags & IN_ONLYDIR) {
         struct stat st;
         if (fstat (fd, &st) == -1) {
-            perror_msg ("Failed to fstat on watch open %s", path);
+            perror_msg (("Failed to fstat on watch open %s", path));
             close (fd);
             return -1;
         }
@@ -309,7 +309,7 @@ watch_init (int fd, struct stat *st)
 
     struct watch *w = calloc (1, sizeof (struct watch));
     if (w == NULL) {
-        perror_msg ("Failed to allocate watch");
+        perror_msg (("Failed to allocate watch"));
         return NULL;
     }
 

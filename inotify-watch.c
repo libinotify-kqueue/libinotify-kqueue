@@ -59,7 +59,7 @@ iwatch_want_skip_subfiles (int fd)
 
     memset (&st, 0, sizeof (st));
     if (FSTATFS (fd, &st) == -1) {
-        perror_msg ("fstatfs failed on %d", fd);
+        perror_msg (("fstatfs failed on %d", fd));
         return false;
     }
 
@@ -85,7 +85,7 @@ iwatch_open (const char *path, uint32_t flags)
 {
     int fd = watch_open (AT_FDCWD, path, flags);
     if (fd == -1) {
-        perror_msg ("Failed to open inotify watch %s", path);
+        perror_msg (("Failed to open inotify watch %s", path));
     }
 
     return fd;
@@ -109,13 +109,13 @@ iwatch_init (struct worker *wrk, int fd, uint32_t flags)
 
     struct stat st;
     if (fstat (fd, &st) == -1) {
-        perror_msg ("fstat failed on %d", fd);
+        perror_msg (("fstat failed on %d", fd));
         return NULL;
     }
 
     struct i_watch *iw = calloc (1, sizeof (struct i_watch));
     if (iw == NULL) {
-        perror_msg ("Failed to allocate inotify watch");
+        perror_msg (("Failed to allocate inotify watch"));
         return NULL;
     }
 
@@ -132,7 +132,7 @@ iwatch_init (struct worker *wrk, int fd, uint32_t flags)
     if (S_ISDIR (st.st_mode)) {
         struct chg_list *deps = dl_listing (fd, NULL);
         if (deps == NULL) {
-            perror_msg ("Directory listing of %d failed", fd);
+            perror_msg (("Directory listing of %d failed", fd));
             iwatch_free (iw);
             return NULL;
         }
@@ -226,8 +226,8 @@ iwatch_add_subwatch (struct i_watch *iw, struct dep_item *di)
         /* Inherit dep-item type from other associated dep-items */
         mode_t mode = watch_get_mode (w);
         if (!S_ISUNK (di->type) && (di->type & S_IFMT) != (mode & S_IFMT)) {
-            perror_msg ("File modes taken with readdir and fstat are different"
-                " %d != %d", (int)di->type, (int)mode);
+            perror_msg (("File modes taken with readdir and fstat are different"
+                " %d != %d", (int)di->type, (int)mode));
         }
         di_settype (di, mode);
         /* Don`t open a watches with empty kqueue filter flags */
@@ -245,13 +245,13 @@ iwatch_add_subwatch (struct i_watch *iw, struct dep_item *di)
 
     int fd = watch_open (iw->fd, di->path, IN_DONT_FOLLOW);
     if (fd == -1) {
-        perror_msg ("Failed to open file %s", di->path);
+        perror_msg (("Failed to open file %s", di->path));
         goto lstat;
     }
 
     struct stat st;
     if (fstat (fd, &st) == -1) {
-        perror_msg ("Failed to stat subwatch %s", di->path);
+        perror_msg (("Failed to stat subwatch %s", di->path));
         close (fd);
         goto lstat;
     }
@@ -271,7 +271,7 @@ iwatch_add_subwatch (struct i_watch *iw, struct dep_item *di)
             st.st_ino = di->inode;
         } else {
             /* Race detected. Use new inode number and try to find watch again */
-            perror_msg ("%s has been replaced after directory listing", di->path);
+            perror_msg (("%s has been replaced after directory listing", di->path));
             di->inode = st.st_ino;
             w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
             if (w != NULL) {
@@ -300,7 +300,7 @@ lstat:
         if (fstatat (iw->fd, di->path, &st, AT_SYMLINK_NOFOLLOW) != -1) {
             di_settype (di, st.st_mode);
         } else {
-            perror_msg ("Failed to lstat subwatch %s", di->path);
+            perror_msg (("Failed to lstat subwatch %s", di->path));
         }
     }
     return NULL;

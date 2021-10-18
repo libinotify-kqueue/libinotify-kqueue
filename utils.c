@@ -48,6 +48,23 @@
 #include "config.h"
 #include "utils.h"
 
+#ifdef ENABLE_PERRORS
+#include <stdarg.h>
+#include <pthread.h>
+pthread_mutex_t perror_msg_mutex = PTHREAD_MUTEX_INITIALIZER;
+char *
+perror_msg_printf (const char *fmt, ...)
+{
+    static char buf[200];
+    va_list ap;
+
+    va_start (ap, fmt);
+    vsnprintf (buf, sizeof (buf), fmt, ap);
+    va_end (ap);
+    return buf;
+}
+#endif
+
 /**
  * Create a new inotify event.
  *
@@ -71,9 +88,9 @@ create_inotify_event (int         wd,
     event = calloc (1, *event_len);
 
     if (event == NULL) {
-        perror_msg ("Failed to allocate a new inotify event [%s, %X]",
+        perror_msg (("Failed to allocate a new inotify event [%s, %X]",
                     name,
-                    mask);
+                    mask));
         return NULL;
     }
 
@@ -90,13 +107,13 @@ create_inotify_event (int         wd,
 }
 
 
-#define SAFE_GENERIC_OP(fcn, fd, data, size, ...)              \
+#define SAFE_GENERIC_OP(fcn, fd, data, size)    \
     size_t total = 0;                           \
     if (fd == -1) {                             \
         return -1;                              \
     }                                           \
     while (size > 0) {                          \
-        ssize_t retval = fcn (fd, data, size, ##__VA_ARGS__);  \
+        ssize_t retval = fcn (fd, data, size);  \
         if (retval == -1) {                     \
             if (errno == EINTR) {               \
                 continue;                       \
@@ -139,25 +156,10 @@ safe_write (int fd, const void *data, size_t size)
 }
 
 /**
- * EINTR-ready version of send().
- *
- * @param[in] fd    A file descriptor to send to.
- * @param[in] data  A buffer to send.
- * @param[in] size  The number of bytes to send.
- * @param[in] flags A send(3) flags.
- * @return Number of bytes which were sent on success, -1 on failure.
- **/
-ssize_t
-safe_send (int fd, const void *data, size_t size, int flags)
-{
-    SAFE_GENERIC_OP (send, fd, data, size, flags);
-}
-
-/**
  * The canonical version of this routine is maintained in the rra-c-util,
  * which can be found at <http://www.eyrie.org/~eagle/software/rra-c-util/>.
  */
-#define SAFE_GENERIC_VOP(fcn, fd, iov, iovcnt, ...)			\
+#define SAFE_GENERIC_VOP(fcn, fd, iov, iovcnt, flags)			\
 									\
     ssize_t total, status = 0;						\
     size_t left, offset;						\
@@ -191,7 +193,7 @@ safe_send (int fd, const void *data, size_t size, int flags)
     do {								\
         if (++count > 10)						\
             break;							\
-        status = fcn(fd, iov, iovcnt, ##__VA_ARGS__);			\
+        status = fcn(fd, iov, iovcnt, flags);				\
         if (status > 0)							\
             count = 0;							\
     } while (status < 0 && errno == EINTR);				\
@@ -237,7 +239,7 @@ safe_send (int fd, const void *data, size_t size, int flags)
         tmpiov[i].iov_len -= offset;					\
                                                                         \
         /* Write out what's left and return success if it's all written. */	\
-        status = fcn(fd, tmpiov + i, iovleft, ##__VA_ARGS__);		\
+        status = fcn(fd, tmpiov + i, iovleft, flags);			\
         if (status <= 0)						\
             offset = 0;							\
         else {								\
@@ -270,20 +272,6 @@ sendv (int fd, struct iovec iov[], int iovcnt, int flags)
     msg.msg_iovlen = iovcnt;
 
     return (sendmsg (fd, &msg, flags));
-}
-
-/**
- * EINTR-ready version of writev().
- *
- * @param[in] fd     A file descriptor to write to.
- * @param[in] iov    An array of iovec buffers to wtite.
- * @param[in] iovcnt A number of iovec buffers to write.
- * @return Number of bytes which were written on success, -1 on failure.
- **/
-ssize_t
-safe_writev (int fd, const struct iovec iov[], int iovcnt)
-{
-    SAFE_GENERIC_VOP (writev, fd, iov, iovcnt);
 }
 
 /**
@@ -327,7 +315,7 @@ is_deleted (int fd)
 
     if (fstat (fd, &st) == -1) {
         if (errno != ENOENT) {
-            perror_msg ("fstat %d failed", fd);
+            perror_msg (("fstat %d failed", fd));
         }
         return 1;
     }

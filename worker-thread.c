@@ -90,7 +90,7 @@ enqueue_event (struct i_watch *iw, uint32_t mask, const struct dep_item *di)
     }
 
     if (event_queue_enqueue (&wrk->eq, iw->wd, mask, cookie, name) == -1) {
-        perror_msg ("Failed to enqueue a inotify event %x", mask);
+        perror_msg (("Failed to enqueue a inotify event %x", mask));
         return -1;
     }
 
@@ -126,8 +126,8 @@ process_command (struct worker *wrk, struct worker_cmd *cmd)
         cmd->error = errno;
         break;
     default:
-        perror_msg ("Worker processing a command without a command - "
-                    "something went wrong.");
+        perror_msg (("Worker processing a command without a command - "
+                    "something went wrong."));
         cmd->retval = -1;
         cmd->error = EINVAL;
     }
@@ -271,7 +271,7 @@ produce_directory_diff (struct i_watch *iw, struct kevent *event)
 
     struct chg_list *changes = dl_listing (iw->fd, &iw->deps);
     if (changes == NULL) {
-        perror_msg ("Failed to create a listing for watch %d", iw->wd);
+        perror_msg (("Failed to create a listing for watch %d", iw->wd));
         return;
     }
 
@@ -435,7 +435,7 @@ worker_thread (void *arg)
 
         int nevents = kevent (wrk->kq, NULL, 0, received, MAXEVENTS, NULL);
         if (nevents == -1) {
-            perror_msg ("kevent failed");
+            perror_msg (("kevent failed"));
             continue;
         }
         for (i = 0; i < nevents; i++) {
