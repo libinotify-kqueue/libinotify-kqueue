@@ -408,6 +408,38 @@ worker_free (struct worker *wrk)
 }
 
 /**
+ * Allocate new inotify watch descriptor.
+ *
+ * @param[in] wrk   A pointer to #worker.
+ * @return An unique (per watch) newly allocated descriptor
+ **/
+int
+worker_allocate_wd (struct worker *wrk)
+{
+    bool allocated;
+
+    do {
+        if (wrk->wd_last == INT_MAX) {
+            wrk->wd_last = 0;
+            wrk->wd_overflow = true;
+        }
+        allocated = true;
+        ++wrk->wd_last;
+        if (wrk->wd_overflow) {
+            struct i_watch *iw;
+            SLIST_FOREACH (iw, &wrk->head, next) {
+                if (iw->wd == wrk->wd_last) {
+                    allocated = false;
+                    break;
+                }
+            }
+        }
+    } while (!allocated);
+
+    return wrk->wd_last;
+}
+
+/**
  * Add or modify a watch.
  *
  * @param[in] wrk   A pointer to #worker.
@@ -424,7 +456,6 @@ worker_add_or_modify (struct worker *wrk,
     struct stat st;
     struct watch *w;
     struct i_watch *iw;
-    bool allocated;
 
     assert (path != NULL);
     assert (wrk != NULL);
@@ -460,25 +491,6 @@ worker_add_or_modify (struct worker *wrk,
     if (iw == NULL) {
         return -1;
     }
-
-    /* Allocate watch descriptor */
-    do {
-        if (wrk->wd_last == INT_MAX) {
-            wrk->wd_last = 0;
-            wrk->wd_overflow = true;
-        }
-        allocated = true;
-        ++wrk->wd_last;
-        if (wrk->wd_overflow) {
-            SLIST_FOREACH (iw, &wrk->head, next) {
-                if (iw->wd == wrk->wd_last) {
-                    allocated = false;
-                    break;
-                }
-            }
-        }
-    } while (!allocated);
-    iw->wd = wrk->wd_last;
 
     /* add inotify watch to worker`s watchlist */
     SLIST_INSERT_HEAD (&wrk->head, iw, next);

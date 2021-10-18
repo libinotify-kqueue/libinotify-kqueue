@@ -122,6 +122,7 @@ iwatch_init (struct worker *wrk, int fd, uint32_t flags)
         return NULL;
     }
 
+    iw->wd = worker_allocate_wd (wrk);
     iw->wrk = wrk;
     iw->fd = fd;
     iw->flags = flags;

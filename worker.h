@@ -112,6 +112,7 @@ int            worker_notify  (struct worker *wrk, struct worker_cmd *cmd);
 int     worker_add_or_modify  (struct worker *wrk,
                                const char *path,
                                uint32_t flags);
+int     worker_allocate_wd    (struct worker *wrk);
 int     worker_remove         (struct worker *wrk, int id);
 void    worker_remove_iwatch  (struct worker *wrk, struct i_watch *iw);
 int     worker_set_param      (struct worker *wrk, int param, intptr_t value);
