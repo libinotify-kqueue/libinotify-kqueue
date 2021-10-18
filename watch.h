@@ -39,11 +39,6 @@ typedef struct watch watch;
 
 #include "inotify-watch.h"
 
-/* Inherit watch_flags_t from <sys/stat.h> mode_t type.
- * It is hackish but allow to use existing stat macroses */
-#define WF_SKIP_NEXT  S_IWOTH /* Some evens (open/close/read) should be skipped
-                               * on the next round as produced by libinotify */
-
 #define WD_FOREACH(wd, w) SLIST_FOREACH ((wd), &(w)->deps, next)
 
 typedef enum watch_type {
@@ -59,9 +54,9 @@ struct watch_dep {
 
 struct watch {
     i_watch *iw;              /* A pointer to parent inotify watch */
-    mode_t flags;             /* A watch flags. Not in inotify/kqueue format */
     int fd;                   /* file descriptor of a watched entry */
     ino_t inode;              /* inode number taken from readdir call */
+    bool skip_next;           /* next kevent can be produced by readdir call */
     struct watch_dep_list deps; /* An associated dep_items list */
     RB_ENTRY(watch) link;     /* RB tree links */
 };

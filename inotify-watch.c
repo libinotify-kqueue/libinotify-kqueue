@@ -122,6 +122,7 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
     iw->wrk = wrk;
     iw->fd = fd;
     iw->flags = flags;
+    iw->mode = st.st_mode & S_IFMT;
     iw->inode = st.st_ino;
     iw->dev = st.st_dev;
     iw->is_closed = 0;
@@ -217,7 +218,6 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
 
     watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL) {
-        di_settype (di, w->flags);
         goto hold;
     }
 
@@ -351,7 +351,7 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
     watch *w = watch_set_find (&iw->watches, iw->inode);
     assert (w != NULL);
     assert (!watch_deps_empty (w));
-    uint32_t fflags = inotify_to_kqueue (flags, w->flags, true);
+    uint32_t fflags = inotify_to_kqueue (flags, iw->mode, true);
     watch_register_event (w, fflags);
 
     /* update kqueue subwatches or close those we dont need to watch */
@@ -362,7 +362,7 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
             /* try to watch  unwatched subfiles */
             iwatch_add_subwatch (iw, iter);
         } else {
-            fflags = inotify_to_kqueue (flags, w->flags, false);
+            fflags = inotify_to_kqueue (flags, iter->type, false);
             if (fflags == 0) {
                 watch_del_dep (w, iter);
             } else {

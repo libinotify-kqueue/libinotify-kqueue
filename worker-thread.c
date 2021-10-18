@@ -326,7 +326,7 @@ produce_notifications (worker *wrk, struct kevent *event)
     bool is_parent = false;
 
     /* Set deleted flag if no more links exist */
-    if (flags & NOTE_DELETE && (!S_ISREG (w->flags) || is_deleted (w->fd))) {
+    if (flags & NOTE_DELETE && is_deleted (w->fd)) {
         deleted = true;
     }
 
@@ -334,19 +334,17 @@ produce_notifications (worker *wrk, struct kevent *event)
     defined (NOTE_OPEN) && defined (NOTE_CLOSE)
     /* Mask events produced by open/closedir calls while directory diffing.
      * Kqueue coalesces both events as kevent is not called that time */
-    if (w->flags & WF_SKIP_NEXT) {
+    if (w->skip_next) {
         flags &= ~(NOTE_OPEN | NOTE_CLOSE);
     }
 #endif
 #ifdef NOTE_READ
     /* Mask event produced by readdir call while directory diffing. */
-    if (w->flags & WF_SKIP_NEXT) {
+    if (w->skip_next) {
         flags &= ~NOTE_READ;
     }
 #endif
-    if (S_ISDIR (w->flags)) {
-        w->flags &= ~WF_SKIP_NEXT;
-    }
+    w->skip_next = false;
 
     size_t i;
     /* Deaggregate inotify events  */
@@ -358,13 +356,15 @@ produce_notifications (worker *wrk, struct kevent *event)
         WD_FOREACH (wd, w) {
 
             is_parent = watch_dep_is_parent (wd);
+            mode_t mode = is_parent ? iw->mode : wd->di->type;
 
             uint32_t i_flags = kqueue_to_inotify (flags,
-                                                  w->flags,
+                                                  mode,
                                                   is_parent,
                                                   deleted);
+
             if (is_parent && ie_order[i] == IN_MODIFY &&
-                flags & NOTE_WRITE && S_ISDIR (w->flags)) {
+                flags & NOTE_WRITE && S_ISDIR (iw->mode)) {
 #ifdef __OpenBSD__
                 /* OpenBSD notifies user with kevent about file moved in/out
                  * watched directory slightly BEFORE change hits directory
@@ -373,7 +373,7 @@ produce_notifications (worker *wrk, struct kevent *event)
                 nanosleep (&timeout, NULL);
 #endif
                 produce_directory_diff (iw, event);
-                w->flags |= WF_SKIP_NEXT;
+                w->skip_next = true;
 
             } else if (i_flags & ie_order[i]) {
 

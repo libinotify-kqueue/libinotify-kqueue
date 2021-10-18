@@ -42,6 +42,7 @@ struct i_watch {
     int skip_subfiles;         /* Fs is not safe to start subwatches */
 #endif
     uint32_t flags;            /* flags in the inotify format */
+    mode_t mode;               /* File status of the watched inode */
     ino_t inode;               /* inode number of watched inode */
     dev_t dev;                 /* device number of watched inode */
     dep_list deps;             /* dependence list of inotify watch */

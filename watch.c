@@ -285,7 +285,7 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
 
     w->iw = iw;
     w->fd = fd;
-    w->flags = st->st_mode & S_IFMT;
+    w->skip_next = false;
     SLIST_INIT (&w->deps);
     /* Inode number obtained via fstat call cannot be used here as it
      * differs from readdir`s one at mount points. */
