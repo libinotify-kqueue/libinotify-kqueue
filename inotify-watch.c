@@ -107,6 +107,7 @@ iwatch_init (struct worker *wrk, int fd, uint32_t flags)
     struct stat st;
     struct i_watch *iw;
     struct watch *parent;
+    bool is_new = false;
 
     assert (wrk != NULL);
     assert (fd != -1);
@@ -153,15 +154,16 @@ iwatch_init (struct worker *wrk, int fd, uint32_t flags)
             iwatch_free (iw);
             return NULL;
         }
-        watch_set_insert (&wrk->watches, parent);
+        is_new = true;
     }
 
     if (watch_add_dep (parent, iw, DI_PARENT) == NULL) {
-        if (watch_deps_empty (parent)) {
-            watch_set_delete (&wrk->watches, parent);
-        }
         iwatch_free (iw);
         return NULL;
+    }
+
+    if (is_new) {
+        watch_set_insert (&wrk->watches, parent);
     }
 
     if (S_ISDIR (st.st_mode)) {
@@ -299,11 +301,16 @@ iwatch_add_subwatch (struct i_watch *iw, struct dep_item *di)
         return NULL;
     }
 
+    if (watch_add_dep (w, iw, di) == NULL) {
+        watch_free (w);
+        return NULL;
+    }
     watch_set_insert (&iw->wrk->watches, w);
+    return w;
 
 hold:
-    if (watch_add_dep (w, iw, di) == NULL && watch_deps_empty (w)) {
-        watch_set_delete (&iw->wrk->watches, w);
+    if (watch_add_dep (w, iw, di) == NULL) {
+        return NULL;
     }
     return w;
 

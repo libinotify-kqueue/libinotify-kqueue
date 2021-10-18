@@ -99,6 +99,7 @@ watch_set_insert (struct watch_set *ws, struct watch *w)
 {
     assert (ws != NULL);
     assert (w != NULL);
+    assert (!watch_deps_empty (w));
 
     RB_INSERT (watch_set, ws, w);
 }
