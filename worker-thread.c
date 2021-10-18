@@ -441,7 +441,6 @@ worker_thread (void *arg)
         for (i = 0; i < nevents; i++) {
             if (received[i].ident == wrk->io[KQUEUE_FD]) {
                 if (received[i].flags & EV_EOF) {
-                    wrk->io[INOTIFY_FD] = -1;
                     worker_erase (wrk);
                     /* Notify user threads waiting for cmd of grim news */
                     worker_post (wrk);

@@ -82,7 +82,7 @@ void worker_cmd_param  (struct worker_cmd *cmd, int param, intptr_t value);
 
 struct worker {
     int kq;                /* kqueue descriptor */
-    volatile int io[2];    /* a socket pair */
+    int io[2];             /* a socket pair */
     int sockbufsize;       /* socket buffer size */
     pthread_t thread;      /* worker thread */
     struct i_watch_list head; /* linked list of inotify watches */

@@ -274,6 +274,7 @@ worker_erase (struct worker *wrk)
             break;
         }
     }
+    wrk->io[INOTIFY_FD] = -1;
     workerset_unlock ();
 }
 

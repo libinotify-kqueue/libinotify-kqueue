@@ -289,7 +289,7 @@ worker_create (int flags)
         goto failure;
     }
 
-    if (pipe_init ((int *) wrk->io, flags) == -1) {
+    if (pipe_init (wrk->io, flags) == -1) {
         perror_msg ("Failed to create a pipe");
         goto failure;
     }
