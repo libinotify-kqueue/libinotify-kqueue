@@ -345,41 +345,35 @@ produce_notifications (worker *wrk, struct kevent *event)
         w->flags &= ~WF_SKIP_NEXT;
     }
 
-    if (!(w->flags & WF_ISSUBWATCH)) {
-        uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
+    uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
 
-        size_t i;
-        /* Deaggregate inotify events (most of) */
-        for (i = 0; i < nitems (ie_order); i++) {
-            if (i_flags & ie_order[i]) {
+    size_t i;
+    /* Deaggregate inotify events  */
+    for (i = 0; i < nitems (ie_order); i++) {
+
+        if (!(w->flags & WF_ISSUBWATCH) && ie_order[i] == IN_MODIFY &&
+            flags & NOTE_WRITE && S_ISDIR (w->flags)) {
+#ifdef __OpenBSD__
+            /* OpenBSD notifies user with kevent about file moved in/out
+             * watched directory slightly BEFORE change hits directory
+             * content. Workaround it with adding a small delay. */
+            struct timespec timeout = { 0, 5 };
+            nanosleep (&timeout, NULL);
+#endif
+            produce_directory_diff (iw, event);
+            w->flags |= WF_SKIP_NEXT;
+
+        } else if (i_flags & ie_order[i]) {
+
+            if (!(w->flags & WF_ISSUBWATCH)) {
                 /* Report deaggregated items */
                 enqueue_event (iw,
                                ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
                                NULL);
-            } else
-            /* Report subfiles(dependency) list changes */
-            if (ie_order[i] == IN_MODIFY &&
-                flags & NOTE_WRITE && S_ISDIR (w->flags)) {
-#ifdef __OpenBSD__
-                /* OpenBSD notifies user with kevent about file moved in/out
-                 * watched directory slightly BEFORE change hits directory
-                 * content. Workaround it with adding a small delay. */
-                struct timespec timeout = { 0, 5 };
-                nanosleep (&timeout, NULL);
-#endif
-                produce_directory_diff (iw, event);
-                w->flags |= WF_SKIP_NEXT;
-            }
-        }
-    } else {
-        uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
-
-        size_t i;
-        /* Deaggregate inotify events */
-        for (i = 0; i < nitems (ie_order); i++) {
-            if (i_flags & ie_order[i]) {
+            } else {
+                /* Report subfiles(dependency) list changes */
                 uint32_t i_flag = ie_order[i] | (i_flags & ~IN_ALL_EVENTS);
-                /* Report deaggregated items */
+
                 assert (!watch_deps_empty (w));
                 struct watch_dep *wd;
                 WD_FOREACH (wd, w) {
