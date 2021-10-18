@@ -82,7 +82,7 @@ static void    workers_init (void);
  * @return  -1 on failure, a file descriptor on success.
  **/
 int
-inotify_init (void) __THROW
+inotify_init (void)
 {
     return inotify_init1 (0);
 }
@@ -98,7 +98,7 @@ inotify_init (void) __THROW
  * @return  -1 on failure, a file descriptor on success.
  **/
 int
-inotify_init1 (int flags) __THROW
+inotify_init1 (int flags)
 {
     int lfd = -1;
 
@@ -174,7 +174,7 @@ inotify_init1 (int flags) __THROW
 int
 inotify_add_watch (int         fd,
                    const char *name,
-                   uint32_t    mask) __THROW
+                   uint32_t    mask)
 {
     struct stat st;
     struct worker_cmd cmd;
@@ -217,7 +217,7 @@ inotify_add_watch (int         fd,
  **/
 int
 inotify_rm_watch (int fd,
-                  int wd) __THROW
+                  int wd)
 {
     struct worker_cmd cmd;
 
