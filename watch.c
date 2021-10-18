@@ -22,6 +22,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include "config.h"
+
 #include <sys/types.h>
 #include <sys/event.h> /* kevent */
 #include <sys/stat.h> /* stat */
