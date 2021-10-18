@@ -26,7 +26,6 @@
 #include <dirent.h>  /* opendir, readdir, closedir */
 #include <errno.h>   /* errno */
 #include <fcntl.h>   /* open */
-#include <stdbool.h> /* bool */
 #include <stddef.h>  /* offsetof */
 #include <stdlib.h>  /* calloc */
 #include <string.h>  /* strcmp */

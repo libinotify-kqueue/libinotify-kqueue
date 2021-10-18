@@ -30,12 +30,12 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
-#include <stdbool.h>
 #include <stddef.h> /* NULL */
 #include <unistd.h>
 
 #include "sys/inotify.h"
 
+#include "compat.h"
 #include "utils.h"
 #include "worker.h"
 

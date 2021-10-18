@@ -53,6 +53,22 @@
 #include <inttypes.h>
 #endif
 
+#if HAVE_STDBOOL_H
+# include <stdbool.h>
+#else
+# ifndef HAVE__BOOL
+#  ifdef __cplusplus
+typedef bool _Bool;
+#  else
+typedef int _Bool;
+#  endif
+# endif
+# define bool _Bool
+# define false 0
+# define true 1
+# define __bool_true_false_are_defined 1
+#endif
+
 #ifndef __cplusplus /* requires stdbool.h */
 #ifdef HAVE_STDATOMIC_H
 #include <stdatomic.h>

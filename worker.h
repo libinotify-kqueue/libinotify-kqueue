@@ -29,7 +29,6 @@
 #include <sys/queue.h>
 
 #include <pthread.h>
-#include <stdbool.h>
 
 #include "compat.h"
 #include "event-queue.h"

@@ -7,6 +7,7 @@ AC_PROG_LIBTOOL
 AC_PROG_CXX
 AC_CONFIG_FILES([Makefile libinotify.pc])
 AC_C_FLEXIBLE_ARRAY_MEMBER
+AC_HEADER_STDBOOL
 
 case "$host_os" in
 *linux*)

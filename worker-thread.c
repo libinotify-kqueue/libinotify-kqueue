@@ -30,11 +30,11 @@
 #include <errno.h>  /* errno */
 #include <stdlib.h> /* calloc, realloc */
 #include <string.h> /* memset */
-#include <stdbool.h>
 #include <stdio.h>
 
 #include "sys/inotify.h"
 
+#include "compat.h"
 #include "config.h"
 #include "dep-list.h"
 #include "inotify-watch.h"

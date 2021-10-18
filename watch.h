@@ -31,7 +31,6 @@
 
 #include <assert.h>    /* assert */
 #include <dirent.h>    /* ino_t */
-#include <stdbool.h>
 
 #include "compat.h"
 #include "dep-list.h"

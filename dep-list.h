@@ -29,8 +29,6 @@
 #include <sys/queue.h> /* SLIST */
 #include <sys/stat.h>  /* mode_t */
 
-#include <stdbool.h>
-
 #include "compat.h"
 #include "config.h"
 
