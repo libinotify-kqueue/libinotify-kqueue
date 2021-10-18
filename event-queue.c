@@ -50,7 +50,7 @@ event_queue_init (struct event_queue *eq)
 {
     eq->allocated = 0;
     eq->sb_events = 0;
-    eq->count = 0;
+    eq->mem_events = 0;
     eq->iov = NULL;
     eq->last = NULL;
     event_queue_set_max_events (eq, IN_DEF_MAX_QUEUED_EVENTS);
@@ -66,7 +66,7 @@ event_queue_free (struct event_queue *eq)
 {
     int i;
 
-    for (i = 0; i < eq->count; i++) {
+    for (i = 0; i < eq->mem_events; i++) {
         free (eq->iov[i].iov_base);
     }
     free (eq->iov);
@@ -100,8 +100,8 @@ event_queue_set_max_events (struct event_queue *eq, int max_events)
 static int
 event_queue_extend (struct event_queue *eq)
 {
-    if (eq->count >= eq->allocated) {
-        int to_allocate = eq->count * 3 / 2;
+    if (eq->mem_events >= eq->allocated) {
+        int to_allocate = eq->mem_events * 3 / 2;
         void *ptr;
 
         if (to_allocate < 10) {
@@ -143,7 +143,7 @@ event_queue_enqueue (struct event_queue *eq,
     struct inotify_event *prev_ie;
     int retval = 0;
 
-    if (eq->count > eq->max_events) {
+    if (eq->mem_events > eq->max_events) {
         return -1;
     }
 
@@ -151,7 +151,7 @@ event_queue_enqueue (struct event_queue *eq,
         return -1;
     }
 
-    if (eq->count == eq->max_events) {
+    if (eq->mem_events == eq->max_events) {
         wd = -1;
         mask = IN_Q_OVERFLOW;
         cookie = 0;
@@ -163,8 +163,8 @@ event_queue_enqueue (struct event_queue *eq,
      * Find previous reported event. If event queue is not empty, get last
      * event from tail. Otherwise get last event sent to communication pipe.
      */
-    prev_ie =
-        eq->count > 0 ? eq->iov[eq->count - 1].iov_base : (void *)eq->last;
+    prev_ie = eq->mem_events > 0 ?
+        (struct inotify_event*)eq->iov[eq->mem_events - 1].iov_base : eq->last;
 
     /* Compare current event with previous to decide if it can be coalesced */
     if (prev_ie != NULL &&
@@ -178,7 +178,7 @@ event_queue_enqueue (struct event_queue *eq,
             int buffered = 0;
 
             /* Events are identical and queue is not empty. Skip current. */
-            if (eq->count > 0) {
+            if (eq->mem_events > 0) {
                 return retval;
             }
             /* Event queue is empty. Check if any events remain in the pipe */
@@ -187,14 +187,14 @@ event_queue_enqueue (struct event_queue *eq,
             }
     }
 
-    eq->iov[eq->count].iov_base = (void *)create_inotify_event (
-        wd, mask, cookie, name, &eq->iov[eq->count].iov_len);
-    if (eq->iov[eq->count].iov_base == NULL) {
+    eq->iov[eq->mem_events].iov_base = (void *)create_inotify_event (
+        wd, mask, cookie, name, &eq->iov[eq->mem_events].iov_len);
+    if (eq->iov[eq->mem_events].iov_base == NULL) {
         perror_msg (("Failed to create a inotify event %x", mask));
         return -1;
     }
 
-    ++eq->count;
+    ++eq->mem_events;
 
     return retval;
 }
@@ -214,7 +214,7 @@ void event_queue_flush (struct event_queue *eq, size_t sbspace)
     size_t iovlen = 0;
     int i;
 
-    iovmax = eq->count;
+    iovmax = eq->mem_events;
     if (iovmax > IOV_MAX) {
         iovmax = IOV_MAX;
     }
@@ -248,8 +248,8 @@ void event_queue_flush (struct event_queue *eq, size_t sbspace)
 
     memmove (&eq->iov[0],
              &eq->iov[iovcnt],
-             sizeof(struct iovec) * (eq->count - iovcnt));
-    eq->count -= iovcnt;
+             sizeof(struct iovec) * (eq->mem_events - iovcnt));
+    eq->mem_events -= iovcnt;
     eq->sb_events += iovcnt;
 }
 

@@ -438,7 +438,7 @@ worker_thread (void *arg)
         size_t i;
         int nevents;
 
-        if (sbspace > 0 && wrk->eq.count > 0) {
+        if (sbspace > 0 && wrk->eq.mem_events > 0) {
             event_queue_flush (&wrk->eq, sbspace);
             sbspace = 0;
         }

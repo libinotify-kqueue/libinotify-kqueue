@@ -32,7 +32,7 @@
 struct event_queue {
     struct iovec *iov; /* inotify events to send */
     int sb_events;     /* number of events enqueued in send buffer */
-    int count;         /* number of events enqueued */
+    int mem_events;    /* number of events enqueued in memory */
     int allocated;     /* number of iovs allocated */
     int max_events;    /* max_queued_events */
     struct inotify_event *last; /* Last event sent to socket */
