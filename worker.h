@@ -89,6 +89,7 @@ struct worker {
     atomic_uint mutex_rc;  /* worker mutex sleepers/holders refcount */
     ik_sem_t sync_sem;     /* worker <-> user syncronization semaphore */
     event_queue eq;        /* inotify events queue */
+    watch_set watches;     /* kqueue watches */
 };
 
 #define container_of(p, s, f) ((s *)(((uint8_t *)(p)) - offsetof(s, f)))

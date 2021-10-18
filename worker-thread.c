@@ -318,7 +318,7 @@ produce_notifications (worker *wrk, struct kevent *event)
     assert (w != NULL);
     assert (w->fd == event->ident);
 
-    struct watch_dep *wd;
+    struct watch_dep *wd, *wd2;
     uint32_t flags = event->fflags;
     bool deleted = false;
 
@@ -355,7 +355,7 @@ produce_notifications (worker *wrk, struct kevent *event)
             bool is_parent = watch_dep_is_parent (wd);
             mode_t mode = watch_dep_get_mode (wd);
 
-            assert (watch_set_find (&iw->watches, w->dev, w->inode) == w);
+            assert (watch_set_find (&wrk->watches, w->dev, w->inode) == w);
 
             uint32_t i_flags = kqueue_to_inotify (flags,
                                                   mode,
@@ -386,13 +386,27 @@ produce_notifications (worker *wrk, struct kevent *event)
         }
     }
 
-    WD_FOREACH (wd, w) {
-        if (wd->iw->is_closed ||
-            (watch_dep_is_parent (wd) && (deleted || flags & NOTE_REVOKE))) {
-            worker_remove (wrk, wd->iw->wd);
-            break;
+   /* worker_remove can free watch deps and watch itself on return so we should
+    * reiterate after worker_remove or break loop if watch is associated with
+    * only one inotify watch to avoid use after free */
+    bool reiterate;
+    do {
+        reiterate = false;
+        WD_FOREACH (wd, w) {
+            if (wd->iw->is_closed || (watch_dep_is_parent (wd) &&
+                (deleted || flags & NOTE_REVOKE))) {
+                /* Check are 2 or more #i_watch associated with #watch */
+                WD_FOREACH (wd2, w) {
+                    if (wd->iw != wd2->iw) {
+                        reiterate = true;
+                        break;
+                    }
+                }
+                worker_remove (wrk, wd->iw->wd);
+                break;
+            }
         }
-    }
+    } while (reiterate);
 }
 
 /**

@@ -43,6 +43,7 @@
 
 #include "event-queue.h"
 #include "utils.h"
+#include "watch.h"
 #include "worker-thread.h"
 #include "worker.h"
 
@@ -294,6 +295,7 @@ worker_create (int flags)
     atomic_init (&wrk->mutex_rc, 0);
     ik_sem_init (&wrk->sync_sem, 0, 0);
     event_queue_init (&wrk->eq);
+    watch_set_init (&wrk->watches);
 
     /* create a run a worker thread */
     pthread_attr_init (&attr);
@@ -391,19 +393,22 @@ worker_add_or_modify (worker     *wrk,
     }
 
     /* look up for an entry with these inode&device numbers */
-    i_watch *iw;
-    SLIST_FOREACH (iw, &wrk->head, next) {
-        if (iw->inode == st.st_ino && iw->dev == st.st_dev) {
-            close (fd);
-            iwatch_update_flags (iw, flags);
-            return iw->wd;
+    struct watch *w = watch_set_find (&wrk->watches, st.st_dev, st.st_ino);
+    if (w != NULL) {
+        struct watch_dep *wd;
+        close (fd);
+        fd = w->fd;
+        WD_FOREACH (wd, w) {
+            if (watch_dep_is_parent (wd)) {
+                iwatch_update_flags (wd->iw, flags);
+                return wd->iw->wd;
+            }
         }
     }
 
     /* create a new entry if watch is not found */
-    iw = iwatch_init (wrk, fd, flags);
+    i_watch *iw = iwatch_init (wrk, fd, flags);
     if (iw == NULL) {
-        close (fd);
         return -1;
     }
 
