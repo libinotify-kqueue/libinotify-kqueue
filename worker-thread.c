@@ -371,10 +371,6 @@ produce_notifications (worker *wrk, struct kevent *event)
                 w->flags |= WF_SKIP_NEXT;
             }
         }
-
-        if (w->flags & WF_DELETED || flags & NOTE_REVOKE) {
-            iw->is_closed = 1;
-        }
     } else {
         uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
 
@@ -395,7 +391,8 @@ produce_notifications (worker *wrk, struct kevent *event)
         }
     }
 
-    if (iw->is_closed) {
+    if (iw->is_closed || (!(w->flags & WF_ISSUBWATCH) &&
+        (w->flags & WF_DELETED || flags & NOTE_REVOKE))) {
         worker_remove (wrk, iw->wd);
     }
 }
