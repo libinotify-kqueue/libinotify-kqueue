@@ -32,6 +32,16 @@
 #include "watch-set.h"
 #include "watch.h"
 
+static int watch_set_cmp (struct watch *w1, struct watch *w2);
+
+RB_GENERATE_NEXT(watch_set, watch, link, static inline)
+RB_GENERATE_MINMAX(watch_set, watch, link, static inline)
+RB_GENERATE_INSERT_COLOR(watch_set, watch, link, static inline)
+RB_GENERATE_REMOVE_COLOR(watch_set, watch, link, static inline)
+RB_GENERATE_INSERT(watch_set, watch, link, watch_set_cmp, static inline)
+RB_GENERATE_REMOVE(watch_set, watch, link, static inline)
+RB_GENERATE_FIND(watch_set, watch, link, watch_set_cmp, static inline)
+
 /**
  * Initialize the watch set.
  *
@@ -128,5 +138,3 @@ watch_set_cmp (struct watch *w1, struct watch *w2)
     else
         return ((w1->dev > w2->dev) - (w1->dev < w2->dev));
 }
-
-RB_GENERATE(watch_set, watch, link, watch_set_cmp)

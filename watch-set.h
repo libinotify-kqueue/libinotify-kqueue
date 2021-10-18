@@ -40,7 +40,4 @@ void          watch_set_delete (struct watch_set *ws, struct watch *w);
 void          watch_set_insert (struct watch_set *ws, struct watch *w);
 struct watch *watch_set_find   (struct watch_set *ws, dev_t dev, ino_t inode);
 
-RB_PROTOTYPE(watch_set, watch, link, watch_cmp)
-
-
 #endif /* __WATCH_SET_H__ */
