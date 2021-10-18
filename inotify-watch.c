@@ -186,9 +186,6 @@ iwatch_free (i_watch *iw)
     if (w != NULL) {
         assert (!watch_deps_empty (w));
         watch_del_dep (w, DI_PARENT);
-        if (watch_deps_empty (w)) {
-            watch_set_delete (&iw->watches, w);
-        }
     }
 
     dl_free (&iw->deps);
@@ -303,10 +300,6 @@ iwatch_del_subwatch (i_watch *iw, const dep_item *di)
     if (w != NULL) {
         assert (!watch_deps_empty (w));
         watch_del_dep (w, di);
-
-        if (watch_deps_empty (w)) {
-            watch_set_delete (&iw->watches, w);
-        }
     }
 }
 
@@ -372,9 +365,6 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
             fflags = inotify_to_kqueue (flags, w->flags, false);
             if (fflags == 0) {
                 watch_del_dep (w, iter);
-                if (watch_deps_empty (w)) {
-                    watch_set_delete (&iw->watches, w);
-                }
             } else {
                 watch_register_event (w, fflags);
             }

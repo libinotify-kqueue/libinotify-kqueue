@@ -378,6 +378,9 @@ watch_del_dep (watch *w, const dep_item *di)
     if (wd != NULL) {
         SLIST_REMOVE (&w->deps, wd, watch_dep, next);
         free (wd);
+        if (watch_deps_empty (w)) {
+            watch_set_delete (&w->iw->watches, w);
+        }
     }
     return (wd);
 }
