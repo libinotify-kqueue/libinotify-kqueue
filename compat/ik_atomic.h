@@ -33,12 +33,12 @@ extern pthread_mutex_t ik_atomic_mutex;
 typedef	_Atomic(unsigned int)		atomic_uint;
 #define ATOMIC_VAR_INIT(value)          (value)
 #define	atomic_init(object, value)	(*(object) = (value))
-#define atomic_load(object) ((typeof (*(object))) \
-    atomic_fetch_add_impl((object), 0, sizeof (*(object))))
-#define atomic_fetch_add(object, operand) ((typeof (*(object))) \
-    atomic_fetch_add_impl((object), (operand), sizeof (*(object))))
-#define atomic_fetch_sub(object, operand) ((typeof (*(object))) \
-    atomic_fetch_add_impl((object), -(operand), sizeof (*(object))))
+#define atomic_load(object) \
+    atomic_fetch_add_impl((object), 0, sizeof (*(object)))
+#define atomic_fetch_add(object, operand) \
+    atomic_fetch_add_impl((object), (operand), sizeof (*(object)))
+#define atomic_fetch_sub(object, operand) \
+    atomic_fetch_add_impl((object), -(operand), sizeof (*(object)))
 
 static inline uint64_t
 atomic_fetch_add_impl (volatile void *object, uint64_t operand, int bytes)
