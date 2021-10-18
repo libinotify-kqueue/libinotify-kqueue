@@ -175,7 +175,22 @@ iwatch_free (i_watch *iw)
 {
     assert (iw != NULL);
 
-    watch_set_free (&iw->watches);
+    /* unwatch subfiles */
+    dep_item *iter;
+    DL_FOREACH (iter, &iw->deps) {
+        iwatch_del_subwatch (iw, iter);
+    }
+
+    /* unwatch parent */
+    watch *w = watch_set_find (&iw->watches, iw->inode);
+    if (w != NULL) {
+        assert (!watch_deps_empty (w));
+        watch_del_dep (w, DI_PARENT);
+        if (watch_deps_empty (w)) {
+            watch_set_delete (&iw->watches, w);
+        }
+    }
+
     dl_free (&iw->deps);
     free (iw);
 }
