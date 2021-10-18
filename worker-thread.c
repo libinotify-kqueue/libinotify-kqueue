@@ -322,31 +322,30 @@ produce_notifications (worker *wrk, struct kevent *event)
 
     uint32_t flags = event->fflags;
 
-    if (!(w->flags & WF_ISSUBWATCH)) {
-        /* Set deleted flag if no more links exist */
-        if (flags & NOTE_DELETE &&
-            (!S_ISREG (w->flags) || is_deleted (w->fd))) {
-                w->flags |= WF_DELETED;
-        }
+    /* Set deleted flag if no more links exist */
+    if (flags & NOTE_DELETE && (!S_ISREG (w->flags) || is_deleted (w->fd))) {
+        w->flags |= WF_DELETED;
+    }
 
 #if (READDIR_DOES_OPENDIR == 2) && \
     defined (NOTE_OPEN) && defined (NOTE_CLOSE)
-        /* Mask events produced by open/closedir calls while directory diffing.
-         * Kqueue coalesces both events as kevent is not called that time */
-        if (w->flags & WF_SKIP_NEXT) {
-            flags &= ~(NOTE_OPEN | NOTE_CLOSE);
-        }
+    /* Mask events produced by open/closedir calls while directory diffing.
+     * Kqueue coalesces both events as kevent is not called that time */
+    if (w->flags & WF_SKIP_NEXT) {
+        flags &= ~(NOTE_OPEN | NOTE_CLOSE);
+    }
 #endif
 #ifdef NOTE_READ
-        /* Mask event produced by readdir call while directory diffing. */
-        if (w->flags & WF_SKIP_NEXT) {
-            flags &= ~NOTE_READ;
-        }
+    /* Mask event produced by readdir call while directory diffing. */
+    if (w->flags & WF_SKIP_NEXT) {
+        flags &= ~NOTE_READ;
+    }
 #endif
-        if (S_ISDIR (w->flags)) {
-            w->flags &= ~WF_SKIP_NEXT;
-        }
+    if (S_ISDIR (w->flags)) {
+        w->flags &= ~WF_SKIP_NEXT;
+    }
 
+    if (!(w->flags & WF_ISSUBWATCH)) {
         uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
 
         size_t i;
