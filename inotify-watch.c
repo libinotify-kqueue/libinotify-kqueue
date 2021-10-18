@@ -251,7 +251,9 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
     watch_set_insert (&iw->watches, w);
 
 hold:
-    ++w->refcount;
+    if (watch_add_dep (w, di) == NULL && watch_deps_empty (w)) {
+        watch_set_delete (&iw->watches, w);
+    }
     return w;
 
 lstat:
@@ -279,12 +281,35 @@ iwatch_del_subwatch (i_watch *iw, const dep_item *di)
 
     watch *w = watch_set_find (&iw->watches, di->inode);
     if (w != NULL) {
-        assert (w->refcount > 0);
-        --w->refcount;
+        assert (!watch_deps_empty (w));
+        watch_del_dep (w, di);
 
-        if (w->refcount == 0) {
+        if (watch_deps_empty (w)) {
             watch_set_delete (&iw->watches, w);
         }
+    }
+}
+
+/**
+ * Update a inotify watch from worker by its old and new paths.
+ *
+ * @param[in] iw      A pointer to the #i_watch.
+ * @param[in] di_from A old name & inode number of the file.
+ * @param[in] di_to   A new name & inode number of the file.
+ **/
+void
+iwatch_move_subwatch (i_watch *iw,
+                      const dep_item *di_from,
+                      const dep_item *di_to)
+{
+    assert (iw != NULL);
+    assert (di_from != NULL);
+    assert (di_to != NULL);
+    assert (di_from->inode == di_to->inode);
+
+    watch *w = watch_set_find (&iw->watches, di_to->inode);
+    if (w != NULL && !watch_deps_empty (w)) {
+        watch_chg_dep (w, di_from, di_to);
     }
 }
 

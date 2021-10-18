@@ -27,9 +27,12 @@
 
 #include "compat.h"
 
+#include <assert.h>    /* assert */
 #include <dirent.h>    /* ino_t */
+#include <stdbool.h>
 
 #include <sys/types.h>
+#include <sys/queue.h>
 #include <sys/stat.h>  /* stat */
 
 typedef struct watch watch;
@@ -44,19 +47,25 @@ typedef mode_t watch_flags_t;
 #define WF_SKIP_NEXT  S_IWOTH /* Some evens (open/close/read) should be skipped
                                * on the next round as produced by libinotify */
 
+#define WD_FOREACH(wd, w) SLIST_FOREACH ((wd), &(w)->deps, next)
+
 typedef enum watch_type {
     WATCH_USER,
     WATCH_DEPENDENCY,
 } watch_type_t;
 
+SLIST_HEAD(watch_dep_list, watch_dep);
+struct watch_dep {
+    const dep_item *di;
+    SLIST_ENTRY(watch_dep) next;
+};
 
 struct watch {
     i_watch *iw;              /* A pointer to parent inotify watch */
     watch_flags_t flags;      /* A watch flags. Not in inotify/kqueue format */
-    size_t refcount;          /* number of dependency list items corresponding
-                               * to that watch */ 
     int fd;                   /* file descriptor of a watched entry */
     ino_t inode;              /* inode number taken from readdir call */
+    struct watch_dep_list deps; /* An associated dep_items list */
     RB_ENTRY(watch) link;     /* RB tree links */
 };
 
@@ -70,6 +79,26 @@ watch *watch_init (i_watch *iw,
                    struct stat *st);
 void   watch_free (watch *w);
 
+struct watch_dep *watch_find_dep (watch *w, const dep_item *di);
+struct watch_dep *watch_add_dep  (watch *w, const dep_item *di);
+struct watch_dep *watch_del_dep  (watch *w, const dep_item *di);
+struct watch_dep *watch_chg_dep  (watch *w,
+                                  const dep_item *di_from,
+                                  const dep_item *di_to);
+
 int    watch_register_event (watch *w, uint32_t fflags);
+
+/**
+ * Checks if #watch is associated with any file dependency or not.
+ *
+ * @param[in] w A pointer to the #watch.
+ * @return true if A #watch has associated dependency records. false otherwise.
+ **/
+static inline bool
+watch_deps_empty (watch *w)
+{
+    assert (w != NULL);
+    return (SLIST_EMPTY (&w->deps));
+}
 
 #endif /* __WATCH_H__ */

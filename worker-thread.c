@@ -240,6 +240,7 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
 
     enqueue_event (ctx->iw, IN_MOVED_FROM, from_di);
     enqueue_event (ctx->iw, IN_MOVED_TO, to_di);
+    iwatch_move_subwatch (ctx->iw, from_di, to_di);
 }
 
 
@@ -382,14 +383,14 @@ produce_notifications (worker *wrk, struct kevent *event)
         /* Deaggregate inotify events */
         for (i = 0; i < nitems (ie_order); i++) {
             if (i_flags & ie_order[i]) {
-                dep_item *iter = NULL;
+                uint32_t i_flag = ie_order[i] | (i_flags & ~IN_ALL_EVENTS);
                 /* Report deaggregated items */
-                DL_FOREACH (iter, &iw->deps) {
-                    if (iter->inode == w->inode) {
-                        enqueue_event (iw,
-                                       ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
-                                       iter);
-                    }
+                assert (!watch_deps_empty (w));
+                struct watch_dep *wd;
+                WD_FOREACH (wd, w) {
+                    assert (w->inode == wd->di->inode);
+                    assert (wd->di == dl_find (&iw->deps, wd->di->path));
+                    enqueue_event (iw, i_flag, wd->di);
                 }
             }
         }

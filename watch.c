@@ -285,7 +285,7 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
     w->iw = iw;
     w->fd = fd;
     w->flags = wf;
-    w->refcount = 0;
+    SLIST_INIT (&w->deps);
     /* Inode number obtained via fstat call cannot be used here as it
      * differs from readdir`s one at mount points. */
     w->inode = st->st_ino;
@@ -310,5 +310,96 @@ watch_free (watch *w)
     if (w->fd != -1) {
         close (w->fd);
     }
+    while (!watch_deps_empty (w)) {
+        struct watch_dep *wd = SLIST_FIRST (&w->deps);
+        SLIST_REMOVE_HEAD (&w->deps, next);
+        free (wd);
+    }
     free (w);
+}
+
+/**
+ * Find a file dependency associated with a #watch.
+ *
+ * @param[in] w  A pointer to the #watch.
+ * @param[in] di A pointer to name & inode number of the file.
+ * @return A pointer to a dependency record if found. NULL otherwise.
+ **/
+struct watch_dep *
+watch_find_dep (watch *w, const dep_item *di)
+{
+    assert (w != NULL);
+
+    struct watch_dep *wd;
+
+    WD_FOREACH (wd, w) {
+        if (wd->di == di) {
+            return (wd);
+        }
+    }
+
+    return (NULL);
+}
+
+/**
+ * Associate a file dependency with a #watch.
+ *
+ * @param[in] w  A pointer to the #watch.
+ * @param[in] di A name & inode number of the associated file.
+ * @return A pointer to a created dependency record. NULL on failure.
+ **/
+struct watch_dep *
+watch_add_dep (watch *w, const dep_item *di)
+{
+    assert (w != NULL);
+
+    struct watch_dep *wd = calloc (1, sizeof (struct watch_dep));
+    if (wd != NULL) {
+        wd->di = di;
+        SLIST_INSERT_HEAD (&w->deps, wd, next);
+    }
+    return (wd);
+}
+
+/**
+ * Disassociate file dependency from a #watch.
+ *
+ * @param[in] w  A pointer to the #watch.
+ * @param[in] di A name & inode number of the disassociated file.
+ * @return A pointer to a diassociated dependency record. NULL if not found.
+ **/
+struct watch_dep *
+watch_del_dep (watch *w, const dep_item *di)
+{
+    assert (w != NULL);
+
+    struct watch_dep *wd = watch_find_dep (w, di);
+    if (wd != NULL) {
+        SLIST_REMOVE (&w->deps, wd, watch_dep, next);
+        free (wd);
+    }
+    return (wd);
+}
+
+/**
+ * Update a file dependency associated with a #watch.
+ *
+ * @param[in] w       A pointer to the #watch.
+ * @param[in] di_from A old name & inode number of the file.
+ * @param[in] di_to   A new name & inode number of the file.
+ * @return A pointer to a updated dependency record. NULL if not found.
+ **/
+struct watch_dep *
+watch_chg_dep (watch *w, const dep_item *di_from, const dep_item *di_to)
+{
+    assert (w != NULL);
+    assert (di_from != NULL);
+    assert (di_to != NULL);
+    assert (di_from->inode == di_to->inode);
+
+    struct watch_dep *wd = watch_find_dep (w, di_from);
+    if (wd != NULL) {
+        wd->di = di_to;
+    }
+    return (wd);
 }

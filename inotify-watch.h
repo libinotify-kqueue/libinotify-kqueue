@@ -57,5 +57,8 @@ void     iwatch_update_flags    (i_watch *iw, uint32_t flags);
 
 watch*   iwatch_add_subwatch    (i_watch *iw, dep_item *di);
 void     iwatch_del_subwatch    (i_watch *iw, const dep_item *di);
+void     iwatch_move_subwatch   (i_watch *iw,
+                                 const dep_item *di_from,
+                                 const dep_item *di_to);
 
 #endif /* __INOTIFY_WATCH_H__ */
