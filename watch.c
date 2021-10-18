@@ -213,12 +213,14 @@ watch_update_event (watch *w)
     assert (!watch_deps_empty (w));
 
     int kq = SLIST_FIRST(&w->deps)->iw->wrk->kq;
+    mode_t mode = watch_get_mode (w);
     uint32_t fflags = 0;
     struct watch_dep *wd;
 
     WD_FOREACH (wd, w) {
+        assert ((mode & S_IFMT) == (watch_dep_get_mode (wd) & S_IFMT));
         fflags |= inotify_to_kqueue (wd->iw->flags,
-                                     watch_dep_get_mode (wd),
+                                     mode,
                                      watch_dep_is_parent (wd));
     }
     assert (fflags != 0);
