@@ -32,6 +32,7 @@
 #include <stdbool.h>
 
 #include "compat.h"
+#include "config.h"
 
 #define DI_UNCHANGED S_IXOTH /* dep_item remained unchanged between listings */
 #define DI_REPLACED  S_IROTH /* dep_item was replaced by other item */
@@ -61,7 +62,7 @@ struct dep_item {
     };
     ino_t inode;
     mode_t type;
-    char path[];
+    char path[FLEXIBLE_ARRAY_MEMBER];
 };
 
 RB_HEAD(dep_list, dep_item);

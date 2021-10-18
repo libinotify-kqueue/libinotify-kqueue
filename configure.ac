@@ -6,6 +6,7 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_PROG_LIBTOOL
 AC_PROG_CXX
 AC_CONFIG_FILES([Makefile libinotify.pc])
+AC_C_FLEXIBLE_ARRAY_MEMBER
 
 case "$host_os" in
 *linux*)
