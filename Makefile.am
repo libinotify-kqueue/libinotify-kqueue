@@ -67,7 +67,8 @@ endif
 
 inotify_test_SOURCES = inotify-test.c
 inotify_test_LDADD = libinotify.la
-noinst_PROGRAMS = inotify-test
+kqueue_test_SOURCES = kqueue-test.c
+noinst_PROGRAMS = inotify-test kqueue-test
 
 pkgconfigdir = $(libdir)/pkgconfig
 nodist_pkgconfig_DATA = libinotify.pc
