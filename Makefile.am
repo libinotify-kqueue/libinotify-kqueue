@@ -41,6 +41,10 @@ if !HAVE_FDOPENDIR
 libinotify_la_SOURCES += compat/fdopendir.c
 endif
 
+if !HAVE_FDCLOSEDIR
+libinotify_la_SOURCES += compat/fdclosedir.c
+endif
+
 if !HAVE_FSTATAT
 libinotify_la_SOURCES += compat/fstatat.c
 endif
@@ -53,24 +57,23 @@ libinotify_la_SOURCES += compat/ik_atomic.c compat/ik_atomic.h
 endif
 endif
 
-if !HAVE_SYS_TREE_H
 libinotify_la_SOURCES += compat/tree.h
-endif
 
-libinotify_la_CFLAGS = -I. -DNDEBUG @PTHREAD_CFLAGS@ -Wall -Werror
+libinotify_la_CFLAGS = -I. @DEBUG_CFLAGS@ @PTHREAD_CFLAGS@ -Wall -Werror
 libinotify_la_LDFLAGS = @PTHREAD_LIBS@ -export-symbols libinotify.sym
 endif
 
 inotify_test_SOURCES = inotify-test.c
 inotify_test_LDADD = libinotify.la
-noinst_PROGRAMS = inotify-test
+kqueue_test_SOURCES = kqueue-test.c
+noinst_PROGRAMS = inotify-test kqueue-test
 
 pkgconfigdir = $(libdir)/pkgconfig
 nodist_pkgconfig_DATA = libinotify.pc
 
 EXTRA_DIST = \
-    libinotify.sym \
-    patches/freebsd11-O_SYMLINK.patch
+    LICENSE \
+    libinotify.sym
 
 dist_man_MANS = libinotify.3
 MAN_LINKS = \
@@ -78,7 +81,7 @@ MAN_LINKS = \
 	inotify_init1.3 \
 	inotify_add_watch.3 \
 	inotify_rm_watch.3 \
-	inotify_set_param.3 \
+	libinotify_set_param.3 \
 	inotify_event.3
 
 install-data-hook: $(MAN_LINKS)

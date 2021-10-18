@@ -104,9 +104,9 @@ void event_queue_test::run ()
 #ifdef __linux__
 //    system ("echo "QUEUED_EVENTS" > /proc/sys/fs/inotify/max_queued_events");
 #else
-    inotify_set_param (cons.get_fd (), IN_SOCKBUFSIZE,
-                       PIPED_EVENTS * (sizeof (struct inotify_event) + 1));
-    inotify_set_param (cons.get_fd (), IN_MAX_QUEUED_EVENTS, QUEUED_EVENTS);
+    libinotify_set_param (cons.get_fd (), IN_SOCKBUFSIZE,
+                          PIPED_EVENTS * (sizeof (struct inotify_event) + 1));
+    libinotify_set_param (cons.get_fd (), IN_MAX_QUEUED_EVENTS, QUEUED_EVENTS);
 #endif
     cons.output.reset ();
 
@@ -120,7 +120,7 @@ void event_queue_test::run ()
         usleep (EVENT_INTERVAL);
     }
 
-    cons.input.receive (1000);
+    cons.input.receive ();
     cons.output.wait ();
     received = cons.output.registered ();
     should ("receive IN_Q_OVERFLOW on many consecutive touches",

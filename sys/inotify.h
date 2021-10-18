@@ -1,7 +1,13 @@
 #ifndef __BSD_INOTIFY_H__
 #define __BSD_INOTIFY_H__
 
+#if defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
 #include <stdint.h>
+#define LIBINOTIFY_FLEXIBLE_ARRAY_MEMBER /**/
+#else
+#include <inttypes.h>
+#define LIBINOTIFY_FLEXIBLE_ARRAY_MEMBER 0
+#endif
 
 #ifndef __THROW
   #ifdef __cplusplus
@@ -24,6 +30,9 @@
 /* linux`s /proc/sys/fs/inotify/max_queued_events counterpart */
 #define IN_MAX_QUEUED_EVENTS		1
 #define IN_DEF_MAX_QUEUED_EVENTS	16384
+/* linux`s /proc/sys/fs/inotify/max_user_instances counterpart */
+#define IN_MAX_USER_INSTANCES		2
+#define IN_DEF_MAX_USER_INSTANCES	2147483646
 
 /* Flags for the parameter of inotify_init1. */
 #define IN_CLOEXEC	02000000	/* Linux x86 O_CLOEXEC */
@@ -31,13 +40,13 @@
 
 
 /* Structure describing an inotify event. */
-struct inotify_event
+__extension__ struct inotify_event
 {
     int wd;          /* Watch descriptor.  */
     uint32_t mask;   /* Watch mask.  */
     uint32_t cookie; /* Cookie to synchronize two events.  */
     uint32_t len;    /* Length (including NULLs) of name.  */
-    char name[];     /* Name.  */
+    char name[LIBINOTIFY_FLEXIBLE_ARRAY_MEMBER];  /* Name.  */
 };
 
 
@@ -100,7 +109,8 @@ int inotify_add_watch (int fd, const char *name, uint32_t mask) __THROW;
 int inotify_rm_watch (int fd, int wd) __THROW;
 
 /* Libinotify specific. Set inotify instance parameter. */
-int inotify_set_param (int fd, int param, intptr_t value) __THROW;
+int libinotify_set_param (int fd, int param, intptr_t value) __THROW;
+#define inotify_set_param(fd, p, v)	libinotify_set_param(fd, p, v)
 
 __END_DECLS
 

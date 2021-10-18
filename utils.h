@@ -25,16 +25,18 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 
-#include "config.h"
-#include "compat.h"
-
-#include <sys/stat.h> /* S_ISDIR */
+#include <sys/types.h>
 #include <sys/uio.h>  /* iovec */
 
+#include <dirent.h> /* DIR */
 #include <errno.h>  /* errno */
 #include <stdio.h>  /* fprintf */
 #include <string.h> /* strerror */
 #include <pthread.h>
+
+#include "config.h"
+
+extern const struct timespec *zero_tsp;
 
 /**
  * Print an error message, if allowed.
@@ -42,20 +44,25 @@
  * Print a file name, line number and errno-based error description as well.
  * The library should be built with --enable-perrors configure option.
  *
- * @param[in] msg A message format to print.
- * @param[in] ... A set of parameters to include in the message, according
- *      to the format string.
+ * @param[in] msg A message format to print followed by a set of parameters to
+ *                include in the message, according to the format string.
  **/
 #ifdef ENABLE_PERRORS
-#define perror_msg(msg, ...)                                            \
+extern pthread_mutex_t perror_msg_mutex;
+char *perror_msg_printf (const char *fmt, ...);
+#define perror_msg(msg)                                                 \
 do {                                                                    \
     int saved_errno_ = errno;                                           \
-    fprintf (stderr, "%s.%d: " msg ": %d (%s)\n", __FILE__, __LINE__,   \
-             ##__VA_ARGS__, errno, strerror (errno));                   \
+    char *buf_;                                                         \
+    pthread_mutex_lock (&perror_msg_mutex);                             \
+    buf_ = perror_msg_printf msg;                                       \
+    fprintf (stderr, "%s.%d: %s: %d (%s)\n", __FILE__, __LINE__, buf_,  \
+             saved_errno_, strerror (saved_errno_));                    \
+    pthread_mutex_unlock (&perror_msg_mutex);                           \
     errno = saved_errno_;                                               \
 } while (0)
 #else
-#define perror_msg(msg, ...)
+#define perror_msg(msg)
 #endif
 
 struct inotify_event* create_inotify_event (int         wd,
@@ -64,17 +71,13 @@ struct inotify_event* create_inotify_event (int         wd,
                                             const char *name,
                                             size_t     *event_len);
 
-ssize_t safe_read   (int fd, void *data, size_t size);
-ssize_t safe_write  (int fd, const void *data, size_t size);
-ssize_t safe_send   (int fd, const void *data, size_t size, int flags);
-ssize_t safe_writev (int fd, const struct iovec iov[], int iovcnt);
-ssize_t safe_sendv (int fd, struct iovec iov[], int iovcnt, int flags);
 ssize_t sendv (int fd, struct iovec iov[], int iovcnt, int flags);
 
 int is_opened (int fd);
 int is_deleted (int fd);
 int set_cloexec_flag (int fd, int value);
 int set_nonblock_flag (int fd, int value);
+int set_sndbuf_size (int fd, int len);
 int dup_cloexec (int oldd);
 DIR *fdreopendir (int oldd);
 

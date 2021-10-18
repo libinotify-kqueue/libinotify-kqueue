@@ -21,6 +21,7 @@
   THE SOFTWARE.
 *******************************************************************************/
 
+#include <cerrno>
 #include <cstdlib>
 
 #include "notifications_test.hh"
@@ -41,6 +42,7 @@ void notifications_test::run ()
     consumer cons;
     events received;
     int wid = 0;
+    int error = 0;
 
 
     cons.input.setup ("ntfst-working", IN_ATTRIB | IN_MODIFY | IN_MOVE_SELF | IN_DELETE_SELF);
@@ -90,6 +92,10 @@ void notifications_test::run ()
     should ("receive IN_ATTRIB on remove", contains (received, event ("", wid, IN_ATTRIB)));
     should ("receive IN_DELETE_SELF on remove", contains (received, event ("", wid, IN_DELETE_SELF)));
     should ("receive IN_IGNORED on remove", contains (received, event ("", wid, IN_IGNORED)));
+
+    error = inotify_rm_watch (cons.get_fd (), wid);
+    should ("inotify_rm_watch returns -1, errno set to EINVAL after watched "
+            "file have been removed", error == -1 && errno == EINVAL);
 
     cons.input.interrupt ();
 }

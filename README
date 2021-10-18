@@ -71,14 +71,50 @@ using only original kqueue(2), these tests will most probably fail:
 >    failed: Receive IN_MOVE_SELF after moving the symlink
 >    failed: Receive IN_DELETE_SELF after removing the symlink
 
-To solve these issues some vfs and kqueue extensions was developed.
-Patches can be found in patches subdirectory of project and are
-applicable to FreeBSD 11-CURRENT. A patched kernel passes all tests
+To solve these issues some vfs and kqueue extensions were developed
+and commited to FreeBSD kernel. A FreeBSD 13-STABLE passes all tests
 flawlessly.
 
 If you will get any other results, please feel free to report it at:
 
   https://github.com/libinotify-kqueue/libinotify-kqueue/issues
+
+
+
+Building under linuxolator (FreeBSD 13+)
+----------------------------------------
+
+It is possible to use libinotify with binary Linux applications. To do
+that, download, build and install linux-libbsd which makes BSD kqueue
+syscall available to linuxolator: https://github.com/wulf7/linux-libbsd
+Install devel/linux-c7-devtools port, than compile libinotify.so
+library and install it somewhere under /compat/linux.
+
+To build and install 64-bit library:
+
+  $ env CC="/compat/linux/bin/gcc" \
+        CFLAGS="--sysroot /compat/linux -include bsd.h" \
+        LDFLAGS="-lbsd" \
+        ./configure --libdir=/usr/lib64
+  $ make
+  $ sudo make install-exec DESTDIR=/compat/linux
+
+To build and install 32-bit library:
+
+  $ env CC="/compat/linux/bin/gcc" \
+        CFLAGS="--sysroot /compat/linux -m32 -include bsd.h" \
+        LDFLAGS="-lbsd" \
+        ./configure --libdir=/usr/lib
+  $ make
+  $ sudo make install-exec DESTDIR=/compat/linux
+
+To run my_64bit_app or my_32bit_app with inotify support use
+
+  $ LD_PRELOAD=/usr/lib64/libinotify.so my_64bit_app
+
+or
+
+  $ LD_PRELOAD=/usr/lib/libinotify.so my_32bit_app
 
 
 
@@ -128,25 +164,26 @@ The library is almost feature-complete, i.e. it implements and
 provides most of what can be implemented/provided using kqueue(2).
 Current state of project is described in following table:
 
-                    Original Patched
-  Inotify event     kernel   kernel     Event flags     Supported
+                    Original Extended
+  Inotify event     kqueue   kqueue     Event flags     Supported
 
   IN_ACCESS         No       Yes        IN_IGNORED      Yes
   IN_ATTRIB         Yes      Yes        IN_ISDIR        Yes
-  IN_CLOSE_WRITE    No       Yes        IN_UNMOUNT      Yes
+  IN_CLOSE_WRITE    No       Yes        IN_UNMOUNT      Yes **
   IN_CLOSE_NOWRITE  No       Yes        IN_Q_OVERFLOW   Yes
   IN_CREATE         Yes      Yes
   IN_DELETE         Yes      Yes        Watch flags     Supported
   IN_DELETE_SELF    Yes      Yes
   IN_MODIFY         Yes      Yes        IN_ONLYDIR      Yes
-  IN_MOVE_SELF      Yes      Yes        IN_DONT_FOLLOW  Yes **
-  IN_MOVED_FROM     Yes *    Yes        IN_EXCL_UNLINK  No  ***
+  IN_MOVE_SELF      Yes      Yes        IN_DONT_FOLLOW  Yes ***
+  IN_MOVED_FROM     Yes *    Yes        IN_EXCL_UNLINK  No  ****
   IN_MOVED_TO       Yes *    Yes        IN_MASK_ADD     Yes
   IN_OPEN           No       Yes        IN_ONESHOT      Yes
 
 * Only renaming file inside watched directory is supported
-** Watching a symlink requires O_SYMLINK kernel patch to be applied
-*** Libinotify-kqueue behaves as IN_EXCL_UNLINK flag is always set
+** libinotify prevents unmount unless O_EVTONLY or O_PATH is supported
+*** Watching a symlink requires kernel with O_SYMLINK or O_PATH support
+**** Libinotify-kqueue behaves as IN_EXCL_UNLINK flag is always set
 
 
 Thanks

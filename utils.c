@@ -1,13 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
   Copyright (c) 2014-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
-  Copyright 2008, 2013, 2014
-      The Board of Trustees of the Leland Stanford Junior University
-  Copyright (c) 2004, 2005, 2006
-      by Internet Systems Consortium, Inc. ("ISC")
-  Copyright (c) 1991, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-      2002, 2003 by The Internet Software Consortium and Rich Salz
-  SPDX-License-Identifier: MIT AND ISC
+  SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -28,23 +22,45 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include "compat.h"
-
-#include <unistd.h> /* read, write */
-#include <errno.h>  /* EINTR */
-#include <stdlib.h> /* malloc */
-#include <string.h> /* strlen */
-#include <fcntl.h> /* fcntl */
-#include <stdio.h>
-#include <assert.h>
-
 #include <sys/types.h>
 #include <sys/socket.h>/* send, sendmsg */
 #include <sys/stat.h>  /* fstat */
 #include <sys/uio.h>   /* writev */
 
+#include <assert.h>
+#include <errno.h>  /* EINTR */
+#include <fcntl.h>  /* fcntl */
+#include <stddef.h> /* offsetof */
+#include <stdio.h>
+#include <stdlib.h> /* malloc */
+#include <string.h> /* strlen */
+#include <unistd.h> /* read, write */
+
 #include "sys/inotify.h"
+
+#include "compat.h"
+#include "config.h"
 #include "utils.h"
+
+static const struct timespec zero_ts = { 0, 0 };
+const struct timespec *zero_tsp = &zero_ts;
+
+#ifdef ENABLE_PERRORS
+#include <stdarg.h>
+#include <pthread.h>
+pthread_mutex_t perror_msg_mutex = PTHREAD_MUTEX_INITIALIZER;
+char *
+perror_msg_printf (const char *fmt, ...)
+{
+    static char buf[200];
+    va_list ap;
+
+    va_start (ap, fmt);
+    vsnprintf (buf, sizeof (buf), fmt, ap);
+    va_end (ap);
+    return buf;
+}
+#endif
 
 /**
  * Create a new inotify event.
@@ -65,13 +81,13 @@ create_inotify_event (int         wd,
 {
     struct inotify_event *event = NULL;
     size_t name_len = name ? strlen (name) + 1 : 0;
-    *event_len = sizeof (struct inotify_event) + name_len;
+    *event_len = offsetof (struct inotify_event, name) + name_len;
     event = calloc (1, *event_len);
 
     if (event == NULL) {
-        perror_msg ("Failed to allocate a new inotify event [%s, %X]",
+        perror_msg (("Failed to allocate a new inotify event [%s, %X]",
                     name,
-                    mask);
+                    mask));
         return NULL;
     }
 
@@ -87,167 +103,6 @@ create_inotify_event (int         wd,
     return event;
 }
 
-
-#define SAFE_GENERIC_OP(fcn, fd, data, size, ...)              \
-    size_t total = 0;                           \
-    if (fd == -1) {                             \
-        return -1;                              \
-    }                                           \
-    while (size > 0) {                          \
-        ssize_t retval = fcn (fd, data, size, ##__VA_ARGS__);  \
-        if (retval == -1) {                     \
-            if (errno == EINTR) {               \
-                continue;                       \
-            } else {                            \
-                return -1;                      \
-            }                                   \
-        }                                       \
-        total += retval;                        \
-        size -= retval;                         \
-        data = (char *)data + retval;           \
-    }                                           \
-    return (ssize_t) total;
-
-/**
- * EINTR-ready version of read().
- *
- * @param[in]  fd   A file descriptor to read from.
- * @param[out] data A receiving buffer.
- * @param[in]  size The number of bytes to read.
- * @return Number of bytes which were read on success, -1 on failure.
- **/
-ssize_t
-safe_read (int fd, void *data, size_t size)
-{
-    SAFE_GENERIC_OP (read, fd, data, size);
-}
-
-/**
- * EINTR-ready version of write().
- *
- * @param[in] fd   A file descriptor to write to.
- * @param[in] data A buffer to wtite.
- * @param[in] size The number of bytes to write.
- * @return Number of bytes which were written on success, -1 on failure.
- **/
-ssize_t
-safe_write (int fd, const void *data, size_t size)
-{
-    SAFE_GENERIC_OP (write, fd, data, size);
-}
-
-/**
- * EINTR-ready version of send().
- *
- * @param[in] fd    A file descriptor to send to.
- * @param[in] data  A buffer to send.
- * @param[in] size  The number of bytes to send.
- * @param[in] flags A send(3) flags.
- * @return Number of bytes which were sent on success, -1 on failure.
- **/
-ssize_t
-safe_send (int fd, const void *data, size_t size, int flags)
-{
-    SAFE_GENERIC_OP (send, fd, data, size, flags);
-}
-
-/**
- * The canonical version of this routine is maintained in the rra-c-util,
- * which can be found at <http://www.eyrie.org/~eagle/software/rra-c-util/>.
- */
-#define SAFE_GENERIC_VOP(fcn, fd, iov, iovcnt, ...)			\
-									\
-    ssize_t total, status = 0;						\
-    size_t left, offset;						\
-    int iovleft, i, count;						\
-    struct iovec *tmpiov;						\
-                                                                        \
-    /*									\
-     * Bounds-check the iovcnt argument.  This is just for our safety.  The	\
-     * system will probably impose a lower limit on iovcnt, causing the later	\
-     * writev to fail with an error we'll return.				\
-     */									\
-    if (iovcnt == 0)							\
-        return 0;							\
-    if (iovcnt < 0 || (size_t) iovcnt > SIZE_MAX / sizeof(struct iovec)) {	\
-        errno = EINVAL;							\
-        return -1;							\
-    }									\
-                                                                        \
-    /* Get a count of the total number of bytes in the iov array. */	\
-    for (total = 0, i = 0; i < iovcnt; i++)				\
-        total += iov[i].iov_len;					\
-    if (total == 0)							\
-        return 0;							\
-                                                                        \
-    /*									\
-     * First, try just writing it all out.  Most of the time this will succeed	\
-     * and save us lots of work.  Abort the write if we try ten times with no	\
-     * forward progress.						\
-     */									\
-    count = 0;								\
-    do {								\
-        if (++count > 10)						\
-            break;							\
-        status = fcn(fd, iov, iovcnt, ##__VA_ARGS__);			\
-        if (status > 0)							\
-            count = 0;							\
-    } while (status < 0 && errno == EINTR);				\
-    if (status < 0)							\
-        return -1;							\
-    if (status == total)						\
-        return total;							\
-                                                                        \
-    /*									\
-     * If we fell through to here, the first write partially succeeded.	\
-     * Figure out how far through the iov array we got, and then duplicate the	\
-     * rest of it so that we can modify it to reflect how much we manage to	\
-     * write on successive tries.					\
-     */									\
-    offset = status;							\
-    left = total - offset;						\
-    for (i = 0; offset >= (size_t) iov[i].iov_len; i++)			\
-        offset -= iov[i].iov_len;					\
-    iovleft = iovcnt - i;						\
-    assert(iovleft > 0);						\
-    tmpiov = calloc(iovleft, sizeof(struct iovec));			\
-    if (tmpiov == NULL)							\
-        return -1;							\
-    memcpy(tmpiov, iov + i, iovleft * sizeof(struct iovec));		\
-                                                                        \
-    /*									\
-     * status now contains the offset into the first iovec struct in tmpiov.	\
-     * Go into the write loop, trying to write out everything remaining at	\
-     * each point.  At the top of the loop, status will contain a count of	\
-     * bytes written out at the beginning of the set of iovec structs.		\
-     */									\
-    i = 0;								\
-    do {								\
-        if (++count > 10)						\
-            break;							\
-                                                                        \
-        /* Skip any leading data that has been written out. */		\
-        for (; offset >= (size_t) tmpiov[i].iov_len && iovleft > 0; i++) {	\
-            offset -= tmpiov[i].iov_len;				\
-            iovleft--;							\
-        }								\
-        tmpiov[i].iov_base = (char *) tmpiov[i].iov_base + offset;	\
-        tmpiov[i].iov_len -= offset;					\
-                                                                        \
-        /* Write out what's left and return success if it's all written. */	\
-        status = fcn(fd, tmpiov + i, iovleft, ##__VA_ARGS__);		\
-        if (status <= 0)						\
-            offset = 0;							\
-        else {								\
-            offset = status;						\
-            left -= offset;						\
-            count = 0;							\
-        }								\
-    } while (left > 0 && (status >= 0 || errno == EINTR));		\
-                                                                        \
-    /* We're either done or got an error; if we're done, left is now 0. */	\
-    free(tmpiov);							\
-    return (left == 0) ? total : -1;
 
 /**
  * scatter-gather version of send with writev()-style parameters.
@@ -268,35 +123,6 @@ sendv (int fd, struct iovec iov[], int iovcnt, int flags)
     msg.msg_iovlen = iovcnt;
 
     return (sendmsg (fd, &msg, flags));
-}
-
-/**
- * EINTR-ready version of writev().
- *
- * @param[in] fd     A file descriptor to write to.
- * @param[in] iov    An array of iovec buffers to wtite.
- * @param[in] iovcnt A number of iovec buffers to write.
- * @return Number of bytes which were written on success, -1 on failure.
- **/
-ssize_t
-safe_writev (int fd, const struct iovec iov[], int iovcnt)
-{
-    SAFE_GENERIC_VOP (writev, fd, iov, iovcnt);
-}
-
-/**
- * EINTR-ready version of sendv().
- *
- * @param[in] fd     A file descriptor to send to.
- * @param[in] iov    An array of iovec buffers to wtite.
- * @param[in] iovcnt A number of iovec buffers to write.
- * @param[in] flags  A send(3) flags.
- * @return Number of bytes which were written on success, -1 on failure.
- **/
-ssize_t
-safe_sendv (int fd, struct iovec iov[], int iovcnt, int flags)
-{
-    SAFE_GENERIC_VOP (sendv, fd, iov, iovcnt, flags);
 }
 
 /**
@@ -325,7 +151,7 @@ is_deleted (int fd)
 
     if (fstat (fd, &st) == -1) {
         if (errno != ENOENT) {
-            perror_msg ("fstat %d failed", fd);
+            perror_msg (("fstat %d failed", fd));
         }
         return 1;
     }
@@ -380,6 +206,19 @@ set_nonblock_flag (int fd, int value)
 }
 
 /**
+ * Set size of socket buffer
+ *
+ * @param[in] fd  A file descriptor (send side).
+ * @param[in] len A new size of socket buffer.
+ * @return 0 on success, or -1 on error with errno set.
+ **/
+int
+set_sndbuf_size (int fd, int len)
+{
+    return setsockopt (fd, SOL_SOCKET, SO_SNDBUF, &len, sizeof(len));
+}
+
+/**
  * Perform dup(2) and set the FD_CLOEXEC flag on the new file descriptor
  *
  * @param[in] oldd A file descriptor to duplicate.
@@ -413,17 +252,36 @@ fdreopendir (int oldd)
 {
     DIR *dir;
 
+#if (READDIR_DOES_OPENDIR == 2) && ! defined (HAVE_FDOPENDIR)
+    char *dirpath = fd_getpath_cached (oldd);
+    if (dirpath == NULL) {
+        return NULL;
+    }
+    dir = opendir (dirpath);
+#else /* READDIR_DOES_OPENDIR == 2 && ! HAVE_FDOPENDIR */
+    int fd;
 #if (READDIR_DOES_OPENDIR == 2)
     int openflags = O_RDONLY | O_NONBLOCK;
 #ifdef O_CLOEXEC
         openflags |= O_CLOEXEC;
 #endif
-#ifdef O_DIRECTORY
-        openflags |= O_DIRECTORY;
-#endif
-    int fd = openat (oldd, ".", openflags);
+#ifdef HAVE_O_EMPTY_PATH
+    fd = openat (oldd, "", openflags | O_EMPTY_PATH);
 #else
-    int fd = dup_cloexec (oldd);
+    fd = openat (oldd, ".", openflags);
+#endif
+#elif (READDIR_DOES_OPENDIR == 1)
+    fd = dup_cloexec (oldd);
+#elif (READDIR_DOES_OPENDIR == 0)
+    fd = oldd;
+#else
+#error unknown READDIR_DOES_OPENDIR value
+#endif
+    if (fd == -1) {
+        return NULL;
+    }
+
+#if (READDIR_DOES_OPENDIR < 2)
     /*
      * Rewind directory content as fdopendir() does not do it for us.
      * Note: rewinddir() right after fdopendir() is not working here
@@ -431,21 +289,18 @@ fdreopendir (int oldd)
      */
     lseek (fd, 0, SEEK_SET);
 #endif
-    if (fd == -1) {
-        return NULL;
-    }
 
-#if (READDIR_DOES_OPENDIR == 2) && !defined(O_CLOEXEC)
-    if (set_cloexec_flag (fd, 1) == -1) {
-        close (fd);
-        return NULL;
-    }
+#if (READDIR_DOES_OPENDIR == 2) && ! defined(O_CLOEXEC)
+    set_cloexec_flag (fd, 1);
 #endif
 
     dir = fdopendir (fd);
+#if (READDIR_DOES_OPENDIR > 0)
     if (dir == NULL) {
         close (fd);
     }
+#endif
+#endif /* READDIR_DOES_OPENDIR != 2 && HAVE_FDOPENDIR */
 
     return dir;
 }

@@ -22,32 +22,33 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include "compat.h"
-
-#include <pthread.h>
-#include <signal.h> 
-#include <stdlib.h>
-#include <string.h>
-#include <fcntl.h> /* open() */
-#include <unistd.h> /* close() */
-#include <assert.h>
-#include <stdio.h>
-#include <dirent.h>
-
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 
+#include <assert.h>
+#include <dirent.h>
+#include <fcntl.h> /* open() */
+#include <pthread.h>
+#include <signal.h> 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h> /* close() */
+
 #include "sys/inotify.h"
 
+#include "compat.h"
 #include "event-queue.h"
+#include "inotify-watch.h"
 #include "utils.h"
+#include "watch.h"
 #include "worker-thread.h"
 #include "worker.h"
 
 static void
-worker_cmd_reset (worker_cmd *cmd);
+worker_cmd_reset (struct worker_cmd *cmd);
 
 
 /**
@@ -58,14 +59,14 @@ worker_cmd_reset (worker_cmd *cmd);
  * @param[in] mask     A combination of the inotify watch flags.
  **/
 void
-worker_cmd_add (worker_cmd *cmd, const char *filename, uint32_t mask)
+worker_cmd_add (struct worker_cmd *cmd, const char *filename, uint32_t mask)
 {
     assert (cmd != NULL);
     worker_cmd_reset (cmd);
 
     cmd->type = WCMD_ADD;
-    cmd->add.filename = filename;
-    cmd->add.mask = mask;
+    cmd->cmd.add.filename = filename;
+    cmd->cmd.add.mask = mask;
 }
 
 
@@ -76,31 +77,31 @@ worker_cmd_add (worker_cmd *cmd, const char *filename, uint32_t mask)
  * @param[in] watch_id  The identificator of a watch to remove.
  **/
 void
-worker_cmd_remove (worker_cmd *cmd, int watch_id)
+worker_cmd_remove (struct worker_cmd *cmd, int watch_id)
 {
     assert (cmd != NULL);
     worker_cmd_reset (cmd);
 
     cmd->type = WCMD_REMOVE;
-    cmd->rm_id = watch_id;
+    cmd->cmd.rm_id = watch_id;
 }
 
 /**
- * Prepare a command with the data of the inotify_set_param() call.
+ * Prepare a command with the data of the libinotify_set_param() call.
  *
  * @param[in] cmd    A pointer to #worker_cmd
  * @param[in] param  Worker-thread parameter name to set.
  * @param[in] value  Worker-thread parameter value to set.
  **/
 void
-worker_cmd_param (worker_cmd *cmd, int param, intptr_t value)
+worker_cmd_param (struct worker_cmd *cmd, int param, intptr_t value)
 {
     assert (cmd != NULL);
     worker_cmd_reset (cmd);
 
     cmd->type = WCMD_PARAM;
-    cmd->param.param = param;
-    cmd->param.value = value;
+    cmd->cmd.param.param = param;
+    cmd->cmd.param.value = value;
 }
 
 /**
@@ -109,17 +110,11 @@ worker_cmd_param (worker_cmd *cmd, int param, intptr_t value)
  * @param[in] cmd A pointer to #worker_cmd.
  **/
 static void
-worker_cmd_reset (worker_cmd *cmd)
+worker_cmd_reset (struct worker_cmd *cmd)
 {
     assert (cmd != NULL);
 
-    cmd->type = 0;
-    cmd->retval = 0;
-    cmd->add.filename = NULL;
-    cmd->add.mask = 0;
-    cmd->rm_id = 0;
-    cmd->param.param = 0;
-    cmd->param.value = 0;
+    memset (cmd, 0, sizeof (struct worker_cmd));
 }
 
 /**
@@ -128,10 +123,15 @@ worker_cmd_reset (worker_cmd *cmd)
  * @param[in] cmd A pointer to #worker_cmd.
  **/
 void
-worker_post (worker *wrk)
+worker_post (struct worker *wrk)
 {
     assert (wrk != NULL);
-    ik_sem_post(&wrk->sync_sem);
+
+    worker_lock (wrk);
+    ++wrk->sema;
+    pthread_cond_broadcast (&wrk->cv);
+    worker_unlock (wrk);
+
 }
 
 /**
@@ -140,11 +140,43 @@ worker_post (worker *wrk)
  * @param[in] cmd A pointer to #worker_cmd.
  **/
 void
-worker_wait (worker *wrk)
+worker_wait (struct worker *wrk)
 {
     assert (wrk != NULL);
-    do { /* NOTHING */
-    } while (ik_sem_wait(&wrk->sync_sem) == -1 && errno == EINTR);
+
+    worker_lock (wrk);
+    while (wrk->sema == 0) {
+        pthread_cond_wait (&wrk->cv, &wrk->mutex);
+    }
+    --wrk->sema;
+    worker_unlock (wrk);
+}
+
+/**
+ * Signal worker thread that #worker_cmd should be executed.
+ *
+ * @param[in] wrk A pointer to #worker.
+ * @param[in] cmd A pointer to #worker_cmd passed to #worker.
+ * @return positive number or 0 on success, -1 on error
+ **/
+int
+worker_notify (struct worker *wrk, struct worker_cmd *cmd)
+{
+#ifdef EVFILT_USER
+    struct kevent ke;
+
+    /* Pass cmd in data field as DragonflyBSD does not copy udata */
+    EV_SET (&ke,
+            wrk->io[KQUEUE_FD],
+            EVFILT_USER,
+            0,
+            NOTE_TRIGGER,
+            (intptr_t)cmd,
+            0);
+    return kevent (wrk->kq, &ke, 1, NULL, 0, zero_tsp);
+#else
+    return write (wrk->io[INOTIFY_FD], &cmd, sizeof (cmd));
+#endif
 }
 
 /**
@@ -154,7 +186,7 @@ worker_wait (worker *wrk)
  * @return 0 on success, -1 otherwise
  **/
 int
-worker_set_sockbufsize (worker *wrk, int bufsize)
+worker_set_sockbufsize (struct worker *wrk, int bufsize)
 {
     assert (wrk != NULL);
 
@@ -163,14 +195,31 @@ worker_set_sockbufsize (worker *wrk, int bufsize)
         return -1;
     }
 
-    if (setsockopt(wrk->io[KQUEUE_FD],
-                   SOL_SOCKET,
-                   SO_SNDBUF,
-                   &bufsize,
-                   sizeof(bufsize))) {
-        perror_msg ("Failed to set send buffer size for socket");
+    if (set_sndbuf_size (wrk->io[KQUEUE_FD], bufsize)) {
+        perror_msg (("Failed to set send buffer size for socket"));
         return -1;
     }
+#ifndef EVFILT_EMPTY
+    {
+        struct kevent ev;
+        EV_SET (&ev,
+                wrk->io[KQUEUE_FD],
+                EVFILT_WRITE,
+                EV_ADD | EV_ENABLE | EV_CLEAR,
+                NOTE_LOWAT,
+                bufsize,
+                0);
+
+        if (kevent (wrk->kq, &ev, 1, NULL, 0, zero_tsp) == -1) {
+            int save_errno = errno;
+            bufsize = wrk->sockbufsize;
+            set_sndbuf_size (wrk->io[KQUEUE_FD], bufsize);
+            errno = save_errno;
+            perror_msg (("Failed to register kqueue event on socket"));
+            return -1;
+        }
+    }
+#endif
     wrk->sockbufsize = bufsize;
 
     return 0;
@@ -187,17 +236,28 @@ static int
 pipe_init (int fildes[2], int flags)
 {
     if (socketpair (AF_UNIX, SOCK_STREAM, 0, fildes) == -1) {
-        perror_msg ("Failed to create a socket pair");
+        perror_msg (("Failed to create a socket pair"));
         return -1;
     }
 
 #ifdef SO_NOSIGPIPE
-     int on = 1;
-     setsockopt (fildes[KQUEUE_FD], SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+    {
+        int on = 1;
+        setsockopt (fildes[KQUEUE_FD],
+                    SOL_SOCKET,
+                    SO_NOSIGPIPE,
+                    &on,
+                    sizeof(on));
+    }
 #endif
 
+    if (set_nonblock_flag (fildes[KQUEUE_FD], 1) == -1) {
+        perror_msg (("Failed to set socket into nonblocking mode"));
+        return -1;
+    }
+
     if (set_cloexec_flag (fildes[KQUEUE_FD], 1) == -1) {
-        perror_msg ("Failed to set cloexec flag on socket");
+        perror_msg (("Failed to set cloexec flag on socket"));
         return -1;
     }
 
@@ -208,14 +268,14 @@ pipe_init (int fildes[2], int flags)
 #else
                           flags & IN_CLOEXEC) == -1) {
 #endif
-        perror_msg ("Failed to set cloexec flag on socket");
+        perror_msg (("Failed to set cloexec flag on socket"));
         return -1;
     }
 
     /* Check flags for both linux and BSD NONBLOCK values */
     if (set_nonblock_flag (fildes[INOTIFY_FD],
                            flags & (IN_NONBLOCK|O_NONBLOCK)) == -1) {
-        perror_msg ("Failed to set socket into nonblocking mode");
+        perror_msg (("Failed to set socket into nonblocking mode"));
         return -1;
     }
 
@@ -227,18 +287,18 @@ pipe_init (int fildes[2], int flags)
  *
  * @return A pointer to a new worker.
  **/
-worker*
+struct worker*
 worker_create (int flags)
 {
     pthread_attr_t attr;
-    struct kevent ev[2];
+    struct kevent ev[3];
     sigset_t set, oset;
-    int result;
+    int result, nevents = 1;
 
-    worker* wrk = calloc (1, sizeof (worker));
+    struct worker* wrk = calloc (1, sizeof (struct worker));
 
     if (wrk == NULL) {
-        perror_msg ("Failed to create a new worker");
+        perror_msg (("Failed to create a new worker"));
         goto failure;
     }
 
@@ -247,12 +307,12 @@ worker_create (int flags)
 
     wrk->kq = kqueue ();
     if (wrk->kq == -1) {
-        perror_msg ("Failed to create a new kqueue");
+        perror_msg (("Failed to create a new kqueue"));
         goto failure;
     }
 
-    if (pipe_init ((int *) wrk->io, flags) == -1) {
-        perror_msg ("Failed to create a pipe");
+    if (pipe_init (wrk->io, flags) == -1) {
+        perror_msg (("Failed to create a pipe"));
         goto failure;
     }
 
@@ -274,27 +334,41 @@ worker_create (int flags)
             1,
             0);
 #endif
-
+#ifdef EVFILT_EMPTY
+    /*
+     * Modern FreeBSDs always report full sendbuffer size in data field of
+     * EVFILT_WRITE kevent so we can not determine amount of data remaining in
+     * it reliably. As we want to know exact amount of bytes to avoid partial
+     * inotify event reads as much as possible, start using of EVFILT_EMPTY
+     * to check available send buffer space. Note that we still use
+     * EVFILT_WRITE with NOTE_LOWAT set too high to check EOF conditions.
+     */
     EV_SET (&ev[1],
             wrk->io[KQUEUE_FD],
             EVFILT_WRITE,
             EV_ADD | EV_ENABLE | EV_CLEAR,
-            0,
-            0,
+            NOTE_LOWAT,
+            INT_MAX,
             0);
+    EV_SET (&ev[2], wrk->io[KQUEUE_FD], EVFILT_EMPTY, EV_ADD | EV_CLEAR, 0, 0, 0);
+    nevents = 3;
+#endif
 
-    if (kevent (wrk->kq, ev, 2, NULL, 0, NULL) == -1) {
-        perror_msg ("Failed to register kqueue event on pipe");
+    if (kevent (wrk->kq, ev, nevents, NULL, 0, zero_tsp) == -1) {
+        perror_msg (("Failed to register kqueue event on pipe"));
         goto failure;
     }
 
     wrk->wd_last = 0;
-    wrk->wd_overflow = 0;
+    wrk->wd_overflow = false;
 
-    pthread_mutex_init (&wrk->mutex, NULL);
+    pthread_mutex_init (&wrk->cmd_mtx, NULL);
     atomic_init (&wrk->mutex_rc, 0);
-    ik_sem_init (&wrk->sync_sem, 0, 0);
+    pthread_mutex_init (&wrk->mutex, NULL);
+    pthread_cond_init (&wrk->cv, NULL);
+    wrk->sema = 0;
     event_queue_init (&wrk->eq);
+    watch_set_init (&wrk->watches);
 
     /* create a run a worker thread */
     pthread_attr_init (&attr);
@@ -309,7 +383,7 @@ worker_create (int flags)
     pthread_sigmask (SIG_SETMASK, &oset, NULL);
 
     if (result != 0) {
-        perror_msg ("Failed to start a new worker thread");
+        perror_msg (("Failed to start a new worker thread"));
         goto failure;
     }
 
@@ -331,11 +405,11 @@ failure:
  * @param[in] wrk A pointer to #worker.
  **/
 void
-worker_free (worker *wrk)
+worker_free (struct worker *wrk)
 {
-    assert (wrk != NULL);
+    struct i_watch *iw;
 
-    i_watch *iw;
+    assert (wrk != NULL);
 
     if (wrk->io[KQUEUE_FD] != -1) {
         close (wrk->io[KQUEUE_FD]);
@@ -344,6 +418,9 @@ worker_free (worker *wrk)
 
     close (wrk->kq);
 
+#ifdef WORKER_FAST_WATCHSET_DESTROY
+   watch_set_free (&wrk->watches);
+#endif
     while (!SLIST_EMPTY (&wrk->head)) {
         iw = SLIST_FIRST (&wrk->head);
         SLIST_REMOVE_HEAD (&wrk->head, next);
@@ -352,14 +429,47 @@ worker_free (worker *wrk)
 
     /* Wait for user thread(s) to release worker`s mutex */
     while (atomic_load (&wrk->mutex_rc) > 0) {
-        WORKER_LOCK (wrk);
-        WORKER_UNLOCK (wrk);
+        worker_cmd_lock (wrk);
+        worker_cmd_unlock (wrk);
     }
-    pthread_mutex_destroy (&wrk->mutex);
+    pthread_mutex_destroy (&wrk->cmd_mtx);
     /* And only after that destroy worker_cmd sync primitives */
-    ik_sem_destroy (&wrk->sync_sem);
+    pthread_cond_destroy (&wrk->cv);
+    pthread_mutex_destroy (&wrk->mutex);
     event_queue_free (&wrk->eq);
     free (wrk);
+}
+
+/**
+ * Allocate new inotify watch descriptor.
+ *
+ * @param[in] wrk   A pointer to #worker.
+ * @return An unique (per watch) newly allocated descriptor
+ **/
+int
+worker_allocate_wd (struct worker *wrk)
+{
+    bool allocated;
+
+    do {
+        if (wrk->wd_last == INT_MAX) {
+            wrk->wd_last = 0;
+            wrk->wd_overflow = true;
+        }
+        allocated = true;
+        ++wrk->wd_last;
+        if (wrk->wd_overflow) {
+            struct i_watch *iw;
+            SLIST_FOREACH (iw, &wrk->head, next) {
+                if (iw->wd == wrk->wd_last) {
+                    allocated = false;
+                    break;
+                }
+            }
+        }
+    } while (!allocated);
+
+    return wrk->wd_last;
 }
 
 /**
@@ -371,62 +481,49 @@ worker_free (worker *wrk)
  * @return An id of an added watch on success, -1 on failure.
 **/
 int
-worker_add_or_modify (worker     *wrk,
-                      const char *path,
-                      uint32_t    flags)
+worker_add_or_modify (struct worker *wrk,
+                      const char    *path,
+                      uint32_t       flags)
 {
+    int fd;
+    struct stat st;
+    struct watch *w;
+    struct i_watch *iw;
+
     assert (path != NULL);
     assert (wrk != NULL);
 
     /* Open inotify watch descriptor */
-    int fd = iwatch_open (path, flags);
+    fd = iwatch_open (path, flags);
     if (fd == -1) {
         return -1;
     }
 
-    struct stat st;
     if (fstat (fd, &st) == -1) {
-        perror_msg ("Failed to stat file %s", path);
+        perror_msg (("Failed to stat file %s", path));
         close (fd);
         return -1;
     }
 
     /* look up for an entry with these inode&device numbers */
-    i_watch *iw;
-    SLIST_FOREACH (iw, &wrk->head, next) {
-        if (iw->inode == st.st_ino && iw->dev == st.st_dev) {
-            close (fd);
-            iwatch_update_flags (iw, flags);
-            return iw->wd;
+    w = watch_set_find (&wrk->watches, st.st_dev, st.st_ino);
+    if (w != NULL) {
+        struct watch_dep *wd;
+        close (fd);
+        fd = w->fd;
+        WD_FOREACH (wd, w) {
+            if (watch_dep_is_parent (wd)) {
+                iwatch_update_flags (wd->iw, flags);
+                return wd->iw->wd;
+            }
         }
     }
 
     /* create a new entry if watch is not found */
     iw = iwatch_init (wrk, fd, flags);
     if (iw == NULL) {
-        close (fd);
         return -1;
     }
-
-    /* Allocate watch descriptor */
-    int allocated;
-    do {
-        if (wrk->wd_last == INT_MAX) {
-            wrk->wd_last = 0;
-            wrk->wd_overflow = 1;
-        }
-        allocated = 1;
-        ++wrk->wd_last;
-        if (wrk->wd_overflow) {
-            SLIST_FOREACH (iw, &wrk->head, next) {
-                if (iw->wd == wrk->wd_last) {
-                    allocated = 0;
-                    break;
-                }
-            }
-        }
-    } while (!allocated);
-    iw->wd = wrk->wd_last;
 
     /* add inotify watch to worker`s watchlist */
     SLIST_INSERT_HEAD (&wrk->head, iw, next);
@@ -442,19 +539,17 @@ worker_add_or_modify (worker     *wrk,
  * @return 0 on success, -1 of failure.
  **/
 int
-worker_remove (worker *wrk,
-               int     id)
+worker_remove (struct worker *wrk, int id)
 {
-    assert (wrk != NULL);
-    assert (id != -1);
+    struct i_watch *iw;
 
-    i_watch *iw;
+    assert (wrk != NULL);
+    assert (id >= 0);
+
     SLIST_FOREACH (iw, &wrk->head, next) {
 
         if (iw->wd == id) {
-            event_queue_enqueue (&wrk->eq, id, IN_IGNORED, 0, NULL);
-            SLIST_REMOVE (&wrk->head, iw, i_watch, next);
-            iwatch_free (iw);
+            worker_remove_iwatch (wrk, iw);
             return 0;
         }
     }
@@ -463,7 +558,24 @@ worker_remove (worker *wrk,
 }
 
 /**
- * Prepare a command with the data of the inotify_set_param() call.
+ * Stop and remove a watch.
+ *
+ * @param[in] wrk A pointer to #worker.
+ * @param[in] iw  A pointer to #i_watch to remove.
+ **/
+void
+worker_remove_iwatch (struct worker *wrk, struct i_watch *iw)
+{
+    assert (wrk != NULL);
+    assert (iw != NULL);
+
+    event_queue_enqueue (&wrk->eq, iw->wd, IN_IGNORED, 0, NULL);
+    SLIST_REMOVE (&wrk->head, iw, i_watch, next);
+    iwatch_free (iw);
+}
+
+/**
+ * Prepare a command with the data of the libinotify_set_param() call.
  *
  * @param[in] wrk   A pointer to #worker.
  * @param[in] param Worker-thread parameter name to set.
@@ -471,7 +583,7 @@ worker_remove (worker *wrk,
  * @return 0 on success, -1 on failure.
  **/
 int
-worker_set_param (worker *wrk, int param, intptr_t value)
+worker_set_param (struct worker *wrk, int param, intptr_t value)
 {
     assert (wrk != NULL);
 

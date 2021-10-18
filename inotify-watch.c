@@ -24,12 +24,6 @@
 #include "compat.h"
 
 #include <sys/types.h>
-#ifdef STATFS_HAVE_F_FSTYPENAME
-#include <sys/mount.h> /* fstatfs */
-#endif
-#ifdef STATVFS_HAVE_F_FSTYPENAME
-#include <sys/statvfs.h> /* fstatvfs */
-#endif
 #include <sys/stat.h>  /* fstat */
 
 #include <assert.h>    /* assert */
@@ -45,6 +39,7 @@
 #include "utils.h"
 #include "watch-set.h"
 #include "watch.h"
+#include "worker.h"
 
 #ifdef SKIP_SUBFILES
 static const char *skip_fs_types[] = { SKIP_SUBFILES };
@@ -54,37 +49,27 @@ static const char *skip_fs_types[] = { SKIP_SUBFILES };
  * where opening of subfiles is inwanted.
  *
  * @param[in] fd A file descriptor of a watched entry.
- * @return 1 if watching for subfiles is unwanted, 0 otherwise.
+ * @return true if watching for subfiles is unwanted, false otherwise.
  **/
-static int
+static bool
 iwatch_want_skip_subfiles (int fd)
 {
-#ifdef STATFS_HAVE_F_FSTYPENAME
-    struct statfs st;
-#else
-    struct statvfs st;
-#endif
+    struct STATFS st;
     size_t i;
-    int ret;
 
     memset (&st, 0, sizeof (st));
-#ifdef STATFS_HAVE_F_FSTYPENAME
-    ret = fstatfs (fd, &st);
-#else
-    ret = fstatvfs (fd, &st);
-#endif
-    if (ret == -1) {
-        perror_msg ("fstatfs failed on %d, fd");
-        return 0;
+    if (FSTATFS (fd, &st) == -1) {
+        perror_msg (("fstatfs failed on %d", fd));
+        return false;
     }
 
     for (i = 0; i < nitems (skip_fs_types); i++) {
         if (strcmp (st.f_fstypename, skip_fs_types[i]) == 0) {
-            return 1;
+            return true;
         }
     }
 
-    return 0;
+    return false;
 }
 #endif
 
@@ -100,7 +85,7 @@ iwatch_open (const char *path, uint32_t flags)
 {
     int fd = watch_open (AT_FDCWD, path, flags);
     if (fd == -1) {
-        perror_msg ("Failed to open inotify watch %s", path);
+        perror_msg (("Failed to open inotify watch %s", path));
     }
 
     return fd;
@@ -116,74 +101,74 @@ iwatch_open (const char *path, uint32_t flags)
  * @param[in] flags  A combination of inotify event flags.
  * @return A pointer to a created #i_watch on success NULL otherwise
  **/
-i_watch *
-iwatch_init (worker *wrk, int fd, uint32_t flags)
+struct i_watch *
+iwatch_init (struct worker *wrk, int fd, uint32_t flags)
 {
+    struct stat st;
+    struct i_watch *iw;
+    struct watch *parent;
+    bool is_new = false;
+
     assert (wrk != NULL);
     assert (fd != -1);
 
-    struct stat st;
     if (fstat (fd, &st) == -1) {
-        perror_msg ("fstat failed on %d", fd);
+        perror_msg (("fstat failed on %d", fd));
         return NULL;
     }
 
-    i_watch *iw = calloc (1, sizeof (i_watch));
+    iw = calloc (1, sizeof (struct i_watch));
     if (iw == NULL) {
-        perror_msg ("Failed to allocate inotify watch");
+        perror_msg (("Failed to allocate inotify watch"));
         return NULL;
     }
 
+    iw->wd = worker_allocate_wd (wrk);
     iw->wrk = wrk;
     iw->fd = fd;
     iw->flags = flags;
+    iw->mode = st.st_mode & S_IFMT;
     iw->inode = st.st_ino;
     iw->dev = st.st_dev;
-    iw->is_closed = 0;
+    iw->is_closed = false;
 
-    watch_set_init (&iw->watches);
     dl_init (&iw->deps);
 
     if (S_ISDIR (st.st_mode)) {
-#if READDIR_DOES_OPENDIR > 0
-        DIR *dir = fdreopendir (fd);
-#else
-        DIR *dir = fdopendir (fd);
-#endif
-        if (dir == NULL) {
-            perror_msg ("Directory listing of %d failed", fd);
-            iwatch_free (iw);
-            return NULL;
-        }
-        chg_list *deps = dl_readdir (dir, NULL);
+        struct chg_list *deps = dl_listing (fd, NULL);
         if (deps == NULL) {
-            perror_msg ("Directory listing of %d failed", fd);
-            closedir (dir);
+            perror_msg (("Directory listing of %d failed", fd));
             iwatch_free (iw);
             return NULL;
         }
         dl_join (&iw->deps, deps);
-#if READDIR_DOES_OPENDIR > 0
-        closedir (dir);
-#else
-        iw->dir = dir;
-#endif
 #ifdef SKIP_SUBFILES
         iw->skip_subfiles = iwatch_want_skip_subfiles (fd);
 #endif
     }
 
-    watch *parent = watch_init (iw, WATCH_USER, fd, &st);
+    parent = watch_set_find (&wrk->watches, iw->dev, iw->inode);
     if (parent == NULL) {
+        parent = watch_init (fd);
+        if (parent == NULL) {
+            iwatch_free (iw);
+            return NULL;
+        }
+        is_new = true;
+    }
+
+    if (watch_add_dep (parent, iw, DI_PARENT) == NULL) {
         iwatch_free (iw);
         return NULL;
     }
 
-    watch_set_insert (&iw->watches, parent);
+    if (is_new) {
+        watch_set_insert (&wrk->watches, parent);
+    }
 
     if (S_ISDIR (st.st_mode)) {
 
-        dep_item *iter;
+        struct dep_item *iter;
         DL_FOREACH (iter, &iw->deps) {
             iwatch_add_subwatch (iw, iter);
         }
@@ -197,21 +182,25 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
  * @param[in] iw      A pointer to #i_watch to remove.
  **/
 void
-iwatch_free (i_watch *iw)
+iwatch_free (struct i_watch *iw)
 {
+    struct dep_item *iter;
+    struct watch *w;
+
     assert (iw != NULL);
 
-#if READDIR_DOES_OPENDIR == 0
-    if (iw->dir != NULL) {
-        closedir (iw->dir);
-        /* parent watch fd is closed on closedir(). Mark it as not opened */
-        watch *w = watch_set_find (&iw->watches, iw->inode);
-        if (w != NULL) {
-            w->fd = -1;
-        }
+    /* unwatch subfiles */
+    DL_FOREACH (iter, &iw->deps) {
+        iwatch_del_subwatch (iw, iter);
     }
-#endif
-    watch_set_free (&iw->watches);
+
+    /* unwatch parent */
+    w = watch_set_find (&iw->wrk->watches, iw->dev, iw->inode);
+    if (w != NULL) {
+        assert (!watch_deps_empty (w));
+        watch_del_dep (w, iw, DI_PARENT);
+    }
+
     dl_free (&iw->deps);
     free (iw);
 }
@@ -223,9 +212,13 @@ iwatch_free (i_watch *iw)
  * @param[in] di A dependency item with relative path to watch.
  * @return A pointer to a created watch.
  **/
-watch*
-iwatch_add_subwatch (i_watch *iw, dep_item *di)
+struct watch*
+iwatch_add_subwatch (struct i_watch *iw, struct dep_item *di)
 {
+    struct stat st;
+    struct watch *w;
+    int fd;
+
     assert (iw != NULL);
     assert (di != NULL);
 
@@ -239,60 +232,82 @@ iwatch_add_subwatch (i_watch *iw, dep_item *di)
     }
 #endif
 
-    watch *w = watch_set_find (&iw->watches, di->inode);
+    w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
     if (w != NULL) {
-        di_settype (di, w->flags);
+        mode_t mode;
+
+        assert (!watch_deps_empty (w));
+
+        /* Inherit dep-item type from other associated dep-items */
+        mode = watch_get_mode (w);
+        if (!S_ISUNK (di->type) && (di->type & S_IFMT) != (mode & S_IFMT)) {
+            perror_msg (("File modes taken with readdir and fstat are different"
+                " %d != %d", (int)di->type, (int)mode));
+        }
+        di_settype (di, mode);
+        /* Don`t open a watches with empty kqueue filter flags */
+        if (inotify_to_kqueue (iw->flags, di->type, false) == 0) {
+            return NULL;
+        }
         goto hold;
     }
 
     /* Don`t open a watches with empty kqueue filter flags */
-    watch_flags_t wf = (di->type & S_IFMT) | WF_ISSUBWATCH;
-    if (!S_ISUNK (di->type) && inotify_to_kqueue (iw->flags, wf) == 0) {
+    if (!S_ISUNK (di->type) &&
+        inotify_to_kqueue (iw->flags, di->type, false) == 0) {
         return NULL;
     }
 
-    int fd = watch_open (iw->fd, di->path, IN_DONT_FOLLOW);
+    fd = watch_open (iw->fd, di->path, IN_DONT_FOLLOW);
     if (fd == -1) {
-        perror_msg ("Failed to open file %s", di->path);
+        perror_msg (("Failed to open file %s", di->path));
         goto lstat;
     }
 
-    struct stat st;
     if (fstat (fd, &st) == -1) {
-        perror_msg ("Failed to stat subwatch %s", di->path);
+        perror_msg (("Failed to stat subwatch %s", di->path));
         close (fd);
         goto lstat;
     }
 
     di_settype (di, st.st_mode);
 
-    /* Correct inode number if opened file is not a listed one */
-    if (di->inode != st.st_ino) {
-        if (iw->dev != st.st_dev) {
-            /* It`s a mountpoint. Keep underlying directory inode number */
-            st.st_ino = di->inode;
-        } else {
-            /* Race detected. Use new inode number and try to find watch again */
-            perror_msg ("%s has been replaced after directory listing", di->path);
-            di->inode = st.st_ino;
-            w = watch_set_find (&iw->watches, di->inode);
-            if (w != NULL) {
-                close (fd);
-                goto hold;
-            }
+    /* Don`t open a watches with empty kqueue filter flags */
+    if (inotify_to_kqueue (iw->flags, di->type, false) == 0) {
+        close (fd);
+        return NULL;
+    }
+
+    /* Check if opened file is not a listed one. If it is a mountpoint, keep
+     * using underlying directory inode number. Otherwise make a new lookup */
+    if (di->inode != st.st_ino && iw->dev == st.st_dev) {
+        /* Race detected. Use new inode number and try to find watch again */
+        perror_msg (("%s has been replaced after directory listing", di->path));
+        di->inode = st.st_ino;
+        w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
+        if (w != NULL) {
+            close (fd);
+            goto hold;
         }
     }
 
-    w = watch_init (iw, WATCH_DEPENDENCY, fd, &st);
+    w = watch_init (fd);
     if (w == NULL) {
         close (fd);
         return NULL;
     }
 
-    watch_set_insert (&iw->watches, w);
+    if (watch_add_dep (w, iw, di) == NULL) {
+        watch_free (w);
+        return NULL;
+    }
+    watch_set_insert (&iw->wrk->watches, w);
+    return w;
 
 hold:
-    ++w->refcount;
+    if (watch_add_dep (w, iw, di) == NULL) {
+        return NULL;
+    }
     return w;
 
 lstat:
@@ -300,7 +315,7 @@ lstat:
         if (fstatat (iw->fd, di->path, &st, AT_SYMLINK_NOFOLLOW) != -1) {
             di_settype (di, st.st_mode);
         } else {
-            perror_msg ("Failed to lstat subwatch %s", di->path);
+            perror_msg (("Failed to lstat subwatch %s", di->path));
         }
     }
     return NULL;
@@ -313,19 +328,42 @@ lstat:
  * @param[in] di A dependency list item to remove watch.
  **/
 void
-iwatch_del_subwatch (i_watch *iw, const dep_item *di)
+iwatch_del_subwatch (struct i_watch *iw, const struct dep_item *di)
 {
+    struct watch *w;
+
     assert (iw != NULL);
     assert (di != NULL);
 
-    watch *w = watch_set_find (&iw->watches, di->inode);
+    w = watch_set_find (&iw->wrk->watches, iw->dev, di->inode);
     if (w != NULL) {
-        assert (w->refcount > 0);
-        --w->refcount;
+        assert (!watch_deps_empty (w));
+        watch_del_dep (w, iw, di);
+    }
+}
 
-        if (w->refcount == 0) {
-            watch_set_delete (&iw->watches, w);
-        }
+/**
+ * Update a inotify watch from worker by its old and new paths.
+ *
+ * @param[in] iw      A pointer to the #i_watch.
+ * @param[in] di_from A old name & inode number of the file.
+ * @param[in] di_to   A new name & inode number of the file.
+ **/
+void
+iwatch_move_subwatch (struct i_watch *iw,
+                      const struct dep_item *di_from,
+                      const struct dep_item *di_to)
+{
+    struct watch *w;
+
+    assert (iw != NULL);
+    assert (di_from != NULL);
+    assert (di_to != NULL);
+    assert (di_from->inode == di_to->inode);
+
+    w = watch_set_find (&iw->wrk->watches, iw->dev, di_to->inode);
+    if (w != NULL && !watch_deps_empty (w)) {
+        watch_chg_dep (w, iw, di_from, di_to);
     }
 }
 
@@ -339,8 +377,11 @@ iwatch_del_subwatch (i_watch *iw, const dep_item *di)
  * @param[in] flags A combination of the inotify watch flags.
  **/
 void
-iwatch_update_flags (i_watch *iw, uint32_t flags)
+iwatch_update_flags (struct i_watch *iw, uint32_t flags)
 {
+    struct watch *parent;
+    struct dep_item *iter;
+
     assert (iw != NULL);
 
     /* merge flags if IN_MASK_ADD flag is set */
@@ -350,30 +391,22 @@ iwatch_update_flags (i_watch *iw, uint32_t flags)
 
     iw->flags = flags;
 
-    watch *w, *tmpw;
-    /* update kwatches or close those we dont need to watch */
-    RB_FOREACH_SAFE (w, watch_set, &iw->watches, tmpw) {
-        uint32_t fflags = inotify_to_kqueue (flags, w->flags);
-        if (fflags == 0) {
-            watch_set_delete (&iw->watches, w);
-        } else {
-            watch_register_event (w, fflags);
-        }
-    }
+    /* update parent kqueue watch */
+    parent = watch_set_find (&iw->wrk->watches, iw->dev, iw->inode);
+    assert (parent != NULL);
+    assert (!watch_deps_empty (parent));
+    watch_update_event (parent);
 
-    /* Mark unwatched subfiles */
-    dep_item *iter;
+    /* update kqueue subwatches or close those we dont need to watch */
     DL_FOREACH (iter, &iw->deps) {
-        if (watch_set_find (&iw->watches, iter->inode) == NULL) {
-            iter->type |= DI_UNCHANGED;
-        }
-    }
-
-    /* And finally try to watch marked items */
-    DL_FOREACH (iter, &iw->deps) {
-        if (iter->type & DI_UNCHANGED) {
+        struct watch *w = watch_set_find (&iw->wrk->watches, iw->dev, iter->inode);
+        if (w == NULL || watch_find_dep (w, iw, iter) == NULL) {
+            /* try to watch  unwatched subfiles */
             iwatch_add_subwatch (iw, iter);
-            iter->type &= ~DI_UNCHANGED;
+        } else if (inotify_to_kqueue (flags, iter->type, false) == 0) {
+            watch_del_dep (w, iw, iter);
+        } else {
+            watch_update_event (w);
         }
     }
 }

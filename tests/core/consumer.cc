@@ -68,10 +68,11 @@ void consumer::add_modify_watch (request::add_modify add_modify)
 
 void consumer::remove_watch (request::remove remove)
 {
-    ino.cancel (remove.watch_id);
+    int retval = ino.cancel (remove.watch_id);
+    int error = errno;
     LOG ("CONS: Cancelled watch");
     input.reset ();
-    output.wait ();
+    output.setup (retval, error);
 }
 
 void consumer::run ()

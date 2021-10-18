@@ -34,6 +34,7 @@
 #include <string.h>    /* memmove */
 
 #include "sys/inotify.h"
+
 #include "config.h"
 #include "event-queue.h"
 #include "utils.h"
@@ -45,10 +46,11 @@
  * @param[in] eq A pointer to #event_queue.
  **/
 void
-event_queue_init (event_queue *eq)
+event_queue_init (struct event_queue *eq)
 {
     eq->allocated = 0;
-    eq->count = 0;
+    eq->sb_events = 0;
+    eq->mem_events = 0;
     eq->iov = NULL;
     eq->last = NULL;
     event_queue_set_max_events (eq, IN_DEF_MAX_QUEUED_EVENTS);
@@ -60,11 +62,11 @@ event_queue_init (event_queue *eq)
  * @param[in] eq A pointer to #event_queue.
  **/
 void
-event_queue_free (event_queue *eq)
+event_queue_free (struct event_queue *eq)
 {
     int i;
 
-    for (i = 0; i < eq->count; i++) {
+    for (i = 0; i < eq->mem_events; i++) {
         free (eq->iov[i].iov_base);
     }
     free (eq->iov);
@@ -79,7 +81,7 @@ event_queue_free (event_queue *eq)
  * @return 0 on success, -1 otherwise.
  **/
 int
-event_queue_set_max_events (event_queue *eq, int max_events)
+event_queue_set_max_events (struct event_queue *eq, int max_events)
 {
     if (max_events <= 0) {
         errno = EINVAL;
@@ -96,13 +98,22 @@ event_queue_set_max_events (event_queue *eq, int max_events)
  * @param[in] eq A pointer to #event_queue.
  **/
 static int
-event_queue_extend (event_queue *eq)
+event_queue_extend (struct event_queue *eq)
 {
-    if (eq->count >= eq->allocated) {
-        int to_allocate = eq->count + 1;
-        void *ptr = realloc (eq->iov, sizeof (struct iovec) * to_allocate);
+    if (eq->mem_events >= eq->allocated) {
+        int to_allocate = eq->mem_events * 3 / 2;
+        void *ptr;
+
+        if (to_allocate < 10) {
+            to_allocate = 10;
+        }
+        if (to_allocate > eq->max_events) {
+            to_allocate = eq->max_events + 1;
+        }
+
+        ptr = realloc (eq->iov, sizeof (struct iovec) * to_allocate);
         if (ptr == NULL) {
-            perror_msg ("Failed to extend events to %d items", to_allocate);
+            perror_msg (("Failed to extend events to %d items", to_allocate));
             return -1;
         }
         eq->iov = ptr;
@@ -123,16 +134,16 @@ event_queue_extend (event_queue *eq)
  * @return 0 on success, -1 otherwise.
  **/
 int
-event_queue_enqueue (event_queue *eq,
-                     int          wd,
-                     uint32_t     mask,
-                     uint32_t     cookie,
-                     const char  *name)
+event_queue_enqueue (struct event_queue *eq,
+                     int                 wd,
+                     uint32_t            mask,
+                     uint32_t            cookie,
+                     const char         *name)
 {
     struct inotify_event *prev_ie;
     int retval = 0;
 
-    if (eq->count > eq->max_events) {
+    if (eq->mem_events > eq->max_events) {
         return -1;
     }
 
@@ -140,7 +151,7 @@ event_queue_enqueue (event_queue *eq,
         return -1;
     }
 
-    if (eq->count == eq->max_events) {
+    if (eq->mem_events == eq->max_events) {
         wd = -1;
         mask = IN_Q_OVERFLOW;
         cookie = 0;
@@ -152,8 +163,8 @@ event_queue_enqueue (event_queue *eq,
      * Find previous reported event. If event queue is not empty, get last
      * event from tail. Otherwise get last event sent to communication pipe.
      */
-    prev_ie =
-        eq->count > 0 ? eq->iov[eq->count - 1].iov_base : (void *)eq->last;
+    prev_ie = eq->mem_events > 0 ?
+        (struct inotify_event*)eq->iov[eq->mem_events - 1].iov_base : eq->last;
 
     /* Compare current event with previous to decide if it can be coalesced */
     if (prev_ie != NULL &&
@@ -162,26 +173,28 @@ event_queue_enqueue (event_queue *eq,
         prev_ie->cookie == cookie &&
       ((prev_ie->len == 0 && name == NULL) ||
        (prev_ie->len > 0 && name != NULL && !strcmp (prev_ie->name, name)))) {
+
+            int fd = EQ_TO_WRK(eq)->io[INOTIFY_FD];
+            int buffered = 0;
+
             /* Events are identical and queue is not empty. Skip current. */
-            if (eq->count > 0) {
+            if (eq->mem_events > 0) {
                 return retval;
             }
             /* Event queue is empty. Check if any events remain in the pipe */
-            int fd = EQ_TO_WRK(eq)->io[INOTIFY_FD];
-            int buffered;
             if (ioctl (fd, FIONREAD, &buffered) == 0 && buffered > 0) {
                 return retval;
             }
     }
 
-    eq->iov[eq->count].iov_base = (void *)create_inotify_event (
-        wd, mask, cookie, name, &eq->iov[eq->count].iov_len);
-    if (eq->iov[eq->count].iov_base == NULL) {
-        perror_msg ("Failed to create a inotify event %x", mask);
+    eq->iov[eq->mem_events].iov_base = (void *)create_inotify_event (
+        wd, mask, cookie, name, &eq->iov[eq->mem_events].iov_len);
+    if (eq->iov[eq->mem_events].iov_base == NULL) {
+        perror_msg (("Failed to create a inotify event %x", mask));
         return -1;
     }
 
-    ++eq->count;
+    ++eq->mem_events;
 
     return retval;
 }
@@ -192,13 +205,19 @@ event_queue_enqueue (event_queue *eq,
  * @param[in] eq      A pointer to #event_queue.
  * @param[in] sbspace Amount of space in socket buffer available to write
  *                    w/o blocking
+ * @return Number of bytes written to socket on success, -1 otherwise.
  **/
-void event_queue_flush (event_queue *eq, size_t sbspace)
+ssize_t
+event_queue_flush (struct event_queue *eq, size_t sbspace)
 {
     int iovcnt, iovmax;
+    int send_flags = 0;
+    int fd = EQ_TO_WRK(eq)->io[KQUEUE_FD];
     size_t iovlen = 0;
+    ssize_t size;
+    int i;
 
-    iovmax = eq->count;
+    iovmax = eq->mem_events;
     if (iovmax > IOV_MAX) {
         iovmax = IOV_MAX;
     }
@@ -211,32 +230,34 @@ void event_queue_flush (event_queue *eq, size_t sbspace)
     }
 
     if (iovcnt == 0) {
-        return;
+        return 0;
     }
 
-    int send_flags = 0;
 #if defined (MSG_NOSIGNAL)
     send_flags |= MSG_NOSIGNAL;
 #endif
 
-    int fd = EQ_TO_WRK(eq)->io[KQUEUE_FD];
-    if (safe_sendv (fd, eq->iov, iovcnt, send_flags) == -1) {
-        perror_msg ("Sending of inotify events to socket failed");
+    size = sendv (fd, eq->iov, iovcnt, send_flags);
+    assert (size == iovlen || size == -1);
+    if (size > 0) {
+        /* Save last event sent to communication pipe for coalecsing checks */
+        free (eq->last);
+        eq->last = (void *)eq->iov[iovcnt - 1].iov_base;
+
+        for (i = 0; i < iovcnt - 1; i++) {
+            free (eq->iov[i].iov_base);
+        }
+
+        memmove (&eq->iov[0],
+                 &eq->iov[iovcnt],
+                 sizeof(struct iovec) * (eq->mem_events - iovcnt));
+        eq->mem_events -= iovcnt;
+        eq->sb_events += iovcnt;
+    } else {
+        perror_msg (("Sending of inotify events to socket failed"));
     }
 
-    /* Save last event sent to communication pipe for coalecsing checks */
-    free (eq->last);
-    eq->last = (void *)eq->iov[iovcnt - 1].iov_base;
-
-    int i;
-    for (i = 0; i < iovcnt - 1; i++) {
-        free (eq->iov[i].iov_base);
-    }
-
-    memmove (&eq->iov[0],
-             &eq->iov[iovcnt],
-             sizeof(struct iovec) * (eq->count - iovcnt));
-    eq->count -= iovcnt;
+    return size;
 }
 
 /**
@@ -245,10 +266,11 @@ void event_queue_flush (event_queue *eq, size_t sbspace)
  * @param[in] eq A pointer to #event_queue.
  **/
 void
-event_queue_reset_last (event_queue *eq)
+event_queue_reset_last (struct event_queue *eq)
 {
     assert (eq != NULL);
 
     free (eq->last);
     eq->last = NULL;
+    eq->sb_events = 0;
 }

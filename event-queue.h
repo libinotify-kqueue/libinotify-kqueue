@@ -25,30 +25,30 @@
 #define __EVENT_QUEUE_H__
 
 #include <sys/types.h> /* uint32_t */
-#include <sys/socket.h>/* SO_NOSIGPIPE */
 #include <sys/uio.h>   /* iovec */
 
-#include "config.h"
+#include "sys/inotify.h"
 
-typedef struct event_queue {
+struct event_queue {
     struct iovec *iov; /* inotify events to send */
-    int count;         /* number of events enqueued */
+    int sb_events;     /* number of events enqueued in send buffer */
+    int mem_events;    /* number of events enqueued in memory */
     int allocated;     /* number of iovs allocated */
     int max_events;    /* max_queued_events */
     struct inotify_event *last; /* Last event sent to socket */
-} event_queue;
+};
 
-void event_queue_init (event_queue *eq);
-void event_queue_free (event_queue *eq);
+void event_queue_init (struct event_queue *eq);
+void event_queue_free (struct event_queue *eq);
 
-int event_queue_set_max_events (event_queue *eq, int max_events);
+int event_queue_set_max_events (struct event_queue *eq, int max_events);
 
-int  event_queue_enqueue (event_queue *eq,
-                          int          wd,
-                          uint32_t     mask,
-                          uint32_t     cookie,
-                          const char  *name);
-void event_queue_flush   (event_queue *eq, size_t sbspace);
-void event_queue_reset_last (event_queue *eq);
+int  event_queue_enqueue       (struct event_queue *eq,
+                                int                 wd,
+                                uint32_t            mask,
+                                uint32_t            cookie,
+                                const char         *name);
+ssize_t event_queue_flush      (struct event_queue *eq, size_t sbspace);
+void    event_queue_reset_last (struct event_queue *eq);
 
 #endif /* __EVENT_QUEUE_H__ */

@@ -22,54 +22,28 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include "config.h"
-#include "compat.h"
-
+#include <assert.h>
+#include <dirent.h>  /* opendir, readdir, closedir */
 #include <errno.h>   /* errno */
-#include <stdbool.h> /* bool */
+#include <fcntl.h>   /* open */
 #include <stddef.h>  /* offsetof */
 #include <stdlib.h>  /* calloc */
-#include <stdio.h>   /* printf */
-#include <dirent.h>  /* opendir, readdir, closedir */
 #include <string.h>  /* strcmp */
-#include <fcntl.h>   /* open */
 #include <unistd.h>  /* close */
-#include <assert.h>
-#include <errno.h>
 
-#include "utils.h"
+#include "compat.h"
+#include "config.h"
 #include "dep-list.h"
+#include "utils.h"
 
-/**
- * Print a list to stdout.
- *
- * @param[in] dl A pointer to a list.
- **/
-void
-dl_print (dep_list *dl)
-{
-    dep_item *di;
+static inline void di_free (struct dep_item *di);
+static int dep_item_cmp (struct dep_item *di1, struct dep_item *di2);
 
-    DL_FOREACH (di, dl) {
-        printf ("%lld:%s ", (long long int) di->inode, di->path);
-    }
-    printf ("\n");
-}
-
-/**
- * Allocate memory for dependency list head.
- *
- * @return A pointer to a new list or NULL in the case of error.
- **/
-dep_list*
-dl_alloc ()
-{
-    dep_list *dl = calloc (1, sizeof (dep_list));
-    if (dl == NULL) {
-        perror_msg ("Failed to allocate new dep-list");
-    }
-    return dl;
-}
+RB_GENERATE_INSERT_COLOR(dep_list, dep_item, u.tree_link, static)
+RB_GENERATE_REMOVE_COLOR(dep_list, dep_item, u.tree_link, static)
+RB_GENERATE_INSERT(dep_list, dep_item, u.tree_link, dep_item_cmp, static)
+RB_GENERATE_REMOVE(dep_list, dep_item, u.tree_link, static)
+RB_GENERATE_FIND(dep_list, dep_item, u.tree_link, dep_item_cmp, static)
 
 /**
  * Initialize a rb-tree based list.
@@ -77,26 +51,10 @@ dl_alloc ()
  * @param[in] dl A pointer to a list.
  **/
 void
-dl_init (dep_list* dl)
+dl_init (struct dep_list* dl)
 {
     assert (dl != NULL);
-    RB_INIT (&dl->head);
-}
-
-/**
- * Create a new list and initialize its fields.
- *
- * @return A pointer to a new list or NULL in the case of error.
- **/
-dep_list*
-dl_create ()
-{
-    dep_list *dl = dl_alloc ();
-    if (dl == NULL) {
-        return NULL;
-    }
-    dl_init (dl);
-    return dl;
+    RB_INIT (dl);
 }
 
 /**
@@ -109,14 +67,14 @@ dl_create ()
  * @param[in] type  A file`s type (compatible with mode_t values)
  * @return A pointer to a new item or NULL in the case of error.
  **/
-dep_item*
+static inline struct dep_item*
 di_create (const char *path, ino_t inode, mode_t type)
 {
     size_t pathlen = strlen (path) + 1;
 
-    dep_item *di = calloc (1, offsetof (dep_item, path) + pathlen);
+    struct dep_item *di = calloc (1, offsetof (struct dep_item, path) + pathlen);
     if (di == NULL) {
-        perror_msg ("Failed to create a new dep-list item");
+        perror_msg (("Failed to create a new dep-list item"));
         return NULL;
     }
 
@@ -132,14 +90,14 @@ di_create (const char *path, ino_t inode, mode_t type)
  * @param[in] dl A pointer to a list.
  * @param[in] di A pointer to a list item to be inserted.
  **/
-void
-dl_insert (dep_list* dl, dep_item* di)
+static inline void
+dl_insert (struct dep_list* dl, struct dep_item* di)
 {
     assert (dl != NULL);
     assert (di != NULL);
-    assert (RB_FIND (dep_tree, &dl->head, di) == NULL);
+    assert (RB_FIND (dep_list, dl, di) == NULL);
 
-    RB_INSERT (dep_tree, &dl->head, di);
+    RB_INSERT (dep_list, dl, di);
 }
 
 /**
@@ -148,14 +106,14 @@ dl_insert (dep_list* dl, dep_item* di)
  * @param[in] dl A pointer to a list.
  * @param[in] di A pointer to a list item to remove.
  **/
-void
-dl_remove (dep_list* dl, dep_item* di)
+static inline void
+dl_remove (struct dep_list* dl, struct dep_item* di)
 {
     assert (dl != NULL);
     assert (di != NULL);
-    assert (RB_FIND (dep_tree, &dl->head, di) != NULL);
+    assert (RB_FIND (dep_list, dl, di) != NULL);
 
-    RB_REMOVE (dep_tree, &dl->head, di);
+    RB_REMOVE (dep_list, dl, di);
     di_free (di);
 }
 
@@ -166,8 +124,8 @@ dl_remove (dep_list* dl, dep_item* di)
  *
  * @param[in] dn A pointer to a list item. May be NULL.
  **/
-void
-di_free (dep_item *di)
+static inline void
+di_free (struct dep_item *di)
 {
     free (di);
 }
@@ -180,14 +138,14 @@ di_free (dep_item *di)
  * @param[in] dl A pointer to a list.
  **/
 void
-dl_free (dep_list *dl)
+dl_free (struct dep_list *dl)
 {
+    struct dep_item *di;
+
     assert (dl != NULL);
 
-    dep_item *di;
-
-    while (!RB_EMPTY (&dl->head)) {
-        di = RB_MIN (dep_tree, &dl->head);
+    while (!RB_EMPTY (dl)) {
+        di = RB_MIN (dep_list, dl);
         dl_remove (dl, di);
     }
 }
@@ -203,16 +161,16 @@ dl_free (dep_list *dl)
  * @param[in] dl_source A pointer to a source list (linked list based).
  **/
 void
-dl_join (dep_list *dl_target, chg_list *dl_source)
+dl_join (struct dep_list *dl_target, struct chg_list *dl_source)
 {
+    struct dep_item *di;
+
     assert (dl_target != NULL);
     assert (dl_source != NULL);
 
-    dep_item *di;
-
-    while (!SLIST_EMPTY (&dl_source->head)) {
-        di = SLIST_FIRST (&dl_source->head);
-        SLIST_REMOVE_HEAD (&dl_source->head, list_link);
+    while (!SLIST_EMPTY (dl_source)) {
+        di = SLIST_FIRST (dl_source);
+        SLIST_REMOVE_HEAD (dl_source, u.s.list_link);
         dl_insert (dl_target, di);
     }
     free (dl_source);
@@ -223,12 +181,13 @@ dl_join (dep_list *dl_target, chg_list *dl_source)
  *
  * @param[in] dl A pointer to a list.
  **/
-static void
-dl_clearflags (dep_list *dl)
+static inline void
+dl_clearflags (struct dep_list *dl)
 {
+    struct dep_item *di;
+
     assert (dl != NULL);
 
-    dep_item *di;
     DL_FOREACH (di, dl) {
         di->type &= S_IFMT;
     }
@@ -241,17 +200,18 @@ dl_clearflags (dep_list *dl)
  * @param[in] path  A name of a file.
  * @return A pointer to a dep_item if item is found, NULL otherwise.
  */
-dep_item*
-dl_find (dep_list *dl, const char *path)
+struct dep_item*
+dl_find (struct dep_list *dl, const char *path)
 {
+    struct dep_item find;
+
     assert (dl != NULL);
     assert (path != NULL);
 
-    dep_item find;
     find.type = DI_EXT_PATH;
-    find.ext_path = path;
+    find.u.ext_path = path;
 
-    return (RB_FIND (dep_tree, &dl->head, &find));
+    return (RB_FIND (dep_list, dl, &find));
 }
 
 /**
@@ -263,21 +223,22 @@ dl_find (dep_list *dl, const char *path)
  *                   resulting list but marked as unchanged in before list.
  * @return A pointer to a list. May return NULL, check errno in this case.
  **/
-chg_list*
-dl_readdir (DIR *dir, dep_list* before)
+struct chg_list*
+dl_readdir (DIR *dir, struct dep_list* before)
 {
-    assert (dir != NULL);
-
     struct dirent *ent;
-    dep_item *item, *before_item;
+    struct dep_item *item, *before_item;
+    struct chg_list *head;
     mode_t type;
 
-    chg_list *head = calloc (1, sizeof (dep_list));
+    assert (dir != NULL);
+
+    head = calloc (1, sizeof (struct dep_list));
     if (head == NULL) {
-        perror_msg ("Failed to allocate list during directory listing");
+        perror_msg (("Failed to allocate list during directory listing"));
         return NULL;
     }
-    SLIST_INIT (&head->head);
+    SLIST_INIT (head);
 
     while ((ent = readdir (dir)) != NULL) {
         if (!strcmp (ent->d_name, ".") || !strcmp (ent->d_name, "..")) {
@@ -308,17 +269,17 @@ dl_readdir (DIR *dir, dep_list* before)
 
         item = di_create (ent->d_name, ent->d_ino, type);
         if (item == NULL) {
-            perror_msg ("Failed to allocate a new item during listing");
+            perror_msg (("Failed to allocate a new item during listing"));
             goto error;
         }
 
         /* File was overwritten between scans. Cache reference on old entry. */
         if (before_item != NULL) {
             item->type |= DI_READDED;
-            item->replacee = before_item;
+            item->u.s.replacee = before_item;
         }
 
-        SLIST_INSERT_HEAD (&head->head, item, list_link);
+        SLIST_INSERT_HEAD (head, item, u.s.list_link);
     }
     return head;
 
@@ -326,22 +287,53 @@ error:
     if (before != NULL) {
         dl_clearflags (before);
     }
-    while (!SLIST_EMPTY (&head->head)) {
-        item = SLIST_FIRST (&head->head);
-        SLIST_REMOVE_HEAD (&head->head, list_link);
+    while (!SLIST_EMPTY (head)) {
+        item = SLIST_FIRST (head);
+        SLIST_REMOVE_HEAD (head, u.s.list_link);
         di_free (item);
     }
     free (head);
     return NULL;
 }
 
+/**
+ * Create a directory listing and return it as a list.
+ *
+ * @return A pointer to a list. May return NULL, check errno in this case.
+ **/
+struct chg_list*
+dl_listing (int fd, struct dep_list* before)
+{
+    DIR *dir = NULL;
+    struct chg_list *head;
 
-#define cb_invoke(cbs, name, udata, ...) \
-    do { \
-        if (cbs->name) { \
-            (cbs->name) (udata, ## __VA_ARGS__); \
-        } \
-    } while (0)
+    assert (fd >= 0);
+
+    dir = fdreopendir (fd);
+    if (dir == NULL) {
+        if (errno == ENOENT) {
+            /* ENOENT is skipped as the directory could be just deleted */
+            head = calloc (1, sizeof (struct chg_list));
+            if (head != NULL) {
+                SLIST_INIT (head);
+                return (head);
+            }
+            perror_msg (("Failed to allocate list during directory listing"));
+        }
+        perror_msg (("Failed to opendir for listing"));
+        return NULL;
+    }
+
+    head = dl_readdir (dir, before);
+
+#if READDIR_DOES_OPENDIR > 0
+    closedir (dir);
+#else
+    fdclosedir (dir);
+#endif
+
+    return head;
+}
 
 
 /**
@@ -356,16 +348,16 @@ error:
  * @param[in] udata  A pointer to user data.
  **/
 void
-dl_calculate (dep_list           *before,
-              chg_list           *after,
-              const traverse_cbs *cbs,
-              void               *udata)
+dl_calculate (struct dep_list           *before,
+              struct chg_list           *after,
+              const struct traverse_cbs *cbs,
+              void                      *udata)
 {
+    struct dep_item *di_from, *di_to, *tmp;
+    size_t n_moves = 0;
+
     assert (before != NULL);
     assert (cbs != NULL);
-
-    dep_item *di_from, *di_to, *tmp;
-    size_t n_moves = 0;
 
     /*
      * Some terminology. Between 2 consecutive directory scans file can be:
@@ -391,12 +383,12 @@ dl_calculate (dep_list           *before,
                     !(di_to->type & DI_MOVED)) {
                     /* Detect replacements in the watched directory */
                     if (di_to->type & DI_READDED) {
-                        di_to->replacee->type |= DI_REPLACED;
+                        di_to->u.s.replacee->type |= DI_REPLACED;
                     }
 
                     /* Now we can mark item as moved in the watched directory */
                     di_to->type |= DI_MOVED;
-                    di_to->moved_from = di_from;
+                    di_to->u.s.moved_from = di_from;
                     di_from->type |= DI_MOVED;
                     ++n_moves;
                     break;
@@ -420,9 +412,9 @@ dl_calculate (dep_list           *before,
     DL_FOREACH (di_from, before) {
         if (!(di_from->type & (DI_UNCHANGED | DI_MOVED))) {
             if (di_from->type & DI_REPLACED) {
-                cb_invoke (cbs, replaced, udata, di_from);
+                cbs->replaced (udata, di_from);
             } else {
-                cb_invoke (cbs, removed, udata, di_from);
+                cbs->removed (udata, di_from);
             }
         }
     }
@@ -444,14 +436,14 @@ dl_calculate (dep_list           *before,
             size_t n_moves_prev = n_moves;
             CL_FOREACH (di_to, after) {
                 bool is_overlap = di_to->type & DI_READDED &&
-                                  di_to->replacee->type & DI_MOVED;
-                if (di_to->type & DI_MOVED && di_to->moved_from != NULL &&
+                                  di_to->u.s.replacee->type & DI_MOVED;
+                if (di_to->type & DI_MOVED && di_to->u.s.moved_from != NULL &&
                     (is_overlap == want_overlap)) {
-                    cb_invoke (cbs, moved, udata, di_to->moved_from, di_to);
+                    cbs->moved (udata, di_to->u.s.moved_from, di_to);
 
                     /* Mark file as not participating in moves */
-                    di_to->moved_from->type &= ~DI_MOVED;
-                    di_to->moved_from = NULL;
+                    di_to->u.s.moved_from->type &= ~DI_MOVED;
+                    di_to->u.s.moved_from = NULL;
 
                     want_overlap = false;
                     --n_moves;
@@ -463,14 +455,14 @@ dl_calculate (dep_list           *before,
              * So just break circular chain at random place. :-(
              */
             if (n_moves_prev == n_moves) {
-                perror_msg("Circular rename detected");
+                perror_msg (("Circular rename detected"));
                 want_overlap = true;
             }
         }
         /* Notify about newly created files */
         CL_FOREACH (di_to, after) {
             if (!(di_to->type & DI_MOVED)) {
-                cb_invoke (cbs, added, udata, di_to);
+                cbs->added (udata, di_to);
             }
         }
     }
@@ -497,12 +489,10 @@ dl_calculate (dep_list           *before,
  *     less than, equal to, or greater than the second one.
  **/
 static int
-dep_item_cmp (dep_item *di1, dep_item *di2)
+dep_item_cmp (struct dep_item *di1, struct dep_item *di2)
 {
-    const char *path1 = (di1->type == DI_EXT_PATH) ? di1->ext_path : di1->path;
-    const char *path2 = (di2->type == DI_EXT_PATH) ? di2->ext_path : di2->path;
+    const char *path1 = (di1->type == DI_EXT_PATH) ? di1->u.ext_path : di1->path;
+    const char *path2 = (di2->type == DI_EXT_PATH) ? di2->u.ext_path : di2->path;
 
     return strcmp (path1, path2);
 }
-
-RB_GENERATE(dep_tree, dep_item, tree_link, dep_item_cmp);

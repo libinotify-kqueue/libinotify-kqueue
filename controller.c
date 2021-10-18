@@ -22,43 +22,48 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include <stddef.h> /* NULL */
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include <sys/types.h>
+#include <sys/queue.h>
+#include <sys/stat.h>
+
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <stdio.h>
-
-#include <sys/types.h>
-#include <sys/event.h>
-#include <sys/stat.h>
+#include <pthread.h>
+#include <stddef.h> /* NULL */
+#include <unistd.h>
 
 #include "sys/inotify.h"
 
+#include "compat.h"
 #include "utils.h"
 #include "worker.h"
 
 
-#define WORKER_SZ 100
-static worker* volatile workers[WORKER_SZ];
+static struct workers_list workers = SLIST_HEAD_INITIALIZER (&workers);
+static atomic_uint nworkers = ATOMIC_VAR_INIT (0);
 static pthread_rwlock_t workers_rwlock = PTHREAD_RWLOCK_INITIALIZER;
-static int initialized = 0;
-static worker dummy_wrk = {
-    .io = { -1, -1 },
-    .mutex = PTHREAD_MUTEX_INITIALIZER
-};
+static unsigned int max_workers = IN_DEF_MAX_USER_INSTANCES;
 
-#define WRK_FREE (&dummy_wrk)
-#define WRK_RESV NULL
+static inline void
+workerset_rlock (void)
+{
+    pthread_rwlock_rdlock (&workers_rwlock);
+}
 
-#define WORKERSET_RLOCK()  pthread_rwlock_rdlock (&workers_rwlock)
-#define WORKERSET_WLOCK()  pthread_rwlock_wrlock (&workers_rwlock)
-#define WORKERSET_UNLOCK() pthread_rwlock_unlock (&workers_rwlock)
+static inline void
+workerset_wlock (void)
+{
+    pthread_rwlock_wrlock (&workers_rwlock);
+}
 
-static int     worker_exec (int fd, worker_cmd *cmd);
-static void    workers_init (void);
+static inline void
+workerset_unlock (void)
+{
+    pthread_rwlock_unlock (&workers_rwlock);
+}
+
+static int     worker_exec (int fd, struct worker_cmd *cmd);
 
 /**
  * Create a new inotify instance.
@@ -70,7 +75,7 @@ static void    workers_init (void);
  * @return  -1 on failure, a file descriptor on success.
  **/
 int
-inotify_init (void) __THROW
+inotify_init (void)
 {
     return inotify_init1 (0);
 }
@@ -86,8 +91,9 @@ inotify_init (void) __THROW
  * @return  -1 on failure, a file descriptor on success.
  **/
 int
-inotify_init1 (int flags) __THROW
+inotify_init1 (int flags)
 {
+    struct worker *wrk, *iter;
     int lfd = -1;
 
 #ifdef O_CLOEXEC
@@ -99,34 +105,18 @@ inotify_init1 (int flags) __THROW
         return -1;
     }
 
-    WORKERSET_WLOCK ();
-
-    if (!initialized) {
-        workers_init();
-    }
-
-    int i;
-    for (i = 0; i < WORKER_SZ; i++) {
-        if (workers[i] == WRK_FREE) {
-            workers[i] = WRK_RESV;
-            break;
-        }
-    }
-
-    WORKERSET_UNLOCK ();
-
-    if (i == WORKER_SZ) {
+    if (atomic_fetch_add (&nworkers, 1) >= max_workers) {
         errno = EMFILE;
+        atomic_fetch_sub (&nworkers, 1);
         return -1;
     }
 
-    worker *wrk = worker_create (flags);
+    wrk = worker_create (flags);
     if (wrk == NULL) {
-        workers[i] = WRK_FREE;
+        atomic_fetch_sub (&nworkers, 1);
         return -1;
     }
 
-    workers[i] = wrk;
     lfd = wrk->io[INOTIFY_FD];
 
     /* We can face into situation when there are two workers with the same
@@ -134,15 +124,17 @@ inotify_init1 (int flags) __THROW
      * the worker has not been removed from a list yet. The fd is free, and
      * when we create a new worker, we can * receive the same fd. So check
      * for duplicates and remove them now. */
-    int j;
-    for (j = 0; j < WORKER_SZ; j++) {
-        worker *jw = workers[j];
-        if (jw != WRK_FREE && jw != WRK_RESV && jw->io[INOTIFY_FD] == lfd &&
-            jw != wrk) {
-            workers[j] = WRK_FREE;
-            perror_msg ("Collision found: fd %d", lfd);
+    workerset_wlock ();
+    SLIST_FOREACH (iter, &workers, next) {
+        if (iter->io[INOTIFY_FD] == lfd) {
+            iter->io[INOTIFY_FD] = -1;
+            perror_msg (("Collision found: fd %d", lfd));
+            break;
         }
     }
+
+    SLIST_INSERT_HEAD (&workers, wrk, next);
+    workerset_unlock ();
 
     return lfd;
 }
@@ -162,10 +154,10 @@ inotify_init1 (int flags) __THROW
 int
 inotify_add_watch (int         fd,
                    const char *name,
-                   uint32_t    mask) __THROW
+                   uint32_t    mask)
 {
     struct stat st;
-    worker_cmd cmd;
+    struct worker_cmd cmd;
 
     if (!is_opened (fd)) {
         return -1;	/* errno = EBADF */
@@ -177,13 +169,13 @@ inotify_add_watch (int         fd,
      * of the process's accessible address space
      */
     if (lstat (name, &st) == -1) {
-        perror_msg("failed to lstat watch %s",
-                   errno != EFAULT ? name : "<bad addr>");
+        perror_msg (("failed to lstat watch %s",
+                     errno != EFAULT ? name : "<bad addr>"));
         return -1;
     }
 
     if (mask == 0) {
-        perror_msg ("Failed to open watch %s. Bad event mask %x", name, mask);
+        perror_msg (("Failed to open watch %s. Bad event mask %x", name, mask));
         errno = EINVAL;
         return -1;
     }
@@ -205,9 +197,14 @@ inotify_add_watch (int         fd,
  **/
 int
 inotify_rm_watch (int fd,
-                  int wd) __THROW
+                  int wd)
 {
-    worker_cmd cmd;
+    struct worker_cmd cmd;
+
+    if (wd < 0) {
+        errno = EINVAL;
+        return -1;
+    }
 
     if (!is_opened (fd)) {
         return -1;	/* errno = EBADF */
@@ -226,39 +223,52 @@ inotify_rm_watch (int fd,
  * @return 0 on success, -1 on failure.
  **/
 int
-inotify_set_param (int fd, int param, intptr_t value)
+libinotify_set_param (int fd, int param, intptr_t value)
 {
-    worker_cmd cmd;
+    struct worker_cmd cmd;
 
-    if (!is_opened (fd)) {
-        return -1;	/* errno = EBADF */
+    /* Apply global parameter right here */
+    switch (param) {
+    case IN_MAX_USER_INSTANCES:
+        if (value < 0 || value > INT_MAX - 1 || fd != -1) {
+            errno = EINVAL;
+            return -1;
+        }
+        max_workers = value;
+        return 0;
+
+    case IN_SOCKBUFSIZE:
+    case IN_MAX_QUEUED_EVENTS:
+        /* Or pass per-instance parameters to workers */
+        if (!is_opened (fd)) {
+            return -1;	/* errno = EBADF */
+        }
+        worker_cmd_param (&cmd, param, value);
+        return worker_exec (fd, &cmd);
+
+    default:
+        errno = EINVAL;
     }
 
-    worker_cmd_param (&cmd, param, value);
-    return worker_exec (fd, &cmd);
+    return -1;
 }
 
 /**
  * Erase a worker from a list of workers.
  * 
- * This function does not lock the global array of workers (I assume that
- * marking its items as volatile should be enough). Also this function is
- * intended to be called from the worker threads only.
- * 
  * @param[in] wrk A pointer to a worker
  **/
 void
-worker_erase (worker *wrk)
+worker_erase (struct worker *wrk)
 {
     assert (wrk != NULL);
 
-    int i;
-    for (i = 0; i < WORKER_SZ; i++) {
-        if (workers[i] == wrk) {
-            workers[i] = WRK_FREE;
-            break;
-        }
-    }
+    workerset_wlock ();
+    SLIST_REMOVE (&workers, wrk, worker, next);
+    wrk->io[INOTIFY_FD] = -1;
+    assert (atomic_load (&nworkers) > 0);
+    atomic_fetch_sub (&nworkers, 1);
+    workerset_unlock ();
 }
 
 /**
@@ -269,52 +279,37 @@ worker_erase (worker *wrk)
  * @return 0 on success, -1 on failure with errno set.
  **/
 static int
-worker_exec (int fd, worker_cmd *cmd)
+worker_exec (int fd, struct worker_cmd *cmd)
 {
-    if (!initialized) {
-        errno = EINVAL;
-        return -1;
-    }
+    struct worker *wrk;
 
-    WORKERSET_RLOCK ();
+    workerset_rlock ();
 
     /* look up for an appropriate worker */
-    int i;
-    for (i = 0; i < WORKER_SZ; i++) {
-        worker *wrk = workers[i];
-        if (wrk != WRK_FREE && wrk != WRK_RESV && wrk->io[INOTIFY_FD] == fd) {
-            WORKER_LOCK (wrk);
-            if (wrk != workers[i]) {
-                /* RACE: worker thread overwrote worker pointer in between
+    SLIST_FOREACH (wrk, &workers, next) {
+        if (wrk->io[INOTIFY_FD] == fd) {
+            worker_ref (wrk);
+            workerset_unlock ();
+            worker_cmd_lock (wrk);
+            if (wrk->io[INOTIFY_FD] != fd) {
+                /* RACE: worker thread overwrote inotify descriptor in between
                    obtaining pointer on wrk and locking its mutex. */
-                perror_msg ("race detected. fd: %d", fd);
-                WORKER_UNLOCK (wrk);
-                WORKERSET_UNLOCK ();
+                perror_msg (("race detected. fd: %d", fd));
+                worker_cmd_unlock (wrk);
+                worker_unref (wrk);
                 errno = EBADF;
                 return -1;
             }
 
             cmd->retval = -1;
             cmd->error = EBADF;
-#ifdef EVFILT_USER
-            struct kevent ke;
-            /* Pass cmd in data field as DragonflyBSD does not copy udata */
-            EV_SET (&ke,
-                    wrk->io[KQUEUE_FD],
-                    EVFILT_USER,
-                    0,
-                    NOTE_TRIGGER,
-                    (intptr_t)cmd,
-                    0);
-            if (kevent (wrk->kq, &ke, 1, NULL, 0, NULL) != -1) {
-#else
-            if (safe_write (wrk->io[INOTIFY_FD], &cmd, sizeof (cmd)) != -1) {
-#endif
+
+            if (worker_notify (wrk, cmd) >= 0) {
                 worker_wait (wrk);
             }
 
-            WORKER_UNLOCK (wrk);
-            WORKERSET_UNLOCK ();
+            worker_cmd_unlock (wrk);
+            worker_unref (wrk);
             if (cmd->retval == -1) {
                 errno = cmd->error;
             }
@@ -322,20 +317,7 @@ worker_exec (int fd, worker_cmd *cmd)
         }
     }
 
-    WORKERSET_UNLOCK ();
+    workerset_unlock ();
     errno = EINVAL;
     return -1;
-}
-
-/**
- * Initialize inotify at first first use. Should be run via pthread_once
- **/
-static void
-workers_init (void)
-{
-    int i;
-    for (i = 0; i < WORKER_SZ; i++) {
-        workers[i] = WRK_FREE;
-    }
-    initialized = 1;
 }

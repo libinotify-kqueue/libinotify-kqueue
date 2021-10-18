@@ -29,21 +29,41 @@
 
 #include <sys/param.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
-#ifdef BUILD_LIBRARY
-#include <sys/queue.h>
-#endif
-
-#ifdef HAVE_SYS_TREE_H
-#include <sys/tree.h>  /* RB tree macroses */
-#else
+/* Always use bunled RB tree macroses */
 #include "compat/tree.h"
+
+#if defined (HAVE_STATFS)
+#include <sys/mount.h> /* fstatfs */
+#define STATFS statfs
+#define FSTATFS(fd, buf) fstatfs((fd), (buf))
+#elif defined (HAVE_STATVFS)
+#include <sys/statvfs.h> /* fstatvfs */
+#define STATFS statvfs
+#define FSTATFS(fd, buf) fstatvfs((fd), (buf))
 #endif
 
 #ifdef HAVE_STDINT_H
 #include <stdint.h>
 #else
 #include <inttypes.h>
+#endif
+
+#if HAVE_STDBOOL_H
+# include <stdbool.h>
+#else
+# ifndef HAVE__BOOL
+#  ifdef __cplusplus
+typedef bool _Bool;
+#  else
+typedef int _Bool;
+#  endif
+# endif
+# define bool _Bool
+# define false 0
+# define true 1
+# define __bool_true_false_are_defined 1
 #endif
 
 #ifndef __cplusplus /* requires stdbool.h */
@@ -56,47 +76,11 @@
 #endif
 #endif
 
-#include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
-
-/*
- * Minimal pthread condition variable-based POSIX semaphore shim.
- * Used as neither Darwin nor valgrind supports POSIX semafores.
- */
-typedef struct {
-    int val;
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
-} ik_sem_t;
-#define ik_sem_init(sem, pshared, value) ({ \
-    pthread_mutex_init(&(sem)->mutex, NULL); \
-    pthread_cond_init(&(sem)->cond, NULL); \
-    (sem)->val = value; \
-    0; \
-})
-#define ik_sem_wait(sem) ({ \
-    pthread_mutex_lock(&(sem)->mutex); \
-    while ((sem)->val == 0) { \
-        pthread_cond_wait(&(sem)->cond, &(sem)->mutex); \
-    } \
-    --(sem)->val; \
-    pthread_mutex_unlock(&(sem)->mutex); \
-    0; \
-})
-#define ik_sem_post(sem) ({ \
-    pthread_mutex_lock(&(sem)->mutex); \
-    ++(sem)->val; \
-    pthread_cond_broadcast(&(sem)->cond); \
-    pthread_mutex_unlock(&(sem)->mutex); \
-    0; \
-})
-#define ik_sem_destroy(sem) ({ \
-    pthread_cond_destroy(&(sem)->cond); \
-    pthread_mutex_destroy(&(sem)->mutex); \
-})
+#include <stdio.h>
 
 #ifndef DTTOIF
 #define DTTOIF(dirtype) ((dirtype) << 12)
@@ -110,9 +94,14 @@ typedef struct {
 #define nitems(x) (sizeof((x)) / sizeof((x)[0]))
 #endif
 
+/* Under linuxolator we should take IOV_MAX from the host system. */
+#if defined(__linux__) && defined (IOV_MAX)
+#undef IOV_MAX
+#endif
+
 /* FreeBSD 4.x doesn't have IOV_MAX exposed. */
 #ifndef IOV_MAX
-#if defined(__FreeBSD__) || defined(__APPLE__)
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__linux__)
 #define IOV_MAX 1024
 #endif
 #endif
@@ -157,6 +146,9 @@ int openat (int fd, const char *path, int flags, ...);
 #endif
 #ifndef HAVE_FDOPENDIR
 DIR *fdopendir (int fd);
+#endif
+#ifndef HAVE_FDCLOSEDIR
+int fdclosedir (DIR *dir);
 #endif
 #ifndef HAVE_FSTATAT
 int fstatat (int fd, const char *path, struct stat *buf, int flag);

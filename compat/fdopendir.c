@@ -22,18 +22,49 @@
 *******************************************************************************/
 
 #include <sys/types.h>
+#include <sys/stat.h>
+
 #include <assert.h> /* assert */
+#include <errno.h>  /* errno */
 #include <dirent.h> /* opendir */
 #include <fcntl.h>  /* fcntl */
+#include <string.h> /* memset */
 #include <unistd.h> /* close */
 
 #include "compat.h"
+#include "config.h"
 
 DIR *
 fdopendir (int fd)
 {
     DIR *dir;
     char *dirpath = fd_getpath_cached (fd);
+#if ! defined (F_GETPATH) && ! defined (ENABLE_UNSAFE_FCHDIR) && defined STATFS
+    if (dirpath == NULL) {
+        /*
+         * Start with opendir of mount point of filesystem where referenced
+         * directory lies to enable support for strange filesystems like nfs or
+         * unionfs. After that internal dir descriptor will be replaced with
+         * one passed by caller so readdir() calls will return proper data.
+         */
+        struct STATFS stfs;
+        struct stat st;
+
+        memset (&st, 0, sizeof (st));
+        if (fstat (fd, &st) == -1) {
+            return NULL;
+        }
+        if (!S_ISDIR (st.st_mode)) {
+            errno = ENOTDIR;
+            return NULL;
+        }
+
+        memset (&stfs, 0, sizeof (stfs));
+        if (FSTATFS (fd, &stfs) != -1) {
+            dirpath = stfs.f_mntonname;
+        }
+    }
+#endif
     if (dirpath == NULL) {
         return NULL;
     }
@@ -58,6 +89,21 @@ fdopendir (int fd)
         *(int *)dir = fd;
 #endif
         close (oldfd);
+#if ! defined (F_GETPATH) && ! defined (ENABLE_UNSAFE_FCHDIR) && defined STATFS
+        /* Discard data that could have been prefetched from the mount point */
+        {
+            int pos = lseek (fd, 0, SEEK_CUR);
+            if (pos == -1) {
+                closedir (dir);
+                return NULL;
+            }
+            rewinddir (dir);
+            if (lseek (fd, pos, SEEK_SET) == -1) {
+                closedir (dir);
+                return NULL;
+            }
+        }
+#endif
     }
 
     return dir;

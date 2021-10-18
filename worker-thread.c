@@ -22,7 +22,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include "compat.h"
+#include <sys/types.h>
+#include <sys/event.h>
 
 #include <stddef.h> /* NULL */
 #include <assert.h>
@@ -30,21 +31,22 @@
 #include <stdlib.h> /* calloc, realloc */
 #include <string.h> /* memset */
 #include <stdio.h>
-
-#include <sys/types.h>
-#include <sys/event.h>
+#include <unistd.h>
 
 #include "sys/inotify.h"
 
+#include "compat.h"
 #include "config.h"
-#include "utils.h"
+#include "dep-list.h"
 #include "inotify-watch.h"
+#include "utils.h"
 #include "watch.h"
 #include "worker.h"
-#include "worker-thread.h"
 
-void worker_erase (worker *wrk);
-static void handle_moved (void *udata, dep_item *from_di, dep_item *to_di);
+void worker_erase (struct worker *wrk);
+static void handle_moved (void *udata,
+                          struct dep_item *from_di,
+                          struct dep_item *to_di);
 
 /**
  * Create a new inotify event and place it to event queue.
@@ -55,11 +57,13 @@ static void handle_moved (void *udata, dep_item *from_di, dep_item *to_di);
  * @return 0 on success, -1 otherwise.
  **/
 static int
-enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
+enqueue_event (struct i_watch *iw, uint32_t mask, const struct dep_item *di)
 {
+    const char *name = NULL;
+    uint32_t cookie = 0;
+
     assert (iw != NULL);
-    worker *wrk = iw->wrk;
-    assert (wrk != NULL);
+    assert (iw->wrk != NULL);
 
     /*
      * Only IN_ALL_EVENTS, IN_UNMOUNT and IN_ISDIR events are allowed to be
@@ -73,12 +77,10 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
     }
 
     if (iw->flags & IN_ONESHOT) {
-        iw->is_closed = 1;
+        iw->is_closed = true;
     }
 
-    const char *name = NULL;
-    uint32_t cookie = 0;
-    if (di != NULL) {
+    if (di != DI_PARENT) {
         name = di->path;
         if (mask & IN_MOVE) {
             cookie = di->inode & 0x00000000FFFFFFFF;
@@ -88,8 +90,8 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
         }
     }
 
-    if (event_queue_enqueue (&wrk->eq, iw->wd, mask, cookie, name) == -1) {
-        perror_msg ("Failed to enqueue a inotify event %x", mask);
+    if (event_queue_enqueue (&iw->wrk->eq, iw->wd, mask, cookie, name) == -1) {
+        perror_msg (("Failed to enqueue a inotify event %x", mask));
         return -1;
     }
 
@@ -103,28 +105,30 @@ enqueue_event (i_watch *iw, uint32_t mask, const dep_item *di)
  * @param[in] cmd A pointer to #worker_cmd.
  **/
 void
-process_command (worker *wrk, worker_cmd *cmd)
+process_command (struct worker *wrk, struct worker_cmd *cmd)
 {
     assert (wrk != NULL);
 
     switch (cmd->type) {
     case WCMD_ADD:
         cmd->retval = worker_add_or_modify (wrk,
-                                            cmd->add.filename,
-                                            cmd->add.mask);
+                                            cmd->cmd.add.filename,
+                                            cmd->cmd.add.mask);
         cmd->error = errno;
         break;
     case WCMD_REMOVE:
-        cmd->retval = worker_remove (wrk, cmd->rm_id);
+        cmd->retval = worker_remove (wrk, cmd->cmd.rm_id);
         cmd->error = errno;
+        break;
     case WCMD_PARAM:
         cmd->retval = worker_set_param (wrk,
-                                        cmd->param.param,
-                                        cmd->param.value);
+                                        cmd->cmd.param.param,
+                                        cmd->cmd.param.value);
         cmd->error = errno;
+        break;
     default:
-        perror_msg ("Worker processing a command without a command - "
-                    "something went wrong.");
+        perror_msg (("Worker processing a command without a command - "
+                    "something went wrong."));
         cmd->retval = -1;
         cmd->error = EINVAL;
     }
@@ -137,10 +141,10 @@ process_command (worker *wrk, worker_cmd *cmd)
  * It is passed to dl_calculate as user data and then is used in all
  * the callbacks.
  **/
-typedef struct {
-    i_watch *iw;
+struct handle_context {
+    struct i_watch *iw;
     uint32_t fflags;
-} handle_context;
+};
 
 /**
  * Produce an IN_CREATE notification for a new file and start wathing on it.
@@ -152,11 +156,11 @@ typedef struct {
  * @param[in] di     File name & inode number of a new file.
  **/
 static void
-handle_added (void *udata, dep_item *di)
+handle_added (void *udata, struct dep_item *di)
 {
-    assert (udata != NULL);
+    struct handle_context *ctx = (struct handle_context *) udata;
 
-    handle_context *ctx = (handle_context *) udata;
+    assert (ctx != NULL);
     assert (ctx->iw != NULL);
 
     iwatch_add_subwatch (ctx->iw, di);
@@ -178,11 +182,11 @@ handle_added (void *udata, dep_item *di)
  * @param[in] di     File name & inode number of the removed file.
  **/
 static void
-handle_removed (void *udata, dep_item *di)
+handle_removed (void *udata, struct dep_item *di)
 {
-    assert (udata != NULL);
+    struct handle_context *ctx = (struct handle_context *) udata;
 
-    handle_context *ctx = (handle_context *) udata;
+    assert (ctx != NULL);
     assert (ctx->iw != NULL);
 
 #ifdef HAVE_NOTE_EXTEND_ON_MOVE_FROM
@@ -206,11 +210,11 @@ handle_removed (void *udata, dep_item *di)
  * @param[in] di    A file name & inode number of the replaced file.
  **/
 static void
-handle_replaced (void *udata, dep_item *di)
+handle_replaced (void *udata, struct dep_item *di)
 {
-    assert (udata != NULL);
+    struct handle_context *ctx = (struct handle_context *) udata;
 
-    handle_context *ctx = (handle_context *) udata;
+    assert (ctx != NULL);
     assert (ctx->iw != NULL);
 
     iwatch_del_subwatch (ctx->iw, di);
@@ -227,11 +231,11 @@ handle_replaced (void *udata, dep_item *di)
  * @param[in] to_di   A new name & inode number of the file.
  **/
 static void
-handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
+handle_moved (void *udata, struct dep_item *from_di, struct dep_item *to_di)
 {
-    assert (udata != NULL);
+    struct handle_context *ctx = (struct handle_context *) udata;
 
-    handle_context *ctx = (handle_context *) udata;
+    assert (ctx != NULL);
     assert (ctx->iw != NULL);
 
     if (S_ISUNK (to_di->type)) {
@@ -240,10 +244,11 @@ handle_moved (void *udata, dep_item *from_di, dep_item *to_di)
 
     enqueue_event (ctx->iw, IN_MOVED_FROM, from_di);
     enqueue_event (ctx->iw, IN_MOVED_TO, to_di);
+    iwatch_move_subwatch (ctx->iw, from_di, to_di);
 }
 
 
-static const traverse_cbs cbs = {
+static const struct traverse_cbs cbs = {
     handle_added,
     handle_removed,
     handle_replaced,
@@ -260,43 +265,20 @@ static const traverse_cbs cbs = {
  * @param[in] event A pointer to the received kqueue event.
  **/
 void
-produce_directory_diff (i_watch *iw, struct kevent *event)
+produce_directory_diff (struct i_watch *iw, struct kevent *event)
 {
+    struct handle_context ctx;
+    struct chg_list *changes;
+
     assert (iw != NULL);
     assert (event != NULL);
 
-    DIR *dir;
-    chg_list *changes = NULL;
-
-#if READDIR_DOES_OPENDIR > 0
-    dir = fdreopendir (iw->fd);
-    if (dir == NULL) {
-        if (errno == ENOENT) {
-            /* Why do I skip ENOENT? Because the directory could be deleted
-             * at this point */
-            goto do_diff;
-        }
-        perror_msg ("Failed to reopen directory for listing");
-        return;
-    }
-#else
-    dir = iw->dir;
-    rewinddir(dir);
-#endif
-
-    changes = dl_readdir (dir, &iw->deps);
-
-#if READDIR_DOES_OPENDIR > 0
-    closedir (dir);
-
-do_diff:
-#endif
+    changes = dl_listing (iw->fd, &iw->deps);
     if (changes == NULL) {
-        perror_msg ("Failed to create a listing for watch %d", iw->wd);
+        perror_msg (("Failed to create a listing for watch %d", iw->wd));
         return;
     }
 
-    handle_context ctx;
     memset (&ctx, 0, sizeof (ctx));
     ctx.iw = iw;
     ctx.fflags = event->fflags;
@@ -311,7 +293,7 @@ do_diff:
  * @param[in] event A pointer to the associated received kqueue event.
  **/
 void
-produce_notifications (worker *wrk, struct kevent *event)
+produce_notifications (struct worker *wrk, struct kevent *event)
 {
     /* Heuristic order of dearrgegated inotify events */
     static uint32_t ie_order[] = {
@@ -334,95 +316,108 @@ produce_notifications (worker *wrk, struct kevent *event)
         IN_UNMOUNT
     };
 
+    struct watch *w;
+    struct watch_dep *wd, *wd2;
+    uint32_t i_flags_par, i_flags_chl;
+    uint32_t flags;
+    bool deleted = false;
+    bool reiterate;
+    mode_t mode;
+    size_t i;
+
     assert (wrk != NULL);
     assert (event != NULL);
 
-    watch *w = (watch *)event->udata;
+    w = (struct watch *)event->udata;
     assert (w != NULL);
     assert (w->fd == event->ident);
+    assert (!watch_deps_empty (w));
 
-    i_watch *iw = w->iw;
-    assert (watch_set_find (&iw->watches, w->inode) == w);
+    flags = event->fflags;
+    mode = watch_get_mode (w);
 
-    uint32_t flags = event->fflags;
+    /* Set deleted flag if no more links exist */
+    if (flags & NOTE_DELETE && (!S_ISREG (mode) || is_deleted (w->fd))) {
+        deleted = true;
+    }
 
-    if (!(w->flags & WF_ISSUBWATCH)) {
-        /* Set deleted flag if no more links exist */
-        if (flags & NOTE_DELETE &&
-            (!S_ISREG (w->flags) || is_deleted (w->fd))) {
-                w->flags |= WF_DELETED;
-        }
-
-#if (READDIR_DOES_OPENDIR == 2) && \
-    defined (NOTE_OPEN) && defined (NOTE_CLOSE)
-        /* Mask events produced by open/closedir calls while directory diffing.
-         * Kqueue coalesces both events as kevent is not called that time */
-        if (w->flags & WF_SKIP_NEXT) {
-            flags &= ~(NOTE_OPEN | NOTE_CLOSE);
-        }
+    /* Mask events produced by opendir, readdir and closedir calls while
+     * directory diffing. Kqueue always aggregates all 3 events into single
+     * event as working thread is not calling kevent() that time. */
+    if (w->skip_next) {
+#if defined (NOTE_OPEN) && (READDIR_DOES_OPENDIR == 2)
+        flags &= ~NOTE_OPEN;
 #endif
-#ifdef NOTE_READ
-        /* Mask event produced by readdir call while directory diffing. */
-        if (w->flags & WF_SKIP_NEXT) {
-            flags &= ~NOTE_READ;
-        }
+#if defined (NOTE_READ)
+        flags &= ~NOTE_READ;
 #endif
-        if (S_ISDIR (w->flags)) {
-            w->flags &= ~WF_SKIP_NEXT;
-        }
+#if defined (NOTE_CLOSE) && (READDIR_DOES_OPENDIR == 2)
+        flags &= ~NOTE_CLOSE;
+#endif
+        w->skip_next = false;
+    }
 
-        uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
+    i_flags_par = kqueue_to_inotify (flags, mode, true, deleted);
+    i_flags_chl = kqueue_to_inotify (flags, mode, false, deleted);
 
-        size_t i;
-        /* Deaggregate inotify events (most of) */
-        for (i = 0; i < nitems (ie_order); i++) {
-            if (i_flags & ie_order[i]) {
-                /* Report deaggregated items */
-                enqueue_event (iw,
-                               ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
-                               NULL);
-            } else
-            /* Report subfiles(dependency) list changes */
-            if (ie_order[i] == IN_MODIFY &&
-                flags & NOTE_WRITE && S_ISDIR (w->flags)) {
+    /* Deaggregate inotify events  */
+    for (i = 0; i < nitems (ie_order); i++) {
+
+        WD_FOREACH (wd, w) {
+
+            struct i_watch *iw = wd->iw;
+            bool is_parent = watch_dep_is_parent (wd);
+            uint32_t i_flags = is_parent ? i_flags_par : i_flags_chl;
+
+            assert (watch_set_find (&wrk->watches, watch_get_dev (w), watch_get_inode (w)) == w);
+            assert ((mode & S_IFMT) == (watch_dep_get_mode (wd) & S_IFMT));
+            assert (watch_get_inode (w) == watch_dep_get_inode (wd));
+            assert (is_parent || wd->di == dl_find (&iw->deps, wd->di->path));
+
+            if (is_parent && ie_order[i] == IN_MODIFY &&
+                flags & NOTE_WRITE && S_ISDIR (iw->mode)) {
 #ifdef __OpenBSD__
                 /* OpenBSD notifies user with kevent about file moved in/out
                  * watched directory slightly BEFORE change hits directory
                  * content. Workaround it with adding a small delay. */
-                struct timespec timeout = { 0, 5 };
-                nanosleep (&timeout, NULL);
+                {
+                    struct timespec timeout = { 0, 5 };
+                    nanosleep (&timeout, NULL);
+                }
 #endif
                 produce_directory_diff (iw, event);
-                w->flags |= WF_SKIP_NEXT;
+                w->skip_next = true;
+
+            } else if (i_flags & ie_order[i]) {
+
+                /* Report deaggregated items */
+                enqueue_event (iw,
+                               ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
+                               wd->di);
             }
         }
+    }
 
-        if (w->flags & WF_DELETED || flags & NOTE_REVOKE) {
-            iw->is_closed = 1;
-        }
-    } else {
-        uint32_t i_flags = kqueue_to_inotify (flags, w->flags);
-
-        size_t i;
-        /* Deaggregate inotify events */
-        for (i = 0; i < nitems (ie_order); i++) {
-            if (i_flags & ie_order[i]) {
-                dep_item *iter = NULL;
-                /* Report deaggregated items */
-                DL_FOREACH (iter, &iw->deps) {
-                    if (iter->inode == w->inode) {
-                        enqueue_event (iw,
-                                       ie_order[i] | (i_flags & ~IN_ALL_EVENTS),
-                                       iter);
+   /* worker_remove can free watch deps and watch itself on return so we should
+    * reiterate after worker_remove or break loop if watch is associated with
+    * only one inotify watch to avoid use after free */
+    do {
+        reiterate = false;
+        WD_FOREACH (wd, w) {
+            if (wd->iw->is_closed || (watch_dep_is_parent (wd) &&
+                (deleted || flags & NOTE_REVOKE))) {
+                /* Check are 2 or more #i_watch associated with #watch */
+                WD_FOREACH (wd2, w) {
+                    if (wd->iw != wd2->iw) {
+                        reiterate = true;
+                        break;
                     }
                 }
+                worker_remove_iwatch (wrk, wd->iw);
+                break;
             }
         }
-    }
-
-    if (iw->is_closed) {
-        worker_remove (wrk, iw->wd);
-    }
+    } while (reiterate);
 }
 
 /**
@@ -434,48 +429,63 @@ produce_notifications (worker *wrk, struct kevent *event)
 void*
 worker_thread (void *arg)
 {
-    assert (arg != NULL);
-    worker* wrk = (worker *) arg;
-    worker_cmd *cmd;
-    size_t i, sbspace = 0;
+    struct worker* wrk = (struct worker *) arg;
+    struct worker_cmd *cmd;
+#define SBEMPTY SIZE_MAX
+    size_t sbspace = SBEMPTY;
 #define MAXEVENTS 1
     struct kevent received[MAXEVENTS];
 
+    assert (wrk != NULL);
+
     for (;;) {
-        if (sbspace > 0 && wrk->eq.count > 0) {
-            event_queue_flush (&wrk->eq, sbspace);
-            sbspace = 0;
+        size_t i;
+        int nevents;
+
+        if (sbspace > 0 && wrk->eq.mem_events > 0) {
+            ssize_t sent;
+            if (sbspace == SBEMPTY) {
+                /* Try to track sockbufsize changes on the fly */
+                sbspace = wrk->sockbufsize;
+            }
+            sent = event_queue_flush (&wrk->eq, sbspace);
+            if (sent < 0) {
+                if (errno == EPIPE || errno == EBADF || errno == ENOTSOCK) {
+                    goto die;
+                } else {
+                    sent = 0; /* Ignore nonfatal errors */
+                }
+            }
+            sbspace = wrk->eq.mem_events == 0 ? sbspace - sent : 0;
         }
 
-        int nevents = kevent (wrk->kq, NULL, 0, received, MAXEVENTS, NULL);
+        nevents = kevent (wrk->kq, NULL, 0, received, MAXEVENTS, NULL);
         if (nevents == -1) {
-            perror_msg ("kevent failed");
+            perror_msg (("kevent failed"));
             continue;
         }
         for (i = 0; i < nevents; i++) {
             if (received[i].ident == wrk->io[KQUEUE_FD]) {
                 if (received[i].flags & EV_EOF) {
-                    wrk->io[INOTIFY_FD] = -1;
-                    worker_erase (wrk);
-                    /* Notify user threads waiting for cmd of grim news */
-                    worker_post (wrk);
-                    worker_free (wrk);
-                    return NULL;
-
+                    goto die;
+#ifdef EVFILT_EMPTY
+                } else if (received[i].filter == EVFILT_EMPTY) {
+#else
                 } else if (received[i].filter == EVFILT_WRITE) {
-                    sbspace = received[i].data;
-                    if (sbspace >= wrk->sockbufsize) {
-                        /* Tell event queue about empty communication pipe */
-                        event_queue_reset_last(&wrk->eq);
-                    }
+                    assert (received[i].data >= wrk->sockbufsize);
+#endif
+                    sbspace = SBEMPTY;
+                    /* Tell event queue about empty communication pipe */
+                    event_queue_reset_last (&wrk->eq);
 #ifdef EVFILT_USER
                 } else if (received[i].filter == EVFILT_USER) {
-                    cmd = (worker_cmd *)(intptr_t)received[i].data;
+                    cmd = (struct worker_cmd *)(intptr_t)received[i].data;
                     process_command (wrk, cmd);
 #else
                 } else if (received[i].filter == EVFILT_READ) {
-                    safe_read (wrk->io[KQUEUE_FD], &cmd, sizeof (cmd));
-                    process_command (wrk, cmd);
+                    if (read (wrk->io[KQUEUE_FD], &cmd, sizeof (cmd)) != -1) {
+                        process_command (wrk, cmd);
+                    }
 #endif
                 }
             } else {
@@ -483,5 +493,10 @@ worker_thread (void *arg)
             }
         }
     }
+die:
+    worker_erase (wrk);
+    /* Notify user threads waiting for cmd of grim news */
+    worker_post (wrk);
+    worker_free (wrk);
     return NULL;
 }

@@ -39,6 +39,7 @@ void handle_error (int error);
 int main (int argc, char *argv[])
 {
     char target[FILENAME_MAX];
+    int ev_count = 0;
     int fd;
     int wd;   /* watch descriptor */
 
@@ -70,8 +71,6 @@ int main (int argc, char *argv[])
         return 1;
     }
 
-    int ev_count = 0;
-
     while (1) {
         /* if (ev_count == 3) { */
         /*     printf("stopping watch\n"); */
@@ -86,8 +85,7 @@ int main (int argc, char *argv[])
 }
 
 /* ----------------------------------------------------------------- */
-/* Allow for 1024 simultanious events */
-#define BUFF_SIZE ((sizeof(struct inotify_event)+FILENAME_MAX)*1024)
+#define BUFF_SIZE (16*1024)
 
 void get_event (int fd, const char * target)
 {

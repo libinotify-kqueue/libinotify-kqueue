@@ -22,23 +22,26 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include "compat.h"
-
-#include <errno.h>  /* errno */
-#include <fcntl.h>  /* open */
-#include <unistd.h> /* close */
-#include <string.h> /* strdup */
-#include <stdlib.h> /* free */
-#include <assert.h>
+#include "config.h"
 
 #include <sys/types.h>
 #include <sys/event.h> /* kevent */
 #include <sys/stat.h> /* stat */
-#include <stdio.h>    /* snprintf */
 
+#include <assert.h>
+#include <errno.h>  /* errno */
+#include <fcntl.h>  /* open */
+#include <stdio.h>  /* snprintf */
+#include <stdlib.h> /* free */
+#include <string.h> /* strdup */
+#include <unistd.h> /* close */
+
+#include "sys/inotify.h"
+
+#include "compat.h"
 #include "utils.h"
 #include "watch.h"
-#include "sys/inotify.h"
+#include "worker.h"
 
 /**
  * Convert the inotify watch mask to the kqueue event filter flags.
@@ -48,11 +51,11 @@
  * @return Converted kqueue event filter flags.
  **/
 uint32_t
-inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
+inotify_to_kqueue (uint32_t flags, mode_t mode, bool is_parent)
 {
     uint32_t result = 0;
 
-    if (!(S_ISREG (wf) || S_ISDIR (wf) || S_ISLNK (wf))) {
+    if (!(S_ISREG (mode) || S_ISDIR (mode) || S_ISLNK (mode))) {
         return result;
     }
 
@@ -65,26 +68,26 @@ inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
         result |= NOTE_CLOSE;
 #endif
 #ifdef NOTE_CLOSE_WRITE
-    if (flags & IN_CLOSE_WRITE && S_ISREG (wf))
+    if (flags & IN_CLOSE_WRITE && S_ISREG (mode))
         result |= NOTE_CLOSE_WRITE;
 #endif
 #ifdef NOTE_READ
-    if (flags & IN_ACCESS && (S_ISREG (wf) || S_ISDIR (wf)))
+    if (flags & IN_ACCESS && (S_ISREG (mode) || S_ISDIR (mode)))
         result |= NOTE_READ;
 #endif
     if (flags & IN_ATTRIB)
         result |= NOTE_ATTRIB;
-    if (flags & IN_MODIFY && S_ISREG (wf))
+    if (flags & IN_MODIFY && S_ISREG (mode))
         result |= NOTE_WRITE;
-    if (!(wf & WF_ISSUBWATCH)) {
-        if (S_ISDIR (wf)) {
+    if (is_parent) {
+        if (S_ISDIR (mode)) {
             result |= NOTE_WRITE;
 #if defined(HAVE_NOTE_EXTEND_ON_MOVE_TO) || \
     defined(HAVE_NOTE_EXTEND_ON_MOVE_FROM)
             result |= NOTE_EXTEND;
 #endif
         }
-        if (flags & IN_ATTRIB && S_ISREG (wf))
+        if (flags & IN_ATTRIB && S_ISREG (mode))
             result |= NOTE_LINK;
         if (flags & IN_MOVE_SELF)
             result |= NOTE_RENAME;
@@ -101,7 +104,10 @@ inotify_to_kqueue (uint32_t flags, watch_flags_t wf)
  * @return Converted inotify watch mask.
  **/
 uint32_t
-kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
+kqueue_to_inotify (uint32_t flags,
+                   mode_t mode,
+                   bool is_parent,
+                   bool is_deleted)
 {
     uint32_t result = 0;
 
@@ -118,32 +124,31 @@ kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
         result |= IN_CLOSE_WRITE;
 #endif
 #ifdef NOTE_READ
-    if (flags & NOTE_READ && (S_ISREG (wf) || S_ISDIR (wf)))
+    if (flags & NOTE_READ && (S_ISREG (mode) || S_ISDIR (mode)))
         result |= IN_ACCESS;
 #endif
 
     if (flags & NOTE_ATTRIB ||                /* attribute changes */
         (flags & (NOTE_LINK | NOTE_DELETE) && /* link number changes */
-         S_ISREG (wf) && !(wf & WF_ISSUBWATCH)))
+         S_ISREG (mode) && is_parent))
         result |= IN_ATTRIB;
 
-    if (flags & NOTE_WRITE && S_ISREG (wf))
+    if (flags & NOTE_WRITE && S_ISREG (mode))
         result |= IN_MODIFY;
 
     /* Do not issue IN_DELETE_SELF if links still exist */
-    if (flags & NOTE_DELETE && !(wf & WF_ISSUBWATCH) &&
-        (wf & WF_DELETED || !S_ISREG (wf)))
+    if (flags & NOTE_DELETE && is_parent && (is_deleted || !S_ISREG (mode)))
         result |= IN_DELETE_SELF;
 
-    if (flags & NOTE_RENAME && !(wf & WF_ISSUBWATCH))
+    if (flags & NOTE_RENAME && is_parent)
         result |= IN_MOVE_SELF;
 
-    if (flags & NOTE_REVOKE && !(wf & WF_ISSUBWATCH))
+    if (flags & NOTE_REVOKE && is_parent)
         result |= IN_UNMOUNT;
 
     /* IN_ISDIR flag for subwatches is set in the enqueue_event routine */
     if ((result & (IN_ATTRIB | IN_OPEN | IN_ACCESS | IN_CLOSE))
-        && S_ISDIR (wf) && !(wf & WF_ISSUBWATCH)) {
+        && S_ISDIR (mode) && is_parent) {
         result |= IN_ISDIR;
     }
 
@@ -162,17 +167,22 @@ kqueue_to_inotify (uint32_t flags, watch_flags_t wf)
  * Register vnode kqueue watch in kernel kqueue(2) subsystem
  *
  * @param[in] w      A pointer to a watch
+ * @param[in] kq     A kqueue descriptor
  * @param[in] fflags A filter flags in kqueue format
  * @return 1 on success, -1 on error and 0 if no events have been registered
  **/
 int
-watch_register_event (watch *w, uint32_t fflags)
+watch_register_event (struct watch *w, int kq, uint32_t fflags)
 {
+    struct kevent ev;
+    int result;
+
     assert (w != NULL);
-    int kq = w->iw->wrk->kq;
     assert (kq != -1);
 
-    struct kevent ev;
+    if (fflags == w->fflags) {
+        return 0;
+    }
 
     EV_SET (&ev,
             w->fd,
@@ -182,7 +192,45 @@ watch_register_event (watch *w, uint32_t fflags)
             0,
             PTR_TO_UDATA (w));
 
-    return kevent (kq, &ev, 1, NULL, 0, NULL);
+    result = kevent (kq, &ev, 1, NULL, 0, zero_tsp);
+
+    if (result != -1) {
+        w->fflags = fflags;
+    }
+
+    return result;
+}
+
+/**
+ * Calculates kqueue filter flags for a #watch with traversing depedencies.
+ * and register vnode kqueue watch in kernel kqueue(2) subsystem
+ *
+ * @param[in] w  A pointer to the #watch.
+ * @return 1 on success, -1 on error and 0 if no events have been registered
+ **/
+int
+watch_update_event (struct watch *w)
+{
+    int kq;
+    mode_t mode;
+    uint32_t fflags = 0;
+    struct watch_dep *wd;
+
+    assert (w != NULL);
+    assert (!watch_deps_empty (w));
+
+    kq = SLIST_FIRST(&w->deps)->iw->wrk->kq;
+    mode = watch_get_mode (w);
+
+    WD_FOREACH (wd, w) {
+        assert ((mode & S_IFMT) == (watch_dep_get_mode (wd) & S_IFMT));
+        fflags |= inotify_to_kqueue (wd->iw->flags,
+                                     mode,
+                                     watch_dep_is_parent (wd));
+    }
+    assert (fflags != 0);
+
+    return (watch_register_event (w, kq, fflags));
 }
 
 /**
@@ -196,13 +244,19 @@ watch_register_event (watch *w, uint32_t fflags)
 int
 watch_open (int dirfd, const char *path, uint32_t flags)
 {
+    int openflags = O_NONBLOCK;
+    int fd;
+
     assert (path != NULL);
 
-    int openflags = O_NONBLOCK;
+#if defined(HAVE_O_PATH) && READDIR_DOES_OPENDIR == 2
+    openflags |= O_PATH;
+#else
 #ifdef O_EVTONLY
     openflags |= O_EVTONLY;
 #else
     openflags |= O_RDONLY;
+#endif
 #endif
 #ifdef O_CLOEXEC
     openflags |= O_CLOEXEC;
@@ -220,7 +274,7 @@ watch_open (int dirfd, const char *path, uint32_t flags)
     }
 #endif
 
-    int fd = openat (dirfd, path, openflags);
+    fd = openat (dirfd, path, openflags);
     if (fd == -1) {
         return -1;
     }
@@ -229,7 +283,7 @@ watch_open (int dirfd, const char *path, uint32_t flags)
     if (flags & IN_ONLYDIR) {
         struct stat st;
         if (fstat (fd, &st) == -1) {
-            perror_msg ("Failed to fstat on watch open %s", path);
+            perror_msg (("Failed to fstat on watch open %s", path));
             close (fd);
             return -1;
         }
@@ -255,45 +309,26 @@ watch_open (int dirfd, const char *path, uint32_t flags)
 /**
  * Initialize a watch.
  *
- * @param[in] iw;        A backreference to parent #i_watch.
- * @param[in] watch_type The type of the watch.
- * @param[in] fd         A file descriptor of a watched entry.
- * @param[in] st         A stat structure of watch.
+ * @param[in] fd A file descriptor of a watched entry.
  * @return A pointer to a watch on success, NULL on failure.
  **/
-watch *
-watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
+struct watch *
+watch_init (int fd)
 {
-    assert (iw != NULL);
+    struct watch *w;
+
     assert (fd != -1);
 
-    watch_flags_t wf = watch_type != WATCH_USER ? WF_ISSUBWATCH : 0;
-    wf |= st->st_mode & S_IFMT;
-
-    uint32_t fflags = inotify_to_kqueue (iw->flags, wf);
-    /* Skip watches with empty kqueue filter flags */
-    if (fflags == 0) {
-        return NULL;
-    }
-
-    watch *w = calloc (1, sizeof (struct watch));
+    w = calloc (1, sizeof (struct watch));
     if (w == NULL) {
-        perror_msg ("Failed to allocate watch");
+        perror_msg (("Failed to allocate watch"));
         return NULL;
     }
 
-    w->iw = iw;
     w->fd = fd;
-    w->flags = wf;
-    w->refcount = 0;
-    /* Inode number obtained via fstat call cannot be used here as it
-     * differs from readdir`s one at mount points. */
-    w->inode = st->st_ino;
-
-    if (watch_register_event (w, fflags) == -1) {
-        free (w);
-        return NULL;
-    }
+    w->fflags = 0;
+    w->skip_next = false;
+    SLIST_INIT (&w->deps);
 
     return w;
 }
@@ -304,11 +339,154 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
  * @param[in] w A pointer to a watch.
  **/
 void
-watch_free (watch *w)
+watch_free (struct watch *w)
 {
     assert (w != NULL);
     if (w->fd != -1) {
         close (w->fd);
     }
+#ifdef WORKER_FAST_WATCHSET_DESTROY
+    while (!watch_deps_empty (w)) {
+        struct watch_dep *wd = SLIST_FIRST (&w->deps);
+        SLIST_REMOVE_HEAD (&w->deps, next);
+        free (wd);
+    }
+#else
+    assert (watch_deps_empty (w));
+#endif
     free (w);
+}
+
+
+/**
+ * Find a file dependency associated with a #watch.
+ *
+ * @param[in] w  A pointer to the #watch.
+ * @param[in] iw A pointer to a parent #i_watch.
+ * @param[in] di A pointer to name & inode number of the file.
+ * @return A pointer to a dependency record if found. NULL otherwise.
+ **/
+struct watch_dep *
+watch_find_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
+{
+    struct watch_dep *wd;
+
+    assert (w != NULL);
+    assert (iw != NULL);
+
+    WD_FOREACH (wd, w) {
+        if (wd->iw == iw && wd->di == di) {
+            return (wd);
+        }
+    }
+
+    return (NULL);
+}
+
+/**
+ * Associate a file dependency with a #watch.
+ *
+ * @param[in] w  A pointer to the #watch.
+ * @param[in] iw A pointer to a parent #i_watch.
+ * @param[in] di A name & inode number of the associated file.
+ * @return A pointer to a created dependency record. NULL on failure.
+ **/
+struct watch_dep *
+watch_add_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
+{
+    struct watch_dep *wd;
+
+    assert (w != NULL);
+    assert (iw != NULL);
+
+    wd = calloc (1, sizeof (struct watch_dep));
+    if (wd != NULL) {
+        uint32_t fflags;
+        wd->iw = iw;
+        wd->di = di;
+
+        fflags = inotify_to_kqueue (iw->flags,
+                                    watch_dep_get_mode (wd),
+                                    watch_dep_is_parent (wd));
+        /* It's too late to skip watches with empty kqueue filter flags here */
+        assert (fflags != 0);
+
+        fflags |= w->fflags;
+        if (watch_register_event (w, iw->wrk->kq, fflags) == -1) {
+#if defined(HAVE_O_PATH) && READDIR_DOES_OPENDIR == 2
+            /* Files opened with O_PATH skip access control at open, but kevent
+             * rejects unaccessible files with EBADF. Convert it to EACCES */
+            if (watch_dep_is_parent (wd) && errno == EBADF)
+#if defined(HAVE_FACCESSAT) && defined(HAVE_AT_EMPTY_PATH)
+                faccessat(w->fd, "", R_OK, AT_EACCESS | AT_EMPTY_PATH);
+#else
+                errno = EACCES;
+#endif
+#endif
+            free (wd);
+            return NULL;
+        }
+
+        SLIST_INSERT_HEAD (&w->deps, wd, next);
+    }
+    return (wd);
+}
+
+/**
+ * Disassociate file dependency from a #watch.
+ *
+ * @param[in] w  A pointer to the #watch.
+ * @param[in] iw A pointer to a parent #i_watch.
+ * @param[in] di A name & inode number of the disassociated file.
+ * @return A pointer to a diassociated dependency record. NULL if not found.
+ **/
+struct watch_dep *
+watch_del_dep (struct watch *w, struct i_watch *iw, const struct dep_item *di)
+{
+    struct watch_dep *wd;
+
+    assert (w != NULL);
+    assert (iw != NULL);
+
+    wd = watch_find_dep (w, iw, di);
+    if (wd != NULL) {
+        SLIST_REMOVE (&w->deps, wd, watch_dep, next);
+        free (wd);
+        if (watch_deps_empty (w)) {
+            watch_set_delete (&iw->wrk->watches, w);
+        } else {
+            watch_update_event (w);
+        }
+    }
+    return (wd);
+}
+
+/**
+ * Update a file dependency associated with a #watch.
+ *
+ * @param[in] w       A pointer to the #watch.
+ * @param[in] iw      A pointer to a parent #i_watch.
+ * @param[in] di_from A old name & inode number of the file.
+ * @param[in] di_to   A new name & inode number of the file.
+ * @return A pointer to a updated dependency record. NULL if not found.
+ **/
+struct watch_dep *
+watch_chg_dep (struct watch *w,
+               struct i_watch *iw,
+               const struct dep_item *di_from,
+               const struct dep_item *di_to)
+{
+    struct watch_dep *wd;
+
+    assert (w != NULL);
+    assert (iw != NULL);
+    assert (di_from != NULL);
+    assert (di_to != NULL);
+    assert (di_from->inode == di_to->inode);
+
+    wd = watch_find_dep (w, iw, di_from);
+    if (wd != NULL) {
+        wd->di = di_to;
+    }
+    return (wd);
 }

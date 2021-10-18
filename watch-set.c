@@ -22,15 +22,26 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include "compat.h"
-
-#include <assert.h>
-#include <stddef.h> /* NULL */
 #include <sys/types.h>
 #include <sys/stat.h>  /* ino_t */
 
+#include <assert.h>
+#include <stddef.h> /* NULL */
+
+#include "compat.h"
+#include "inotify-watch.h"
 #include "watch-set.h"
 #include "watch.h"
+
+static int watch_set_cmp (struct watch *w1, struct watch *w2);
+
+RB_GENERATE_NEXT(watch_set, watch, link, static inline)
+RB_GENERATE_MINMAX(watch_set, watch, link, static inline)
+RB_GENERATE_INSERT_COLOR(watch_set, watch, link, static inline)
+RB_GENERATE_REMOVE_COLOR(watch_set, watch, link, static inline)
+RB_GENERATE_INSERT(watch_set, watch, link, watch_set_cmp, static inline)
+RB_GENERATE_REMOVE(watch_set, watch, link, static inline)
+RB_GENERATE_FIND(watch_set, watch, link, watch_set_cmp, static inline)
 
 /**
  * Initialize the watch set.
@@ -38,7 +49,7 @@
  * @param[in] ws A pointer to the watch set.
  **/
 void
-watch_set_init (watch_set *ws)
+watch_set_init (struct watch_set *ws)
 {
     assert (ws != NULL);
 
@@ -51,11 +62,11 @@ watch_set_init (watch_set *ws)
  * @param[in] ws A pointer the the watch set.
  **/
 void
-watch_set_free (watch_set *ws)
+watch_set_free (struct watch_set *ws)
 {
-    assert (ws != NULL);
+    struct watch *w, *tmp;
 
-    watch *w, *tmp;
+    assert (ws != NULL);
 
     RB_FOREACH_SAFE (w, watch_set, ws, tmp) {
         watch_set_delete (ws, w);
@@ -69,7 +80,7 @@ watch_set_free (watch_set *ws)
  * @param[in] w  A pointer to watch to remove.
  **/
 void
-watch_set_delete (watch_set *ws, watch *w)
+watch_set_delete (struct watch_set *ws, struct watch *w)
 {
     assert (ws != NULL);
     assert (w != NULL);
@@ -85,10 +96,11 @@ watch_set_delete (watch_set *ws, watch *w)
  * @param[in] w  A pointer to inserted watch.
  **/
 void
-watch_set_insert (watch_set *ws, watch *w)
+watch_set_insert (struct watch_set *ws, struct watch *w)
 {
     assert (ws != NULL);
     assert (w != NULL);
+    assert (!watch_deps_empty (w));
 
     RB_INSERT (watch_set, ws, w);
 }
@@ -100,12 +112,22 @@ watch_set_insert (watch_set *ws, watch *w)
  * @param[in] inode A inode number of watch
  * @return A pointer to kqueue watch if found NULL otherwise
  **/
-watch *
-watch_set_find (watch_set *ws, ino_t inode)
+struct watch *
+watch_set_find (struct watch_set *ws, dev_t dev, ino_t inode)
 {
+    struct i_watch iw;
+    struct watch_dep wd;
+    struct watch find;
+
     assert (ws != NULL);
 
-    watch find = { .inode = inode };
+    iw.dev = dev;
+    iw.inode = inode;
+    wd.iw = &iw;
+    wd.di = DI_PARENT;
+    SLIST_INIT (&find.deps);
+    SLIST_INSERT_HEAD (&find.deps, &wd, next);
+
     return RB_FIND (watch_set, ws, &find);
 }
 /**
@@ -118,9 +140,15 @@ watch_set_find (watch_set *ws, ino_t inode)
  * less than, equal to, or greater than the second one.
  **/
 static int
-watch_set_cmp (watch *w1, watch *w2)
+watch_set_cmp (struct watch *w1, struct watch *w2)
 {
-    return ((w1->inode > w2->inode) - (w1->inode < w2->inode));
-}
+    dev_t dev1 = watch_get_dev (w1);
+    dev_t dev2 = watch_get_dev (w2);
 
-RB_GENERATE(watch_set, watch, link, watch_set_cmp);
+    if (dev1 == dev2) {
+        ino_t inode1 = watch_get_inode (w1);
+        ino_t inode2 = watch_get_inode (w2);
+        return ((inode1 > inode2) - (inode1 < inode2));
+    }
+    return ((dev1 > dev2) - (dev1 < dev2));
+}

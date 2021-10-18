@@ -60,7 +60,6 @@ void open_close_test::run ()
     should ("start watching on a file", file_wid != -1);
 
 
-#if defined(__linux__) || defined(NOTE_OPEN)
     cons.output.reset ();
     cons.input.setup ("oct-dir-working", IN_OPEN | IN_CLOSE_WRITE | IN_CLOSE_NOWRITE);
     cons.output.wait ();
@@ -75,6 +74,7 @@ void open_close_test::run ()
 
     cons.output.wait ();
     received = cons.output.registered ();
+#if defined(__linux__) || defined(NOTE_OPEN)
     should ("receive IN_OPEN on cat",
             contains (received, event ("", file_wid, IN_OPEN)));
     should ("receive IN_CLOSE_NOWRITE on cat",
@@ -85,7 +85,6 @@ void open_close_test::run ()
 #endif
 
 
-#if defined(__linux__) || defined(NOTE_OPEN)
     cons.output.reset ();
     cons.input.receive ();
 
@@ -93,6 +92,7 @@ void open_close_test::run ()
 
     cons.output.wait ();
     received = cons.output.registered ();
+#if defined(__linux__) || defined(NOTE_OPEN)
     should ("receive IN_OPEN on ls",
             contains (received, event ("", dir_wid, IN_OPEN)));
     should ("receive IN_CLOSE_NOWRITE on ls",
@@ -103,7 +103,6 @@ void open_close_test::run ()
 #endif
 
 
-#if defined(__linux__) || defined(NOTE_OPEN)
     cons.output.reset ();
     cons.input.receive ();
 
@@ -111,6 +110,7 @@ void open_close_test::run ()
 
     cons.output.wait ();
     received = cons.output.registered ();
+#if defined(__linux__) || defined(NOTE_OPEN)
     should ("receive IN_OPEN on modify",
             contains (received, event ("", file_wid, IN_OPEN)));
     should ("receive IN_CLOSE_WRITE on modify",
