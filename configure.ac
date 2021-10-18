@@ -370,6 +370,22 @@ AC_RUN_IFELSE(
     have_o_path=no
 )
 AC_MSG_RESULT($have_o_path)
+
+
+dnl Need a run-time check to build under linuxolator
+if test "$ac_cv_func_openat" = "yes"; then
+    AC_MSG_CHECKING(for O_EMPTY_PATH in fcntl.h)
+    AC_RUN_IFELSE(
+    [
+        AC_LANG_PROGRAM([@%:@include <fcntl.h>],[return openat(open("iktestdir", O_RDONLY), "", O_RDONLY | O_EMPTY_PATH) < 0;])
+    ],
+    [
+        AC_DEFINE([HAVE_O_EMPTY_PATH],[1],[Define to 1 if openat supports O_EMPTY_PATH flag])
+        AC_MSG_RESULT(yes)
+    ],
+        AC_MSG_RESULT(no)
+    )
+fi
 rm -rf iktestdir
 rm iktestfile
 

@@ -419,7 +419,11 @@ fdreopendir (int oldd)
 #ifdef O_CLOEXEC
         openflags |= O_CLOEXEC;
 #endif
+#ifdef HAVE_O_EMPTY_PATH
+    fd = openat (oldd, "", openflags | O_EMPTY_PATH);
+#else
     fd = openat (oldd, ".", openflags);
+#endif
 #elif (READDIR_DOES_OPENDIR == 1)
     fd = dup_cloexec (oldd);
 #elif (READDIR_DOES_OPENDIR == 0)
