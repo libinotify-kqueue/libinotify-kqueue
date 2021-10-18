@@ -143,18 +143,23 @@ iwatch_init (worker *wrk, int fd, uint32_t flags)
 #endif
     }
 
-    watch *parent = watch_init (fd, &st);
+    watch *parent = watch_set_find (&iw->watches, iw->inode);
     if (parent == NULL) {
-        iwatch_free (iw);
-        return NULL;
+        parent = watch_init (fd, &st);
+        if (parent == NULL) {
+            iwatch_free (iw);
+            return NULL;
+        }
+        watch_set_insert (&iw->watches, parent);
     }
 
     if (watch_add_dep (parent, iw, DI_PARENT) == NULL) {
+        if (watch_deps_empty (parent)) {
+            watch_set_delete (&iw->watches, parent);
+        }
         iwatch_free (iw);
         return NULL;
     }
-
-    watch_set_insert (&iw->watches, parent);
 
     if (S_ISDIR (st.st_mode)) {
 
