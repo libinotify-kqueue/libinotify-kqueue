@@ -318,6 +318,7 @@ produce_notifications (struct worker *wrk, struct kevent *event)
 
     struct watch *w;
     struct watch_dep *wd, *wd2;
+    uint32_t i_flags_par, i_flags_chl;
     uint32_t flags;
     bool deleted = false;
     bool reiterate;
@@ -356,6 +357,9 @@ produce_notifications (struct worker *wrk, struct kevent *event)
         w->skip_next = false;
     }
 
+    i_flags_par = kqueue_to_inotify (flags, mode, true, deleted);
+    i_flags_chl = kqueue_to_inotify (flags, mode, false, deleted);
+
     /* Deaggregate inotify events  */
     for (i = 0; i < nitems (ie_order); i++) {
 
@@ -363,12 +367,10 @@ produce_notifications (struct worker *wrk, struct kevent *event)
 
             struct i_watch *iw = wd->iw;
             bool is_parent = watch_dep_is_parent (wd);
-            uint32_t i_flags;
+            uint32_t i_flags = is_parent ? i_flags_par : i_flags_chl;
 
             assert (watch_set_find (&wrk->watches, w->dev, w->inode) == w);
             assert ((mode & S_IFMT) == (watch_dep_get_mode (wd) & S_IFMT));
-
-            i_flags = kqueue_to_inotify (flags, mode, is_parent, deleted);
 
             if (is_parent && ie_order[i] == IN_MODIFY &&
                 flags & NOTE_WRITE && S_ISDIR (iw->mode)) {
