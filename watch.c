@@ -164,14 +164,14 @@ kqueue_to_inotify (uint32_t flags,
  * Register vnode kqueue watch in kernel kqueue(2) subsystem
  *
  * @param[in] w      A pointer to a watch
+ * @param[in] kq     A kqueue descriptor
  * @param[in] fflags A filter flags in kqueue format
  * @return 1 on success, -1 on error and 0 if no events have been registered
  **/
 int
-watch_register_event (watch *w, uint32_t fflags)
+watch_register_event (watch *w, int kq, uint32_t fflags)
 {
     assert (w != NULL);
-    int kq = w->iw->wrk->kq;
     assert (kq != -1);
 
     struct kevent ev;
@@ -283,7 +283,6 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
         return NULL;
     }
 
-    w->iw = iw;
     w->fd = fd;
     w->skip_next = false;
     SLIST_INIT (&w->deps);
@@ -291,7 +290,7 @@ watch_init (i_watch *iw, watch_type_t watch_type, int fd, struct stat *st)
      * differs from readdir`s one at mount points. */
     w->inode = st->st_ino;
 
-    if (watch_register_event (w, fflags) == -1) {
+    if (watch_register_event (w, iw->wrk->kq, fflags) == -1) {
         free (w);
         return NULL;
     }
@@ -323,18 +322,20 @@ watch_free (watch *w)
  * Find a file dependency associated with a #watch.
  *
  * @param[in] w  A pointer to the #watch.
+ * @param[in] iw A pointer to a parent #i_watch.
  * @param[in] di A pointer to name & inode number of the file.
  * @return A pointer to a dependency record if found. NULL otherwise.
  **/
 struct watch_dep *
-watch_find_dep (watch *w, const dep_item *di)
+watch_find_dep (watch *w, i_watch *iw, const dep_item *di)
 {
     assert (w != NULL);
+    assert (iw != NULL);
 
     struct watch_dep *wd;
 
     WD_FOREACH (wd, w) {
-        if (wd->di == di) {
+        if (wd->iw == iw && wd->di == di) {
             return (wd);
         }
     }
@@ -346,16 +347,19 @@ watch_find_dep (watch *w, const dep_item *di)
  * Associate a file dependency with a #watch.
  *
  * @param[in] w  A pointer to the #watch.
+ * @param[in] iw A pointer to a parent #i_watch.
  * @param[in] di A name & inode number of the associated file.
  * @return A pointer to a created dependency record. NULL on failure.
  **/
 struct watch_dep *
-watch_add_dep (watch *w, const dep_item *di)
+watch_add_dep (watch *w, i_watch *iw, const dep_item *di)
 {
     assert (w != NULL);
+    assert (iw != NULL);
 
     struct watch_dep *wd = calloc (1, sizeof (struct watch_dep));
     if (wd != NULL) {
+        wd->iw = iw;
         wd->di = di;
         SLIST_INSERT_HEAD (&w->deps, wd, next);
     }
@@ -366,20 +370,22 @@ watch_add_dep (watch *w, const dep_item *di)
  * Disassociate file dependency from a #watch.
  *
  * @param[in] w  A pointer to the #watch.
+ * @param[in] iw A pointer to a parent #i_watch.
  * @param[in] di A name & inode number of the disassociated file.
  * @return A pointer to a diassociated dependency record. NULL if not found.
  **/
 struct watch_dep *
-watch_del_dep (watch *w, const dep_item *di)
+watch_del_dep (watch *w, i_watch *iw, const dep_item *di)
 {
     assert (w != NULL);
+    assert (iw != NULL);
 
-    struct watch_dep *wd = watch_find_dep (w, di);
+    struct watch_dep *wd = watch_find_dep (w, iw, di);
     if (wd != NULL) {
         SLIST_REMOVE (&w->deps, wd, watch_dep, next);
         free (wd);
         if (watch_deps_empty (w)) {
-            watch_set_delete (&w->iw->watches, w);
+            watch_set_delete (&iw->watches, w);
         }
     }
     return (wd);
@@ -389,19 +395,24 @@ watch_del_dep (watch *w, const dep_item *di)
  * Update a file dependency associated with a #watch.
  *
  * @param[in] w       A pointer to the #watch.
+ * @param[in] iw      A pointer to a parent #i_watch.
  * @param[in] di_from A old name & inode number of the file.
  * @param[in] di_to   A new name & inode number of the file.
  * @return A pointer to a updated dependency record. NULL if not found.
  **/
 struct watch_dep *
-watch_chg_dep (watch *w, const dep_item *di_from, const dep_item *di_to)
+watch_chg_dep (watch *w,
+               i_watch *iw,
+               const dep_item *di_from,
+               const dep_item *di_to)
 {
     assert (w != NULL);
+    assert (iw != NULL);
     assert (di_from != NULL);
     assert (di_to != NULL);
     assert (di_from->inode == di_to->inode);
 
-    struct watch_dep *wd = watch_find_dep (w, di_from);
+    struct watch_dep *wd = watch_find_dep (w, iw, di_from);
     if (wd != NULL) {
         wd->di = di_to;
     }

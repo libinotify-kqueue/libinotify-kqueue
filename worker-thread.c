@@ -318,12 +318,9 @@ produce_notifications (worker *wrk, struct kevent *event)
     assert (w != NULL);
     assert (w->fd == event->ident);
 
-    i_watch *iw = w->iw;
-    assert (watch_set_find (&iw->watches, w->inode) == w);
-
+    struct watch_dep *wd;
     uint32_t flags = event->fflags;
     bool deleted = false;
-    bool is_parent = false;
 
     /* Set deleted flag if no more links exist */
     if (flags & NOTE_DELETE && is_deleted (w->fd)) {
@@ -352,11 +349,13 @@ produce_notifications (worker *wrk, struct kevent *event)
 
         assert (!watch_deps_empty (w));
 
-        struct watch_dep *wd;
         WD_FOREACH (wd, w) {
 
-            is_parent = watch_dep_is_parent (wd);
-            mode_t mode = is_parent ? iw->mode : wd->di->type;
+            i_watch *iw = wd->iw;
+            bool is_parent = watch_dep_is_parent (wd);
+            mode_t mode = watch_dep_get_mode (wd);
+
+            assert (watch_set_find (&iw->watches, w->inode) == w);
 
             uint32_t i_flags = kqueue_to_inotify (flags,
                                                   mode,
@@ -387,8 +386,12 @@ produce_notifications (worker *wrk, struct kevent *event)
         }
     }
 
-    if (iw->is_closed || (is_parent && (deleted || flags & NOTE_REVOKE))) {
-        worker_remove (wrk, iw->wd);
+    WD_FOREACH (wd, w) {
+        if (wd->iw->is_closed ||
+            (watch_dep_is_parent (wd) && (deleted || flags & NOTE_REVOKE))) {
+            worker_remove (wrk, wd->iw->wd);
+            break;
+        }
     }
 }
 

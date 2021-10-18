@@ -48,12 +48,12 @@ typedef enum watch_type {
 
 SLIST_HEAD(watch_dep_list, watch_dep);
 struct watch_dep {
+    i_watch *iw;              /* A pointer to parent inotify watch */
     const dep_item *di;
     SLIST_ENTRY(watch_dep) next;
 };
 
 struct watch {
-    i_watch *iw;              /* A pointer to parent inotify watch */
     int fd;                   /* file descriptor of a watched entry */
     ino_t inode;              /* inode number taken from readdir call */
     bool skip_next;           /* next kevent can be produced by readdir call */
@@ -74,14 +74,15 @@ watch *watch_init (i_watch *iw,
                    struct stat *st);
 void   watch_free (watch *w);
 
-struct watch_dep *watch_find_dep (watch *w, const dep_item *di);
-struct watch_dep *watch_add_dep  (watch *w, const dep_item *di);
-struct watch_dep *watch_del_dep  (watch *w, const dep_item *di);
+struct watch_dep *watch_find_dep (watch *w, i_watch *iw, const dep_item *di);
+struct watch_dep *watch_add_dep  (watch *w, i_watch *iw, const dep_item *di);
+struct watch_dep *watch_del_dep  (watch *w, i_watch *iw, const dep_item *di);
 struct watch_dep *watch_chg_dep  (watch *w,
+                                  i_watch *iw,
                                   const dep_item *di_from,
                                   const dep_item *di_to);
 
-int    watch_register_event (watch *w, uint32_t fflags);
+int    watch_register_event (watch *w, int kq, uint32_t fflags);
 
 /**
  * Checks if #watch is associated with any file dependency or not.
@@ -107,5 +108,9 @@ watch_dep_is_parent (const struct watch_dep *wd)
 {
     return (wd->di == DI_PARENT);
 }
+
+/* Leave this as macro to break circular header depedency chain */
+#define watch_dep_get_mode(wd) \
+    (watch_dep_is_parent (wd) ? (wd)->iw->mode : (wd)->di->type)
 
 #endif /* __WATCH_H__ */
