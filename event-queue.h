@@ -25,10 +25,9 @@
 #define __EVENT_QUEUE_H__
 
 #include <sys/types.h> /* uint32_t */
-#include <sys/socket.h>/* SO_NOSIGPIPE */
 #include <sys/uio.h>   /* iovec */
 
-#include "config.h"
+#include "sys/inotify.h"
 
 struct event_queue {
     struct iovec *iov; /* inotify events to send */

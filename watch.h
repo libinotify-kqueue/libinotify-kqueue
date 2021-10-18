@@ -25,16 +25,15 @@
 #ifndef __WATCH_H__
 #define __WATCH_H__
 
-#include "compat.h"
+#include <sys/types.h>
+#include <sys/queue.h>
+#include <sys/stat.h>  /* stat */
 
 #include <assert.h>    /* assert */
 #include <dirent.h>    /* ino_t */
 #include <stdbool.h>
 
-#include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/stat.h>  /* stat */
-
+#include "compat.h"
 #include "dep-list.h"
 #include "inotify-watch.h"
 

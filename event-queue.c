@@ -34,6 +34,7 @@
 #include <string.h>    /* memmove */
 
 #include "sys/inotify.h"
+
 #include "config.h"
 #include "event-queue.h"
 #include "utils.h"

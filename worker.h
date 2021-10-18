@@ -25,11 +25,13 @@
 #ifndef __WORKER_H__
 #define __WORKER_H__
 
-#include "compat.h"
+#include <sys/types.h>
+#include <sys/queue.h>
 
 #include <pthread.h>
+#include <stdbool.h>
 
-#include "dep-list.h"
+#include "compat.h"
 #include "event-queue.h"
 #include "inotify-watch.h"
 #include "watch-set.h"

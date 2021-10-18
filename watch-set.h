@@ -25,10 +25,10 @@
 #ifndef __WATCH_SET_H__
 #define __WATCH_SET_H__
 
-#include "compat.h"
-
 #include <sys/types.h> /* size_t */
 #include <sys/stat.h>  /* ino_t */
+
+#include "compat.h"
 
 RB_HEAD(watch_set, watch);
 

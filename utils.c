@@ -28,22 +28,23 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include "compat.h"
-
-#include <unistd.h> /* read, write */
-#include <errno.h>  /* EINTR */
-#include <stdlib.h> /* malloc */
-#include <string.h> /* strlen */
-#include <fcntl.h> /* fcntl */
-#include <stdio.h>
-#include <assert.h>
-
 #include <sys/types.h>
 #include <sys/socket.h>/* send, sendmsg */
 #include <sys/stat.h>  /* fstat */
 #include <sys/uio.h>   /* writev */
 
+#include <assert.h>
+#include <errno.h>  /* EINTR */
+#include <fcntl.h>  /* fcntl */
+#include <stdio.h>
+#include <stdlib.h> /* malloc */
+#include <string.h> /* strlen */
+#include <unistd.h> /* read, write */
+
 #include "sys/inotify.h"
+
+#include "compat.h"
+#include "config.h"
 #include "utils.h"
 
 /**

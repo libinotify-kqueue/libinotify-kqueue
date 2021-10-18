@@ -22,22 +22,20 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include "config.h"
-#include "compat.h"
-
+#include <assert.h>
+#include <dirent.h>  /* opendir, readdir, closedir */
 #include <errno.h>   /* errno */
+#include <fcntl.h>   /* open */
 #include <stdbool.h> /* bool */
 #include <stddef.h>  /* offsetof */
 #include <stdlib.h>  /* calloc */
-#include <dirent.h>  /* opendir, readdir, closedir */
 #include <string.h>  /* strcmp */
-#include <fcntl.h>   /* open */
 #include <unistd.h>  /* close */
-#include <assert.h>
-#include <errno.h>
 
-#include "utils.h"
+#include "compat.h"
+#include "config.h"
 #include "dep-list.h"
+#include "utils.h"
 
 static inline void di_free (struct dep_item *di);
 

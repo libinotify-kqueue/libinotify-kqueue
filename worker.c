@@ -22,25 +22,24 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include "compat.h"
-
-#include <pthread.h>
-#include <signal.h> 
-#include <stdlib.h>
-#include <string.h>
-#include <fcntl.h> /* open() */
-#include <unistd.h> /* close() */
-#include <assert.h>
-#include <stdio.h>
-#include <dirent.h>
-
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 
+#include <assert.h>
+#include <dirent.h>
+#include <fcntl.h> /* open() */
+#include <pthread.h>
+#include <signal.h> 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h> /* close() */
+
 #include "sys/inotify.h"
 
+#include "compat.h"
 #include "event-queue.h"
 #include "inotify-watch.h"
 #include "utils.h"

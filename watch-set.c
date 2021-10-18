@@ -22,13 +22,13 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include "compat.h"
-
-#include <assert.h>
-#include <stddef.h> /* NULL */
 #include <sys/types.h>
 #include <sys/stat.h>  /* ino_t */
 
+#include <assert.h>
+#include <stddef.h> /* NULL */
+
+#include "compat.h"
 #include "watch-set.h"
 #include "watch.h"
 

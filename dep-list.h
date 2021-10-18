@@ -25,12 +25,13 @@
 #ifndef __DEP_LIST_H__
 #define __DEP_LIST_H__
 
-#include "compat.h"
-
 #include <sys/types.h> /* ino_t */
+#include <sys/queue.h> /* SLIST */
 #include <sys/stat.h>  /* mode_t */
 
 #include <stdbool.h>
+
+#include "compat.h"
 
 #define DI_UNCHANGED S_IXOTH /* dep_item remained unchanged between listings */
 #define DI_REPLACED  S_IROTH /* dep_item was replaced by other item */

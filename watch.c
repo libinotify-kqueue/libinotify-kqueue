@@ -22,24 +22,24 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include "compat.h"
-
-#include <errno.h>  /* errno */
-#include <fcntl.h>  /* open */
-#include <unistd.h> /* close */
-#include <string.h> /* strdup */
-#include <stdlib.h> /* free */
-#include <assert.h>
-
 #include <sys/types.h>
 #include <sys/event.h> /* kevent */
 #include <sys/stat.h> /* stat */
-#include <stdio.h>    /* snprintf */
 
+#include <assert.h>
+#include <errno.h>  /* errno */
+#include <fcntl.h>  /* open */
+#include <stdio.h>  /* snprintf */
+#include <stdlib.h> /* free */
+#include <string.h> /* strdup */
+#include <unistd.h> /* close */
+
+#include "sys/inotify.h"
+
+#include "compat.h"
 #include "utils.h"
 #include "watch.h"
 #include "worker.h"
-#include "sys/inotify.h"
 
 /**
  * Convert the inotify watch mask to the kqueue event filter flags.

@@ -29,10 +29,7 @@
 
 #include <sys/param.h>
 #include <sys/types.h>
-
-#ifdef BUILD_LIBRARY
-#include <sys/queue.h>
-#endif
+#include <sys/stat.h>
 
 #ifdef HAVE_SYS_TREE_H
 #include <sys/tree.h>  /* RB tree macroses */
@@ -66,7 +63,6 @@
 #endif
 #endif
 
-#include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>

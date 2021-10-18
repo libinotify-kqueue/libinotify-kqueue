@@ -22,7 +22,8 @@
   THE SOFTWARE.
 *******************************************************************************/
 
-#include "compat.h"
+#include <sys/types.h>
+#include <sys/event.h>
 
 #include <stddef.h> /* NULL */
 #include <assert.h>
@@ -32,17 +33,14 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#include <sys/types.h>
-#include <sys/event.h>
-
 #include "sys/inotify.h"
 
 #include "config.h"
-#include "utils.h"
+#include "dep-list.h"
 #include "inotify-watch.h"
+#include "utils.h"
 #include "watch.h"
 #include "worker.h"
-#include "worker-thread.h"
 
 void worker_erase (struct worker *wrk);
 static void handle_moved (void *udata,

@@ -25,16 +25,16 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 
-#include "config.h"
-#include "compat.h"
-
-#include <sys/stat.h> /* S_ISDIR */
+#include <sys/types.h>
 #include <sys/uio.h>  /* iovec */
 
+#include <dirent.h> /* DIR */
 #include <errno.h>  /* errno */
 #include <stdio.h>  /* fprintf */
 #include <string.h> /* strerror */
 #include <pthread.h>
+
+#include "config.h"
 
 /**
  * Print an error message, if allowed.
