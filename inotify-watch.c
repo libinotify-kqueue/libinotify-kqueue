@@ -24,17 +24,12 @@
 #include "compat.h"
 
 #include <sys/types.h>
-#ifdef STATFS_HAVE_F_FSTYPENAME
-#include <sys/mount.h> /* fstatfs */
-#endif
-#ifdef STATVFS_HAVE_F_FSTYPENAME
-#include <sys/statvfs.h> /* fstatvfs */
-#endif
 #include <sys/stat.h>  /* fstat */
 
 #include <assert.h>    /* assert */
 #include <errno.h>     /* errno */
 #include <fcntl.h>     /* AT_FDCWD */
+#include <stdbool.h>   /* false */
 #include <stdlib.h>    /* calloc, free */
 #include <string.h>    /* strcmp */
 #include <unistd.h>    /* close */
@@ -59,23 +54,13 @@ static const char *skip_fs_types[] = { SKIP_SUBFILES };
 static int
 iwatch_want_skip_subfiles (int fd)
 {
-#ifdef STATFS_HAVE_F_FSTYPENAME
-    struct statfs st;
-#else
-    struct statvfs st;
-#endif
+    struct STATFS st;
     size_t i;
-    int ret;
 
     memset (&st, 0, sizeof (st));
-#ifdef STATFS_HAVE_F_FSTYPENAME
-    ret = fstatfs (fd, &st);
-#else
-    ret = fstatvfs (fd, &st);
-#endif
-    if (ret == -1) {
-        perror_msg ("fstatfs failed on %d, fd");
-        return 0;
+    if (FSTATFS (fd, &st) == -1) {
+        perror_msg ("fstatfs failed on %d", fd);
+        return false;
     }
 
     for (i = 0; i < nitems (skip_fs_types); i++) {

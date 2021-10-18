@@ -40,6 +40,16 @@
 #include "compat/tree.h"
 #endif
 
+#if defined (HAVE_STATFS)
+#include <sys/mount.h> /* fstatfs */
+#define STATFS statfs
+#define FSTATFS(fd, buf) fstatfs((fd), (buf))
+#elif defined (HAVE_STATVFS)
+#include <sys/statvfs.h> /* fstatvfs */
+#define STATFS statvfs
+#define FSTATFS(fd, buf) fstatvfs((fd), (buf))
+#endif
+
 #ifdef HAVE_STDINT_H
 #include <stdint.h>
 #else
