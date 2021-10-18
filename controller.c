@@ -40,15 +40,12 @@
 
 
 #define WORKER_SZ 100
-static struct worker* volatile workers[WORKER_SZ];
+static struct worker* workers[WORKER_SZ];
 static pthread_rwlock_t workers_rwlock = PTHREAD_RWLOCK_INITIALIZER;
 static bool initialized = false;
-static struct worker dummy_wrk = {
-    .io = { -1, -1 },
-    .cmd_mtx = PTHREAD_MUTEX_INITIALIZER
-};
 
-#define WRK_FREE (&dummy_wrk)
+/* Arbitrary pointers that can not be returned by malloc () */;
+#define WRK_FREE ((void *)workers)
 #define WRK_RESV NULL
 
 static inline void
@@ -133,12 +130,13 @@ inotify_init1 (int flags)
     }
 
     struct worker *wrk = worker_create (flags);
+    workerset_wlock ();
     if (wrk == NULL) {
         workers[i] = WRK_FREE;
+        workerset_unlock ();
         return -1;
     }
 
-    workers[i] = wrk;
     lfd = wrk->io[INOTIFY_FD];
 
     /* We can face into situation when there are two workers with the same
@@ -149,12 +147,15 @@ inotify_init1 (int flags)
     int j;
     for (j = 0; j < WORKER_SZ; j++) {
         struct worker *jw = workers[j];
-        if (jw != WRK_FREE && jw != WRK_RESV && jw->io[INOTIFY_FD] == lfd &&
-            jw != wrk) {
+        if (jw != WRK_FREE && jw != WRK_RESV && jw->io[INOTIFY_FD] == lfd) {
             workers[j] = WRK_FREE;
             perror_msg ("Collision found: fd %d", lfd);
+            break;
         }
     }
+
+    workers[i] = wrk;
+    workerset_unlock ();
 
     return lfd;
 }
@@ -258,10 +259,6 @@ inotify_set_param (int fd, int param, intptr_t value)
 /**
  * Erase a worker from a list of workers.
  * 
- * This function does not lock the global array of workers (I assume that
- * marking its items as volatile should be enough). Also this function is
- * intended to be called from the worker threads only.
- * 
  * @param[in] wrk A pointer to a worker
  **/
 void
@@ -269,6 +266,7 @@ worker_erase (struct worker *wrk)
 {
     assert (wrk != NULL);
 
+    workerset_wlock ();
     int i;
     for (i = 0; i < WORKER_SZ; i++) {
         if (workers[i] == wrk) {
@@ -276,6 +274,7 @@ worker_erase (struct worker *wrk)
             break;
         }
     }
+    workerset_unlock ();
 }
 
 /**
@@ -301,6 +300,7 @@ worker_exec (int fd, struct worker_cmd *cmd)
         struct worker *wrk = workers[i];
         if (wrk != WRK_FREE && wrk != WRK_RESV && wrk->io[INOTIFY_FD] == fd) {
             worker_ref (wrk);
+            workerset_unlock ();
             worker_cmd_lock (wrk);
             if (wrk != workers[i]) {
                 /* RACE: worker thread overwrote worker pointer in between
@@ -308,7 +308,6 @@ worker_exec (int fd, struct worker_cmd *cmd)
                 perror_msg ("race detected. fd: %d", fd);
                 worker_cmd_unlock (wrk);
                 worker_unref (wrk);
-                workerset_unlock ();
                 errno = EBADF;
                 return -1;
             }
@@ -322,7 +321,6 @@ worker_exec (int fd, struct worker_cmd *cmd)
 
             worker_cmd_unlock (wrk);
             worker_unref (wrk);
-            workerset_unlock ();
             if (cmd->retval == -1) {
                 errno = cmd->error;
             }
