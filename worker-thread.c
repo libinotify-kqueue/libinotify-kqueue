@@ -479,7 +479,12 @@ worker_thread (void *arg)
                     event_queue_reset_last (&wrk->eq);
 #ifdef EVFILT_USER
                 } else if (received[i].filter == EVFILT_USER) {
+#ifdef __DragonFly__
+                    /* DragonflyBSD does not copy udata */
                     cmd = (struct worker_cmd *)(intptr_t)received[i].data;
+#else
+                    cmd = received[i].udata;
+#endif
                     process_command (wrk, cmd);
 #else
                 } else if (received[i].filter == EVFILT_READ) {

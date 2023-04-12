@@ -165,14 +165,20 @@ worker_notify (struct worker *wrk, struct worker_cmd *cmd)
 #ifdef EVFILT_USER
     struct kevent ke;
 
-    /* Pass cmd in data field as DragonflyBSD does not copy udata */
     EV_SET (&ke,
             wrk->io[KQUEUE_FD],
             EVFILT_USER,
             0,
             NOTE_TRIGGER,
+#ifdef __DragonFly__
+            /* DragonflyBSD does not copy udata */
             (intptr_t)cmd,
-            0);
+            0
+#else
+            0,
+            cmd
+#endif
+            );
     return kevent (wrk->kq, &ke, 1, NULL, 0, zero_tsp);
 #else
     return write (wrk->io[INOTIFY_FD], &cmd, sizeof (cmd));
