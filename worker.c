@@ -311,7 +311,14 @@ worker_create (int flags)
     wrk->io[INOTIFY_FD] = -1;
     wrk->io[KQUEUE_FD] = -1;
 
+#ifdef HAVE_KQUEUE1
+    wrk->kq = kqueue1 (O_CLOEXEC);
+#else
     wrk->kq = kqueue ();
+    if (wrk->kq != -1) {
+        (void)set_cloexec_flag (wrk->kq, 1);
+    }
+#endif
     if (wrk->kq == -1) {
         perror_msg (("Failed to create a new kqueue"));
         goto failure;
