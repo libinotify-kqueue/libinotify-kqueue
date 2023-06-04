@@ -31,7 +31,6 @@ extern pthread_mutex_t ik_atomic_mutex;
 
 #define	_Atomic(T)		T volatile
 typedef	_Atomic(unsigned int)		atomic_uint;
-#define ATOMIC_VAR_INIT(value)          (value)
 #define	atomic_init(object, value)	(*(object) = (value))
 #define atomic_load(object) \
     atomic_fetch_add_impl((object), 0, sizeof (*(object)))

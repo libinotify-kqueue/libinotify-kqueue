@@ -41,7 +41,7 @@
 
 
 static struct workers_list workers = SLIST_HEAD_INITIALIZER (&workers);
-static atomic_uint nworkers = ATOMIC_VAR_INIT (0);
+static atomic_uint nworkers;
 static pthread_rwlock_t workers_rwlock = PTHREAD_RWLOCK_INITIALIZER;
 static unsigned int max_workers = IN_DEF_MAX_USER_INSTANCES;
 
