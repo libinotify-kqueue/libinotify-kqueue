@@ -73,8 +73,12 @@
 #endif
 #endif
 #if !defined(__cplusplus) && !__has_extension(c_atomic) && \
-	!__has_extension(cxx_atomic) && !__GNUC_PREREQ__(4, 7)
+	!__has_extension(cxx_atomic)
+#if __GNUC_PREREQ__(4, 7)
+#define	_Atomic(T)		T volatile
+#else
 #define	_Atomic(T)		struct { T volatile __val; }
+#endif
 #endif
 
 
@@ -130,6 +134,9 @@
 #if defined(__CLANG_ATOMICS)
 #define	ATOMIC_VAR_INIT(value)		(value)
 #define	atomic_init(obj, value)		__c11_atomic_init(obj, value)
+#elif defined(__GNUC_ATOMICS)
+#define	ATOMIC_VAR_INIT(value)		(value)
+#define	atomic_init(obj, value)	__atomic_store_n(obj, value, __ATOMIC_RELAXED)
 #else
 #define	ATOMIC_VAR_INIT(value)		{ .__val = (value) }
 #define	atomic_init(obj, value)		((void)((obj)->__val = (value)))
