@@ -1,5 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -26,21 +28,26 @@
 #include <poll.h>
 #include <stdio.h>
 #include <sys/ioctl.h>
+#include <sys/uio.h>
 #include <unistd.h>
 #include "inotify_client.hh"
 #include "log.hh"
 
 #include <iostream>
 
-inotify_client::inotify_client ()
-: fd (inotify_init())
+inotify_client::inotify_client (bool direct)
+: fd (inotify_init1(direct ? O_DIRECT : 0))
+, direct(direct)
 {
     assert (fd != -1);
 }
 
 inotify_client::~inotify_client ()
 {
-    close (fd);
+    if (direct)
+        libinotify_direct_close(fd);
+    else
+        close (fd);
 }
 
 int inotify_client::watch (const std::string &filename, uint32_t flags)
@@ -69,6 +76,58 @@ int inotify_client::cancel (int watch_id)
 #define IE_BUFSIZE (((sizeof (struct inotify_event) + FILENAME_MAX)) * 20)
 #endif
 
+void inotify_client::read_events (int fd, events &evs)
+{
+    char buffer[IE_BUFSIZE];
+    char *ptr = buffer;
+    int avail = read (fd, buffer, IE_BUFSIZE);
+
+    /* The construction is probably harmful */
+    while (avail >= sizeof (struct inotify_event *)) {
+        struct inotify_event *ie = (struct inotify_event *) ptr;
+        event ev;
+
+        if (ie->len) {
+                ev.filename = ie->name;
+        }
+        ev.flags = ie->mask;
+        ev.watch = ie->wd;
+        ev.cookie = ie->cookie;
+
+        LOG ("INO: Got next event! " << VAR (ev.filename) << VAR (ev.watch) << VAR (ev.flags));
+        evs.insert (ev);
+
+        int offset = sizeof (struct inotify_event) + ie->len;
+        avail -= offset;
+        ptr += offset;
+    }
+}
+
+void inotify_client::read_events_direct (int fd, events &evs)
+{
+    struct iovec *received[5];
+    int num_events = libinotify_direct_readv (fd, received, 5, 0);
+
+    while (cur_event) {
+        struct inotify_event *ie = (struct inotify_event *) cur_event->iov_base;
+        event ev;
+
+        if (ie->len) {
+                ev.filename = ie->name;
+        }
+        ev.flags = ie->mask;
+        ev.watch = ie->wd;
+        ev.cookie = ie->cookie;
+
+        LOG ("INO: Got next event! " << VAR (ev.filename) << VAR (ev.watch) << VAR (ev.flags));
+        evs.insert (ev);
+
+        cur_event++;
+    }
+
+    libinotify_free_iovec (events);
+}
+
 events inotify_client::receive_during (int timeout) const
 {
     events received;
@@ -92,28 +151,10 @@ events inotify_client::receive_during (int timeout) const
         }
 
         if (pfd.revents & POLLIN) {
-            char buffer[IE_BUFSIZE];
-            char *ptr = buffer;
-            int avail = read (fd, buffer, IE_BUFSIZE);
-
-            /* The construction is probably harmful */
-            while (avail >= sizeof (struct inotify_event *)) {
-                struct inotify_event *ie = (struct inotify_event *) ptr;
-                event ev;
-
-                if (ie->len) {
-                        ev.filename = ie->name;
-                }
-                ev.flags = ie->mask;
-                ev.watch = ie->wd;
-                ev.cookie = ie->cookie;
-
-                LOG ("INO: Got next event! " << VAR (ev.filename) << VAR (ev.watch) << VAR (ev.flags));
-                received.insert (ev);
-
-                int offset = sizeof (struct inotify_event) + ie->len;
-                avail -= offset;
-                ptr += offset;
+            if (direct) {
+                read_events_direct (fd, received);
+            } else {
+                read_events (fd, received);
             }
         }
     }

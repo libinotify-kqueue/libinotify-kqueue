@@ -23,6 +23,7 @@
 *******************************************************************************/
 
 #include <sys/types.h>
+#include <sys/event.h> /* kqueue[1] */
 #include <sys/socket.h>/* send, sendmsg */
 #include <sys/stat.h>  /* fstat */
 #include <sys/uio.h>   /* writev */
@@ -61,6 +62,24 @@ perror_msg_printf (const char *fmt, ...)
     return buf;
 }
 #endif
+
+int
+kqueue_init (void)
+{
+    int kq;
+#ifdef HAVE_KQUEUE1
+    kq = kqueue1 (O_CLOEXEC);
+#else
+    kq = kqueue ();
+    if (kq != -1) {
+        (void)set_cloexec_flag (kq, 1);
+    }
+#endif
+    if (kq == -1) {
+        perror_msg (("Failed to create a new kqueue"));
+    }
+    return kq;
+}
 
 /**
  * Create a new inotify event.

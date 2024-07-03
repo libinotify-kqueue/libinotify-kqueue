@@ -65,6 +65,8 @@ do {                                                                    \
 #define perror_msg(msg)
 #endif
 
+int kqueue_init (void);
+
 struct inotify_event* create_inotify_event (int         wd,
                                             uint32_t    mask,
                                             uint32_t    cookie,

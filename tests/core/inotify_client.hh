@@ -1,5 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -29,12 +31,15 @@
 
 class inotify_client {
     int fd;
+    bool direct;
 
 private:
     static time_t timems ();
+    static void read_events (int fd, events &evs);
+    static void read_events_direct (int fd, events &evs);
 
 public:
-    inotify_client ();
+    inotify_client (bool direct = false);
     ~inotify_client ();
     int watch (const std::string &filename, uint32_t flags);
     int cancel (int wid);

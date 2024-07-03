@@ -1,6 +1,8 @@
 /*******************************************************************************
   Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
   Copyright (c) 2014-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2024 Serenity Cyber Security, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -45,7 +47,8 @@ typedef enum {
     WCMD_NONE = 0,   /* uninitialized state */
     WCMD_ADD,        /* add or modify a watch */
     WCMD_REMOVE,     /* remove a watch */
-    WCMD_PARAM       /* set worker thread parameter */
+    WCMD_PARAM,      /* set worker thread parameter */
+    WCMD_CLOSE       /* signal worker thread to shutdown itself */
 } worker_cmd_type_t;
 
 /**
@@ -78,6 +81,7 @@ void worker_cmd_add    (struct worker_cmd *cmd,
                         uint32_t mask);
 void worker_cmd_remove (struct worker_cmd *cmd, int watch_id);
 void worker_cmd_param  (struct worker_cmd *cmd, int param, intptr_t value);
+void worker_cmd_close  (struct worker_cmd *cmd);
 
 SLIST_HEAD(workers_list, worker);
 
