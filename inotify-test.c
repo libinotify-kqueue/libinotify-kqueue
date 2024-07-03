@@ -1,5 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2024 Serenity Cyber Security, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +25,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/resource.h>
+#include <sys/uio.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
@@ -32,6 +35,7 @@
 #include <sys/inotify.h>
 
 void get_event (int fd, const char * target);
+void get_event_direct (int fd, const char * target);
 void handle_error (int error);
 
 /* ----------------------------------------------------------------- */
@@ -42,6 +46,7 @@ int main (int argc, char *argv[])
     int ev_count = 0;
     int fd;
     int wd;   /* watch descriptor */
+    int direct = 0;
 
     struct rlimit rl;
     rl.rlim_cur = 3072;
@@ -56,8 +61,10 @@ int main (int argc, char *argv[])
         fprintf (stderr, "Watching %s\n", argv[1]);
         strcpy (target, argv[1]);
     }
+    if (argc == 3 && !strcmp(argv[2], "direct"))
+        direct = 1;
 
-    fd = inotify_init();
+    fd = inotify_init1(direct ? O_DIRECT : 0);
     if (fd < 0) {
         printf("inotify_init failed\n");
         handle_error (errno);
@@ -78,13 +85,59 @@ int main (int argc, char *argv[])
         /* } */
 
         ++ev_count;
-        get_event(fd, target);
+        if (direct)
+            get_event_direct(fd, target);
+        else
+            get_event(fd, target);
     }
 
     return 0;
 }
 
 /* ----------------------------------------------------------------- */
+
+static void dump_event (struct inotify_event *pevent, char* action)
+{
+    if (pevent->mask & IN_ACCESS)
+        strcat(action, " was read");
+    if (pevent->mask & IN_ATTRIB)
+        strcat(action, " Metadata changed");
+    if (pevent->mask & IN_CLOSE_WRITE)
+        strcat(action, " opened for writing was closed");
+    if (pevent->mask & IN_CLOSE_NOWRITE)
+        strcat(action, " not opened for writing was closed");
+    if (pevent->mask & IN_CREATE)
+        strcat(action, " created in watched directory");
+    if (pevent->mask & IN_DELETE)
+        strcat(action, " deleted from watched directory");
+    if (pevent->mask & IN_DELETE_SELF)
+        strcat(action, " watched file/directory was itself deleted");
+    if (pevent->mask & IN_MODIFY)
+        strcat(action, " was modified");
+    if (pevent->mask & IN_MOVE_SELF)
+        strcat(action, " watched file/directory was itself moved");
+    if (pevent->mask & IN_MOVED_FROM)
+        strcat(action, " moved out of watched directory");
+    if (pevent->mask & IN_MOVED_TO)
+        strcat(action, " moved into watched directory");
+    if (pevent->mask & IN_OPEN)
+        strcat(action, " was opened");
+    if (pevent->mask & IN_IGNORED)
+        strcat(action, " was ignored");
+    if (pevent->mask & IN_UNMOUNT)
+        strcat(action, " was unmounted");
+
+    /*
+        printf ("wd=%d mask=%x cookie=%d len=%d dir=%s\n",
+        pevent->wd, pevent->mask, pevent->cookie, pevent->len,
+        (pevent->mask & IN_ISDIR)?"yes":"no");
+
+        if (pevent->len) printf ("name=%s\n", pevent->name);
+    */
+
+    printf ("%s [%s]\n", action, pevent->name);
+}
+
 #define BUFF_SIZE (16*1024)
 
 void get_event (int fd, const char * target)
@@ -103,49 +156,37 @@ void get_event (int fd, const char * target)
         else
             strcpy (action, target);
 
-        if (pevent->mask & IN_ACCESS)
-            strcat(action, " was read");
-        if (pevent->mask & IN_ATTRIB)
-            strcat(action, " Metadata changed");
-        if (pevent->mask & IN_CLOSE_WRITE)
-            strcat(action, " opened for writing was closed");
-        if (pevent->mask & IN_CLOSE_NOWRITE)
-            strcat(action, " not opened for writing was closed");
-        if (pevent->mask & IN_CREATE)
-            strcat(action, " created in watched directory");
-        if (pevent->mask & IN_DELETE)
-            strcat(action, " deleted from watched directory");
-        if (pevent->mask & IN_DELETE_SELF)
-            strcat(action, " watched file/directory was itself deleted");
-        if (pevent->mask & IN_MODIFY)
-            strcat(action, " was modified");
-        if (pevent->mask & IN_MOVE_SELF)
-            strcat(action, " watched file/directory was itself moved");
-        if (pevent->mask & IN_MOVED_FROM)
-            strcat(action, " moved out of watched directory");
-        if (pevent->mask & IN_MOVED_TO)
-            strcat(action, " moved into watched directory");
-        if (pevent->mask & IN_OPEN)
-            strcat(action, " was opened");
-        if (pevent->mask & IN_IGNORED)
-            strcat(action, " was ignored");
-        if (pevent->mask & IN_UNMOUNT)
-            strcat(action, " was unmounted");
-
-        /*
-          printf ("wd=%d mask=%x cookie=%d len=%d dir=%s\n",
-          pevent->wd, pevent->mask, pevent->cookie, pevent->len,
-          (pevent->mask & IN_ISDIR)?"yes":"no");
-
-          if (pevent->len) printf ("name=%s\n", pevent->name);
-        */
-
-        printf ("%s [%s]\n", action, pevent->name);
+        dump_event (pevent, action);
 
         i += sizeof(struct inotify_event) + pevent->len;
 
     }
 
+}  /* get_event */
+
+void get_event_direct (int fd, const char * target)
+{
+    struct iovec *received[5];
+    int num_events = libinotify_direct_readv (fd, received, 5, 0);
+
+    for (int i = 0; i < num_events; i++) {
+        struct iovec *cur_event = received[i];
+        while (cur_event->iov_base) {
+            struct inotify_event *pevent = (struct inotify_event *) cur_event->iov_base;
+            char action[81+FILENAME_MAX] = {0};
+
+            if (pevent->len)
+                strcpy (action, pevent->name);
+            else
+                strcpy (action, target);
+
+            dump_event (pevent, action);
+
+            cur_event++;
+
+        }
+        libinotify_free_iovec (received[i]);
+    }
 }  /* get_event */
 
 /* ----------------------------------------------------------------- */

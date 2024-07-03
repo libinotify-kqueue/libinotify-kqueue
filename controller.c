@@ -1,6 +1,8 @@
 /*******************************************************************************
   Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
   Copyright (c) 2014-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2024 Serenity Cyber Security, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,12 +27,14 @@
 #include <sys/types.h>
 #include <sys/queue.h>
 #include <sys/stat.h>
+#include <sys/event.h>
 
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <stddef.h> /* NULL */
+#include <stdlib.h>
 #include <unistd.h>
 
 #include "sys/inotify.h"
@@ -97,9 +101,9 @@ inotify_init1 (int flags)
     int lfd = -1;
 
 #ifdef O_CLOEXEC
-    if (flags & ~(IN_CLOEXEC|O_CLOEXEC|IN_NONBLOCK|O_NONBLOCK)) {
+    if (flags & ~(IN_CLOEXEC|O_CLOEXEC|IN_NONBLOCK|O_NONBLOCK|O_DIRECT)) {
 #else
-    if (flags & ~(IN_CLOEXEC|IN_NONBLOCK|O_NONBLOCK)) {
+    if (flags & ~(IN_CLOEXEC|IN_NONBLOCK|O_NONBLOCK|O_DIRECT)) {
 #endif
         errno = EINVAL;
         return -1;
@@ -148,7 +152,7 @@ inotify_init1 (int flags)
  *
  * @param[in] fd   A file descriptor of an inotify instance.
  * @param[in] name A path to a file to watch.
- * @param[in] mask A combination of inotify flags. 
+ * @param[in] mask A combination of inotify flags.
  * @return id of a watch, -1 on failure.
  **/
 int
@@ -253,9 +257,60 @@ libinotify_set_param (int fd, int param, intptr_t value)
     return -1;
 }
 
+int libinotify_direct_readv (int fd, struct iovec **events, int size, int no_block)
+{
+    int nevents;
+    struct timespec timeout = {0};
+    struct kevent received[size];
+
+    do {
+        nevents = kevent (fd, NULL, 0, received, size, no_block ? &timeout : NULL);
+    } while (nevents < 0 && !no_block && errno == EINTR);
+
+    if (nevents == -1) {
+        perror_msg (("libinotify_direct_drain failed"));
+        return -1;
+    }
+
+    for (int i = 0; i < nevents; i++) {
+#ifdef __DragonFly__
+        /* DragonflyBSD does not copy udata */
+        events[i] = (struct iovec *)(intptr_t)received[i].data;
+#else
+        events[i] = received[i].udata;
+#endif
+    }
+
+    return nevents;
+}
+
+void libinotify_free_iovec (struct iovec *events)
+{
+    struct iovec *start = events;
+
+    if (!events)
+        return;
+
+    while (events->iov_base) {
+        free (events->iov_base);
+        events++;
+    }
+
+    free(start);
+}
+
+int libinotify_direct_close (int fd)
+{
+    struct worker_cmd cmd;
+
+    worker_cmd_close(&cmd);
+
+    return worker_exec (fd, &cmd);
+}
+
 /**
  * Erase a worker from a list of workers.
- * 
+ *
  * @param[in] wrk A pointer to a worker
  **/
 void

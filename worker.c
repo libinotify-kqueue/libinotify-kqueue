@@ -1,6 +1,8 @@
 /*******************************************************************************
   Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
   Copyright (c) 2014-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2024 Serenity Cyber Security, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -31,7 +33,7 @@
 #include <dirent.h>
 #include <fcntl.h> /* open() */
 #include <pthread.h>
-#include <signal.h> 
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -102,6 +104,20 @@ worker_cmd_param (struct worker_cmd *cmd, int param, intptr_t value)
     cmd->type = WCMD_PARAM;
     cmd->cmd.param.param = param;
     cmd->cmd.param.value = value;
+}
+
+/**
+ * Prepare a command that signals the worker shutdown.
+ *
+ * @param[in] cmd    A pointer to #worker_cmd
+ **/
+void
+worker_cmd_close (struct worker_cmd *cmd)
+{
+    assert (cmd != NULL);
+    worker_cmd_reset (cmd);
+
+    cmd->type = WCMD_CLOSE;
 }
 
 /**
@@ -300,6 +316,7 @@ worker_create (int flags)
     struct kevent ev[3];
     sigset_t set, oset;
     int result, nevents = 1;
+    bool direct = flags & O_DIRECT;
 
     struct worker* wrk = calloc (1, sizeof (struct worker));
 
@@ -311,27 +328,38 @@ worker_create (int flags)
     wrk->io[INOTIFY_FD] = -1;
     wrk->io[KQUEUE_FD] = -1;
 
-#ifdef HAVE_KQUEUE1
-    wrk->kq = kqueue1 (O_CLOEXEC);
-#else
-    wrk->kq = kqueue ();
-    if (wrk->kq != -1) {
-        (void)set_cloexec_flag (wrk->kq, 1);
-    }
-#endif
+    wrk->kq = kqueue_init ();
     if (wrk->kq == -1) {
         perror_msg (("Failed to create a new kqueue"));
         goto failure;
     }
 
-    if (pipe_init (wrk->io, flags) == -1) {
-        perror_msg (("Failed to create a pipe"));
+    if (direct) {
+#ifndef EVFILT_USER
+        perror_msg (("Direct mode requires support for EVFILT_USER"));
         goto failure;
-    }
-
-    /* Set socket buffer size to IN_DEF_SOCKBUFSIZE bytes */
-    if (worker_set_sockbufsize(wrk, IN_DEF_SOCKBUFSIZE) == -1) {
-        goto failure;
+#endif
+        /* When operating in the direct mode the KQUEUE_FD is really a kqueue
+         * descriptor, not an end of a socket pipe.
+         */
+        wrk->io[KQUEUE_FD] = kqueue_init ();
+        if (wrk->io[KQUEUE_FD] == -1) {
+            perror_msg (("Failed to create a new kqueue"));
+            goto failure;
+        }
+        /* In direct mode we don't need any more descriptors, so we put the
+         * same fd into INOTIFY_FD. This also allows other parts of the library
+         * to figure in what mode we're running. */
+        wrk->io[INOTIFY_FD] = wrk->io[KQUEUE_FD];
+    } else {
+        if (pipe_init (wrk->io, flags) == -1) {
+            perror_msg (("Failed to create a pipe"));
+            goto failure;
+        }
+        /* Set socket buffer size to IN_DEF_SOCKBUFSIZE bytes */
+        if (worker_set_sockbufsize(wrk, IN_DEF_SOCKBUFSIZE) == -1) {
+            goto failure;
+        }
     }
 
     SLIST_INIT (&wrk->head);
@@ -348,23 +376,25 @@ worker_create (int flags)
             0);
 #endif
 #ifdef EVFILT_EMPTY
-    /*
-     * Modern FreeBSDs always report full sendbuffer size in data field of
-     * EVFILT_WRITE kevent so we can not determine amount of data remaining in
-     * it reliably. As we want to know exact amount of bytes to avoid partial
-     * inotify event reads as much as possible, start using of EVFILT_EMPTY
-     * to check available send buffer space. Note that we still use
-     * EVFILT_WRITE with NOTE_LOWAT set too high to check EOF conditions.
-     */
-    EV_SET (&ev[1],
-            wrk->io[KQUEUE_FD],
-            EVFILT_WRITE,
-            EV_ADD | EV_ENABLE | EV_CLEAR,
-            NOTE_LOWAT,
-            INT_MAX,
-            0);
-    EV_SET (&ev[2], wrk->io[KQUEUE_FD], EVFILT_EMPTY, EV_ADD | EV_CLEAR, 0, 0, 0);
-    nevents = 3;
+    if (!direct) {
+        /*
+        * Modern FreeBSDs always report full sendbuffer size in data field of
+        * EVFILT_WRITE kevent so we can not determine amount of data remaining in
+        * it reliably. As we want to know exact amount of bytes to avoid partial
+        * inotify event reads as much as possible, start using of EVFILT_EMPTY
+        * to check available send buffer space. Note that we still use
+        * EVFILT_WRITE with NOTE_LOWAT set too high to check EOF conditions.
+        */
+        EV_SET (&ev[1],
+                wrk->io[KQUEUE_FD],
+                EVFILT_WRITE,
+                EV_ADD | EV_ENABLE | EV_CLEAR,
+                NOTE_LOWAT,
+                INT_MAX,
+                0);
+        EV_SET (&ev[2], wrk->io[KQUEUE_FD], EVFILT_EMPTY, EV_ADD | EV_CLEAR, 0, 0, 0);
+        nevents = 3;
+    }
 #endif
 
     if (kevent (wrk->kq, ev, nevents, NULL, 0, zero_tsp) == -1) {
@@ -391,7 +421,7 @@ worker_create (int flags)
     pthread_sigmask (SIG_BLOCK, &set, &oset);
 
     result = pthread_create (&wrk->thread, &attr, worker_thread, wrk);
-    
+
     pthread_attr_destroy (&attr);
     pthread_sigmask (SIG_SETMASK, &oset, NULL);
 
@@ -401,7 +431,7 @@ worker_create (int flags)
     }
 
     return wrk;
-    
+
 failure:
     if (wrk != NULL) {
         if (wrk->io[INOTIFY_FD] != -1) {
@@ -421,12 +451,15 @@ void
 worker_free (struct worker *wrk)
 {
     struct i_watch *iw;
+    bool direct = wrk->io[KQUEUE_FD] == wrk->io[INOTIFY_FD];
 
     assert (wrk != NULL);
 
     if (wrk->io[KQUEUE_FD] != -1) {
         close (wrk->io[KQUEUE_FD]);
         wrk->io[KQUEUE_FD] = -1;
+        if (direct)
+            wrk->io[INOTIFY_FD] = -1;
     }
 
     close (wrk->kq);
@@ -602,7 +635,10 @@ worker_set_param (struct worker *wrk, int param, intptr_t value)
 
     switch (param) {
     case IN_SOCKBUFSIZE:
-        return worker_set_sockbufsize (wrk, value);
+        if(wrk->io[KQUEUE_FD] != wrk->io[INOTIFY_FD]) /* we have no sockets in direct mode */
+            return worker_set_sockbufsize (wrk, value);
+        else
+            return 0;
     case IN_MAX_QUEUED_EVENTS:
         return event_queue_set_max_events (&wrk->eq, value);
     default:

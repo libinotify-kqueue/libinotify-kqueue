@@ -3,3 +3,6 @@ inotify_init1
 inotify_add_watch
 inotify_rm_watch
 libinotify_set_param
+libinotify_direct_readv
+libinotify_free_iovec
+libinotify_direct_close

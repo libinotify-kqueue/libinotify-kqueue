@@ -1,6 +1,8 @@
 /*******************************************************************************
   Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
   Copyright (c) 2014-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2024 Serenity Cyber Security, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -136,7 +138,7 @@ process_command (struct worker *wrk, struct worker_cmd *cmd)
     worker_post (wrk);
 }
 
-/** 
+/**
  * This structure represents a directory diff calculation context.
  * It is passed to dl_calculate as user data and then is used in all
  * the callbacks.
@@ -424,7 +426,7 @@ produce_notifications (struct worker *wrk, struct kevent *event)
  * The worker thread command loop.
  *
  * @param[in] arg A pointer to the associated #worker.
- * @return NULL. 
+ * @return NULL.
 **/
 void*
 worker_thread (void *arg)
@@ -435,6 +437,7 @@ worker_thread (void *arg)
     size_t sbspace = SBEMPTY;
 #define MAXEVENTS 1
     struct kevent received[MAXEVENTS];
+    bool direct = wrk->io[KQUEUE_FD] == wrk->io[INOTIFY_FD];
 
     assert (wrk != NULL);
 
@@ -444,7 +447,7 @@ worker_thread (void *arg)
 
         if (sbspace > 0 && wrk->eq.mem_events > 0) {
             ssize_t sent;
-            if (sbspace == SBEMPTY) {
+            if (sbspace == SBEMPTY && !direct) {
                 /* Try to track sockbufsize changes on the fly */
                 sbspace = wrk->sockbufsize;
             }
@@ -456,7 +459,8 @@ worker_thread (void *arg)
                     sent = 0; /* Ignore nonfatal errors */
                 }
             }
-            sbspace = wrk->eq.mem_events == 0 ? sbspace - sent : 0;
+            if (!direct)
+                sbspace = wrk->eq.mem_events == 0 ? sbspace - sent : 0;
         }
 
         nevents = kevent (wrk->kq, NULL, 0, received, MAXEVENTS, NULL);
@@ -485,7 +489,10 @@ worker_thread (void *arg)
 #else
                     cmd = received[i].udata;
 #endif
-                    process_command (wrk, cmd);
+                    if (cmd->type != WCMD_CLOSE)
+                        process_command (wrk, cmd);
+                    else
+                        goto die;
 #else
                 } else if (received[i].filter == EVFILT_READ) {
                     if (read (wrk->io[KQUEUE_FD], &cmd, sizeof (cmd)) != -1) {

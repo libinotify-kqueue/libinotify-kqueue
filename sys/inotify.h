@@ -112,6 +112,32 @@ int inotify_rm_watch (int fd, int wd) __THROW;
 int libinotify_set_param (int fd, int param, intptr_t value) __THROW;
 #define inotify_set_param(fd, p, v)	libinotify_set_param(fd, p, v)
 
+struct iovec;
+
+/*
+ * Libinotify-specific: Direct mode operation.
+ * In this mode the fd handed over to the user isn't a read()able one, but is
+ * actually a kqueue fd. This allows to reduce some copying overhead at
+ * the cost of adapting the library client code. The mode is activated by passing
+ * O_DIRECT to inotify_init1().
+ */
+
+/* Wait or poll for events in direct mode. This call boils down to kevent().
+ * Events are returned as an array of iovec structures, where iov_base points to
+ * an inotify_event. Each vector is terminated with an item with iov_base = NULL.
+ * The iovec's should be freed using libinotify_free_iovec.
+ */
+/* FIXME: __THROW ? */
+int libinotify_direct_readv (int fd, struct iovec **events, int size, int no_block);
+
+/* Frees a struct iovec obtained from the libinotify_direct_drain call. */
+void libinotify_free_iovec (struct iovec *events);
+
+/* Closes an inotify fd opened in direct mode.
+ * It correctly shuts down an internal worker thread and should be used instead of
+ * plain close() when operating in direct mode. */
+int libinotify_direct_close (int fd);
+
 __END_DECLS
 
 #endif /* __BSD_INOTIFY_H__ */

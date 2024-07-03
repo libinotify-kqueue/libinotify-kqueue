@@ -36,6 +36,7 @@ struct event_queue {
     int allocated;     /* number of iovs allocated */
     int max_events;    /* max_queued_events */
     struct inotify_event *last; /* Last event sent to socket */
+    uint user_ident;   /* ident for EVFILT_USER events when operating in direct mode */
 };
 
 void event_queue_init (struct event_queue *eq);
@@ -50,5 +51,7 @@ int  event_queue_enqueue       (struct event_queue *eq,
                                 const char         *name);
 ssize_t event_queue_flush      (struct event_queue *eq, size_t sbspace);
 void    event_queue_reset_last (struct event_queue *eq);
+
+struct iovec *event_queue_direct_drain (struct event_queue *eq);
 
 #endif /* __EVENT_QUEUE_H__ */

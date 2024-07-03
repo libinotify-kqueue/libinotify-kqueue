@@ -14,8 +14,8 @@ AC_C_FLEXIBLE_ARRAY_MEMBER
 AC_HEADER_STDBOOL
 
 
-if [test "$ac_cv_prog_cc_c89" = "no"]; then
-    AC_MSG_ERROR(C89 compiler support required)
+if [test "$ac_cv_prog_cc_c99" = "no"]; then
+    AC_MSG_ERROR(C99 compiler support required)
 fi
 
 

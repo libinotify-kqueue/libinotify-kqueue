@@ -1,5 +1,7 @@
 .\" Copyright (c) 2012 Vishesh Yadav
 .\" Copyright (c) 2017 Vladimr Kondratyev
+.\" Copyright (c) 2024 Serenity Cyber Security, LLC
+.\"                    Author: Gleb Popov
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -25,7 +27,7 @@
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\"
-.Dd April 13, 2017
+.Dd July 22, 2024
 .Dt LIBINOTIFY 3
 .Os
 .Sh NAME
@@ -36,6 +38,9 @@
 .Nm inotify_rm_watch ,
 .Nm libinotify_set_param ,
 .Nm inotify_event ,
+.Nm libinotify_direct_readv ,
+.Nm libinotify_free_iovec ,
+.Nm libinotify_direct_close ,
 .Nd monitor file system events
 .Sh SYNOPSIS
 .In sys/inotify.h
@@ -49,6 +54,12 @@
 .Fn inotify_rm_watch "int fd" "int wd"
 .Ft int
 .Fn libinotify_set_param "int fd" "int param" "intptr_t value"
+.Ft int
+.Fn libinotify_direct_readv "int fd" "struct iovec **events" "int size" "int no_block"
+.Ft void
+.Fn libinotify_free_iovec "struct iovec *events"
+.Ft int
+.Fn libinotify_direct_close "int fd"
 .Sh DESCRIPTION
 The
 .Fn inotify_init
@@ -66,6 +77,8 @@ Set I_NONBLOCK file status flag on the inotify file descriptor.
 .It IN_CLOSEXEC
 Set FD_CLOEXEC flag on the new file descriptor. See O_CLOEXEC flag in
 .Xr open(2)
+.It O_DIRECT
+libinotify-specific flag that enables direct mode (see below)
 .Pp
 .El
 The function returns the file descritor to the inotify handle if successful
@@ -102,7 +115,7 @@ A component of path that must exist does not exist.
 .It ENOMEM
 Insufficient kernel memory available.
 .It ENOSPC
-User limit on total number of inotify watches has crossed or kernel failed to 
+User limit on total number of inotify watches has crossed or kernel failed to
 allocate a needed resource.
 .El
 .Pp
@@ -143,7 +156,7 @@ linux`s /proc/sys/fs/inotify/max_user_instances counterpart.
 Default value 2147483646 (exported as IN_DEF_MAX_USER_INSTANCES)
 .El
 .Pp
-.Sh inotify_event structure 
+.Sh inotify_event structure
 .Bd -literal
 struct inotify_event {
     int         wd;       /* Watch descriptor */
@@ -153,7 +166,7 @@ struct inotify_event {
     char        name[];   /* Optional null-terminated name */
 };
 .Ed
-.Sh inotify events - 
+.Sh inotify events -
 Following are the masks supported by libinotify implementation.
 .Bd -literal -offset indent -compact
 IN_OPEN             File was opened.
@@ -205,6 +218,22 @@ Event queue has overflowed.
 .It IN_UNMOUNT
 File system containing watched file/directory was unmounted.
 .El
+.Sh DIRECT MODE
+In this mode the fd handed over to the user isn't a read()able one, but is actually a kqueue fd.
+This allows to reduce some copying overhead at the cost of being incompatible with how Linux inotify fd works.
+The mode is activated by passing O_DIRECT to inotify_init1().
+.Pp
+.Fn libinotify_direct_readv
+is a replacement for the read call in direct mode.
+Pass it an array of struct iovec* of desired size to fill it with lists of events.
+Each struct iovec* points to an array of structs terminated with a null iovec (iov_base = NULL).
+It is the caller responsibility to free these arrays.
+.Pp
+.Fn libinotify_free_iovec
+Frees a list of iovec structs returned by the previous call.
+.Pp
+.Fn libinotify_direct_close
+is a replacement for the close call in direct mode.
 .Sh SEE ALSO
 .Xr read 3
 .Sh HISTORY

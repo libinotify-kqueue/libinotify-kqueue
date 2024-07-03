@@ -1,5 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2016-2018 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2024 Serenity Cyber Security, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,6 +29,7 @@
 #include <sys/ioctl.h> /* ioctl */
 #include <sys/socket.h>/* SO_NOSIGPIPE */
 #include <sys/uio.h>   /* iovec */
+#include <sys/event.h>   /* kevent */
 
 #include <assert.h>    /* assert */
 #include <stddef.h>    /* offsetof */
@@ -53,6 +56,7 @@ event_queue_init (struct event_queue *eq)
     eq->mem_events = 0;
     eq->iov = NULL;
     eq->last = NULL;
+    eq->user_ident = 0;
     event_queue_set_max_events (eq, IN_DEF_MAX_QUEUED_EVENTS);
 }
 
@@ -216,6 +220,7 @@ event_queue_flush (struct event_queue *eq, size_t sbspace)
     size_t iovlen = 0;
     ssize_t size;
     int i;
+    bool direct = fd == EQ_TO_WRK(eq)->io[INOTIFY_FD];
 
     iovmax = eq->mem_events;
     if (iovmax > IOV_MAX) {
@@ -237,25 +242,85 @@ event_queue_flush (struct event_queue *eq, size_t sbspace)
     send_flags |= MSG_NOSIGNAL;
 #endif
 
-    size = sendv (fd, eq->iov, iovcnt, send_flags);
-    assert (size == iovlen || size == -1);
-    if (size > 0) {
-        /* Save last event sent to communication pipe for coalecsing checks */
-        free (eq->last);
-        eq->last = (void *)eq->iov[iovcnt - 1].iov_base;
+    if (!direct) {
+        size = sendv (fd, eq->iov, iovcnt, send_flags);
+        if (size <= 0) {
+            perror_msg (("Sending of inotify events to socket failed"));
+            return size;
+        }
+    } else {
+#ifndef EVFILT_USER
+        perror_msg (("Direct sending of inotify events requires EVFILT_USER"));
+        return -1;
+#endif
+        /* In the direct mode we hand over the event memory to the caller.
+         * It requires us to duplicate the iovec array. */
+        struct iovec* iov_copy = calloc (sizeof(struct iovec), iovcnt + 1); // NULL iovec as terminator
+        if (!iov_copy) {
+            perror_msg (("Direct sending of inotify events failed in calloc"));
+            return -1;
+        }
+        memcpy (iov_copy, eq->iov, sizeof(struct iovec) * iovcnt);
 
+        iov_copy[iovcnt - 1].iov_base = malloc (iov_copy[iovcnt - 1].iov_len);
+        if (!iov_copy[iovcnt - 1].iov_base) {
+            perror_msg (("Direct sending of inotify events failed in malloc"));
+            return -1;
+        }
+        memcpy (iov_copy[iovcnt - 1].iov_base, eq->iov[iovcnt - 1].iov_base, iov_copy[iovcnt - 1].iov_len);
+
+        /* Events are delivered to the user by triggering an EVFILT_USER
+         * We use monotonically increasing values as .ident to make
+         * the kernel to act as a natural queue for our events. */
+        struct kevent ke[2];
+        EV_SET (&ke[0],
+                eq->user_ident,
+                EVFILT_USER,
+                EV_ADD | EV_ONESHOT,
+                0, 0, 0);
+        EV_SET (&ke[1],
+                eq->user_ident,
+                EVFILT_USER,
+                0,
+                NOTE_TRIGGER,
+    #ifdef __DragonFly__
+                /* DragonflyBSD does not copy udata */
+                (intptr_t)iov_copy,
+                0
+    #else
+                0,
+                iov_copy
+    #endif
+                );
+        size = kevent (fd, ke, 2, NULL, 0, zero_tsp);
+        if (size < 0) {
+            free (iov_copy[iovcnt - 1].iov_base);
+            free (iov_copy);
+            perror_msg (("Direct sending of inotify events failed in kevent"));
+            return size;
+        }
+        size = iovlen;
+        eq->user_ident++;
+    }
+
+    assert (size == iovlen || size == -1);
+
+    /* Save last event sent to communication pipe for coalecsing checks */
+    free (eq->last);
+    eq->last = (void *)eq->iov[iovcnt - 1].iov_base;
+
+    if (!direct) {
         for (i = 0; i < iovcnt - 1; i++) {
             free (eq->iov[i].iov_base);
         }
 
         memmove (&eq->iov[0],
-                 &eq->iov[iovcnt],
-                 sizeof(struct iovec) * (eq->mem_events - iovcnt));
-        eq->mem_events -= iovcnt;
-        eq->sb_events += iovcnt;
-    } else {
-        perror_msg (("Sending of inotify events to socket failed"));
+                &eq->iov[iovcnt],
+                sizeof(struct iovec) * (eq->mem_events - iovcnt));
     }
+
+    eq->mem_events -= iovcnt;
+    eq->sb_events += iovcnt;
 
     return size;
 }
