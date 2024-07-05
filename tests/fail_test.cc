@@ -1,6 +1,8 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
   Copyright (c) 2015 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -49,9 +51,9 @@ void fail_test::setup ()
     system ("touch fail-working");
 }
 
-void fail_test::run ()
+void fail_test::run (bool direct)
 {
-    consumer cons;
+    consumer cons(direct);
     sig_t oldsegvhandler;
     int wid = 0;
     int error = 0;

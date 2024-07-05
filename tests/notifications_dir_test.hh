@@ -29,7 +29,7 @@
 class notifications_dir_test: public test {
 protected:
     virtual void setup ();
-    virtual void run ();
+    virtual void run (bool direct);
     virtual void cleanup ();
 
 public:

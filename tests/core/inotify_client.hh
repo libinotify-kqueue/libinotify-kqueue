@@ -1,6 +1,6 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
-  Copyright (c) 2024 Serenity Cybersecurity, LLC
+  Copyright (c) 2024 Serenity Cyber Security, LLC
                      Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 

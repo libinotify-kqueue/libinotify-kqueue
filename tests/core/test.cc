@@ -1,5 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -40,9 +42,11 @@ void* test::run_ (void *ptr)
 {
     assert (ptr != NULL);
     test *t = static_cast<test *>(ptr);
-    t->setup ();
-    t->run ();
-    t->cleanup ();
+    for (bool direct : {false, true}) {
+        t->setup ();
+        t->run (direct);
+        t->cleanup ();
+    }
     return NULL;
 }
 

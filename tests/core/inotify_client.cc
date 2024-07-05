@@ -1,6 +1,6 @@
 /*******************************************************************************
   Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
-  Copyright (c) 2024 Serenity Cybersecurity, LLC
+  Copyright (c) 2024 Serenity Cyber Security, LLC
                      Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
@@ -108,24 +108,28 @@ void inotify_client::read_events_direct (int fd, events &evs)
     struct iovec *received[5];
     int num_events = libinotify_direct_readv (fd, received, 5, 0);
 
-    while (cur_event) {
-        struct inotify_event *ie = (struct inotify_event *) cur_event->iov_base;
-        event ev;
+    for (int i = 0; i < num_events; i++) {
+        struct iovec *cur_event = received[i];
 
-        if (ie->len) {
-                ev.filename = ie->name;
+        while (cur_event->iov_base) {
+            struct inotify_event *ie = (struct inotify_event *) cur_event->iov_base;
+            event ev;
+
+            if (ie->len) {
+                    ev.filename = ie->name;
+            }
+            ev.flags = ie->mask;
+            ev.watch = ie->wd;
+            ev.cookie = ie->cookie;
+
+            LOG ("INO: Got next event! " << VAR (ev.filename) << VAR (ev.watch) << VAR (ev.flags));
+            evs.insert (ev);
+
+            cur_event++;
         }
-        ev.flags = ie->mask;
-        ev.watch = ie->wd;
-        ev.cookie = ie->cookie;
 
-        LOG ("INO: Got next event! " << VAR (ev.filename) << VAR (ev.watch) << VAR (ev.flags));
-        evs.insert (ev);
-
-        cur_event++;
+        libinotify_free_iovec (received[i]);
     }
-
-    libinotify_free_iovec (events);
 }
 
 events inotify_client::receive_during (int timeout) const

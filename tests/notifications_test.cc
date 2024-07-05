@@ -1,5 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -37,9 +39,9 @@ void notifications_test::setup ()
     system ("touch ntfst-working");
 }
 
-void notifications_test::run ()
+void notifications_test::run (bool direct)
 {
-    consumer cons;
+    consumer cons(direct);
     events received;
     int wid = 0;
     int error = 0;
@@ -81,7 +83,7 @@ void notifications_test::run ()
     received = cons.output.registered ();
     should ("receive IN_MOVE_SELF on move", contains (received, event ("", wid, IN_MOVE_SELF)));
 
-    
+
     cons.output.reset ();
     cons.input.receive ();
 

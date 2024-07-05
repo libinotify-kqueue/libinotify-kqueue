@@ -1,5 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2016 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -29,7 +31,7 @@
 class event_queue_test: public test {
 protected:
     virtual void setup ();
-    virtual void run ();
+    virtual void run (bool direct);
     virtual void cleanup ();
 
 public:

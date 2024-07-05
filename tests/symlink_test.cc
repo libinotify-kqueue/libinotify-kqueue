@@ -1,6 +1,8 @@
 /*******************************************************************************
   Copyright (c) 2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
   Copyright (c) 2014 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -48,10 +50,10 @@ void symlink_test::setup ()
     system ("ln -s ../slt-wd1/foo slt-wd3/baz");
 }
 
-void symlink_test::run ()
+void symlink_test::run (bool direct)
 {
     /* Issue #10 - do not reflect changes in files under watched symlinks */
-    {   consumer cons;
+    {   consumer cons(direct);
         events received;
         events::iterator iter;
         int wid = 0;

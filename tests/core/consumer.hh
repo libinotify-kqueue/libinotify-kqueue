@@ -1,5 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -43,7 +45,7 @@ public:
     request input;
     response output;
 
-    consumer ();
+    consumer (bool direct = false);
     ~consumer ();
     static void* run_ (void *ptr);
     void run ();

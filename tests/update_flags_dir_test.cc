@@ -1,5 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -37,9 +39,9 @@ void update_flags_dir_test::setup ()
     system ("touch ufdt-working/1");
 }
 
-void update_flags_dir_test::run ()
+void update_flags_dir_test::run (bool direct)
 {
-    consumer cons;
+    consumer cons(direct);
     int wid = 0;
     int new_wid = 0;
     events received;
