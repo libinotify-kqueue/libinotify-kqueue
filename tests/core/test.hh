@@ -1,5 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -36,7 +38,7 @@ protected:
     static void* run_ (void *ptr);
 
     virtual void setup () = 0;
-    virtual void run () = 0;
+    virtual void run (bool direct) = 0;
     virtual void cleanup () = 0;
 
 public:

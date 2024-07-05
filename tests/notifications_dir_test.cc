@@ -1,6 +1,8 @@
 /*******************************************************************************
   Copyright (c) 2011-2014 Dmitry Matveev <me@dmitrymatveev.co.uk>
   Copyright (c) 2014 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -53,9 +55,9 @@ void notifications_dir_test::setup ()
     system ("touch ntfsdt-bugs/2");
 }
 
-void notifications_dir_test::run ()
+void notifications_dir_test::run (bool direct)
 {
-    consumer cons;
+    consumer cons(direct);
     events received;
     events::iterator iter;
     int wid = 0;
@@ -70,7 +72,7 @@ void notifications_dir_test::run ()
 
     wid = cons.output.added_watch_id ();
     should ("watch is added successfully", wid != -1);
-    
+
 
     cons.output.reset ();
     cons.input.receive ();
@@ -137,7 +139,7 @@ void notifications_dir_test::run ()
     should ("receive IN_DELETE event on deleting a file from a directory",
             contains (received, event ("2", wid, IN_DELETE)));
 
-    
+
     cons.output.reset ();
     cons.input.receive ();
 
@@ -160,7 +162,7 @@ void notifications_dir_test::run ()
                 iter_from->cookie == iter_to->cookie);
     }
 
-    
+
     cons.output.reset ();
     cons.input.receive ();
 
@@ -275,7 +277,7 @@ void notifications_dir_test::run ()
                          event_matcher (event ("dir", wid, IN_CREATE)));
     should ("receive IN_CREATE with IN_ISDIR when creating a directory in directory",
             iter != received.end() && iter->flags & IN_ISDIR);
-    
+
 
     cons.output.reset ();
     cons.input.receive ();
@@ -291,7 +293,7 @@ void notifications_dir_test::run ()
     should ("receive IN_ATTRIB with IN_ISDIR when touching a directory in directory",
             iter != received.end() && iter->flags & IN_ISDIR);
 
-    
+
     cons.output.reset ();
     cons.input.receive ();
 
@@ -350,8 +352,8 @@ void notifications_dir_test::run ()
 
     should ("receive IN_DELETE with IN_ISDIR when removing directory in directory",
             iter != received.end () &&  (iter->flags & IN_ISDIR));
-    
-    
+
+
     cons.output.reset ();
     cons.input.receive ();
 
@@ -390,6 +392,7 @@ void notifications_dir_test::run ()
 
     cons.output.wait ();
     received = cons.output.registered ();
+
     should ("receive IN_DELETE for a file \'one\' in a directory on removing a directory",
             contains (received, event ("one", wid, IN_DELETE)));
     should ("receive IN_DELETE for a file \'foo\' in a directory on removing a directory",

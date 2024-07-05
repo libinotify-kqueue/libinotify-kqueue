@@ -1,5 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -46,9 +48,9 @@ void open_close_test::setup ()
     system ("mkdir oct-dir-working");
 }
 
-void open_close_test::run ()
+void open_close_test::run (bool direct)
 {
-    consumer cons;
+    consumer cons(direct);
     int file_wid = 0;
     int dir_wid = 0;
     events received;

@@ -1,6 +1,8 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
   Copyright (c) 2014 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -45,9 +47,9 @@ void start_stop_test::setup ()
     system ("ln -s sst-working sst-working3");
 }
 
-void start_stop_test::run ()
+void start_stop_test::run (bool direct)
 {
-    consumer cons;
+    consumer cons(direct);
     int wid = 0;
     int wid2 = 0;
     int error = 0;
@@ -88,11 +90,11 @@ void start_stop_test::run ()
     received = cons.output.registered ();
     should ("got IN_IGNORED on watch stop",
             contains (received, event ("", wid, IN_IGNORED)));
-    
+
     /* Tell again to consumer to watch for an IN_ATTRIB event  */
     cons.output.reset ();
     cons.input.receive ();
-    
+
     system ("touch sst-working");
 
     cons.output.wait ();

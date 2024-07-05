@@ -1,6 +1,8 @@
 /*******************************************************************************
   Copyright (c) 2011 Dmitry Matveev <me@dmitrymatveev.co.uk>
   Copyright (c) 2014 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -40,16 +42,16 @@ start_stop_dir_test::start_stop_dir_test (journal &j)
 void start_stop_dir_test::setup ()
 {
     cleanup ();
-    
+
     system ("mkdir ssdt-working");
     system ("touch ssdt-working/1");
     system ("touch ssdt-working/2");
     system ("touch ssdt-working/3");
 }
 
-void start_stop_dir_test::run ()
+void start_stop_dir_test::run (bool direct)
 {
-    consumer cons;
+    consumer cons(direct);
     events received;
     int wid = 0;
     int error = 0;
@@ -81,7 +83,7 @@ void start_stop_dir_test::run ()
     system ("touch ssdt-working/1");
     system ("touch ssdt-working/2");
     system ("touch ssdt-working/3");
-    
+
     cons.output.wait ();
     received = cons.output.registered ();
     should ("events are registered on the directory contents",
@@ -97,7 +99,7 @@ void start_stop_dir_test::run ()
     /* Linux inotify sends IN_IGNORED on stop */
     cons.output.reset ();
     cons.input.receive ();
-    
+
     cons.output.wait ();
     received = cons.output.registered ();
     should ("got IN_IGNORED on watch stop",

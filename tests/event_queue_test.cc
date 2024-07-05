@@ -1,5 +1,7 @@
 /*******************************************************************************
   Copyright (c) 2016 Vladimir Kondratyev <vladimir@kondratyev.su>
+  Copyright (c) 2024 Serenity Cybersecurity, LLC
+                     Author: Gleb Popov <arrowd@FreeBSD.org>
   SPDX-License-Identifier: MIT
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -51,9 +53,9 @@ void event_queue_test::setup ()
     system ("touch eqt-working/1");
 }
 
-void event_queue_test::run ()
+void event_queue_test::run (bool direct)
 {
-    consumer cons;
+    consumer cons(direct);
     events received;
     int wid = 0;
 
@@ -75,9 +77,10 @@ void event_queue_test::run ()
     cons.input.receive ();
     cons.output.wait ();
     received = cons.output.registered ();
-    should ("receive single (coalesced) IN_ATTRIB on 2 consecutive "
-            "watched dir touches", received.size() == 1 &&
-             contains (received, event ("", wid, IN_ATTRIB)));
+    if (!direct)
+        should ("receive single (coalesced) IN_ATTRIB on 2 consecutive "
+                "watched dir touches", received.size() == 1 &&
+                contains (received, event ("", wid, IN_ATTRIB)));
 
 
     cons.output.reset ();
@@ -90,9 +93,10 @@ void event_queue_test::run ()
     cons.input.receive ();
     cons.output.wait ();
     received = cons.output.registered ();
-    should ("receive single (coalesced) IN_ATTRIB on 2 consecutive "
-            "subfile touches", received.size() == 1 &&
-            contains (received, event ("1", wid, IN_ATTRIB)));
+    if (!direct)
+        should ("receive single (coalesced) IN_ATTRIB on 2 consecutive "
+                "subfile touches", received.size() == 1 &&
+                contains (received, event ("1", wid, IN_ATTRIB)));
 
 
     /*
@@ -123,8 +127,9 @@ void event_queue_test::run ()
     cons.input.receive ();
     cons.output.wait ();
     received = cons.output.registered ();
-    should ("receive IN_Q_OVERFLOW on many consecutive touches",
-            contains (received, event ("", -1, IN_Q_OVERFLOW)));
+    if (!direct)
+        should ("receive IN_Q_OVERFLOW on many consecutive touches",
+                contains (received, event ("", -1, IN_Q_OVERFLOW)));
 
 
     cons.input.interrupt ();
