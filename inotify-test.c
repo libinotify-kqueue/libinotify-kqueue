@@ -135,7 +135,7 @@ static void dump_event (struct inotify_event *pevent, char* action)
         if (pevent->len) printf ("name=%s\n", pevent->name);
     */
 
-    printf ("%s [%s]\n", action, pevent->name);
+    printf ("%s [%s]\n", action, pevent->len ? pevent->name : "");
 }
 
 #define BUFF_SIZE (16*1024)
