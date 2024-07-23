@@ -277,7 +277,7 @@ int libinotify_direct_readv (int fd, struct iovec **events, int size, int no_blo
         /* DragonflyBSD does not copy udata */
         events[i] = (struct iovec *)(intptr_t)received[i].data;
 #else
-        events[i] = received[i].udata;
+        events[i] = (struct iovec *)received[i].udata;
 #endif
     }
 
