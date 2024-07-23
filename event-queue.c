@@ -249,10 +249,7 @@ event_queue_flush (struct event_queue *eq, size_t sbspace)
             return size;
         }
     } else {
-#ifndef EVFILT_USER
-        perror_msg (("Direct sending of inotify events requires EVFILT_USER"));
-        return -1;
-#endif
+#ifdef EVFILT_USER
         /* In the direct mode we hand over the event memory to the caller.
          * It requires us to duplicate the iovec array. */
         struct iovec* iov_copy = calloc (sizeof(struct iovec), iovcnt + 1); // NULL iovec as terminator
@@ -301,6 +298,10 @@ event_queue_flush (struct event_queue *eq, size_t sbspace)
         }
         size = iovlen;
         eq->user_ident++;
+#else  /* !EVFILT_USER */
+        perror_msg (("Direct sending of inotify events requires EVFILT_USER"));
+        return -1;
+#endif /* EVFILT_USER */
     }
 
     assert (size == iovlen || size == -1);
