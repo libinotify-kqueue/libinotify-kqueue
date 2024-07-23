@@ -1,4 +1,4 @@
-AC_INIT([libinotify],[20211018],[https://github.com/libinotify-kqueue/libinotify-kqueue/],[libinotify])
+AC_INIT([libinotify],[20240724],[https://github.com/libinotify-kqueue/libinotify-kqueue/],[libinotify])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
