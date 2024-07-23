@@ -64,7 +64,7 @@ int main (int argc, char *argv[])
     if (argc == 3 && !strcmp(argv[2], "direct"))
         direct = 1;
 
-    fd = inotify_init1(direct ? O_DIRECT : 0);
+    fd = inotify_init1(direct ? IN_DIRECT : 0);
     if (fd < 0) {
         printf("inotify_init failed\n");
         handle_error (errno);

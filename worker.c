@@ -316,7 +316,7 @@ worker_create (int flags)
     struct kevent ev[3];
     sigset_t set, oset;
     int result, nevents = 1;
-    bool direct = flags & O_DIRECT;
+    bool direct = flags & IN_DIRECT;
 
     struct worker* wrk = calloc (1, sizeof (struct worker));
 

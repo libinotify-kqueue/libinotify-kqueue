@@ -77,7 +77,7 @@ Set I_NONBLOCK file status flag on the inotify file descriptor.
 .It IN_CLOSEXEC
 Set FD_CLOEXEC flag on the new file descriptor. See O_CLOEXEC flag in
 .Xr open(2)
-.It O_DIRECT
+.It IN_DIRECT
 libinotify-specific flag that enables direct mode (see below)
 .Pp
 .El
@@ -221,7 +221,7 @@ File system containing watched file/directory was unmounted.
 .Sh DIRECT MODE
 In this mode the fd handed over to the user isn't a read()able one, but is actually a kqueue fd.
 This allows to reduce some copying overhead at the cost of being incompatible with how Linux inotify fd works.
-The mode is activated by passing O_DIRECT to inotify_init1().
+The mode is activated by passing IN_DIRECT to inotify_init1().
 .Pp
 .Fn libinotify_direct_readv
 is a replacement for the read call in direct mode.

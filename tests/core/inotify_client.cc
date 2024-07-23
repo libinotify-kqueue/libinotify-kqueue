@@ -36,7 +36,7 @@
 #include <iostream>
 
 inotify_client::inotify_client (bool direct)
-: fd (inotify_init1(direct ? O_DIRECT : 0))
+: fd (inotify_init1(direct ? IN_DIRECT : 0))
 , direct(direct)
 {
     assert (fd != -1);

@@ -101,9 +101,9 @@ inotify_init1 (int flags)
     int lfd = -1;
 
 #ifdef O_CLOEXEC
-    if (flags & ~(IN_CLOEXEC|O_CLOEXEC|IN_NONBLOCK|O_NONBLOCK|O_DIRECT)) {
+    if (flags & ~(IN_CLOEXEC|O_CLOEXEC|IN_NONBLOCK|O_NONBLOCK|IN_DIRECT)) {
 #else
-    if (flags & ~(IN_CLOEXEC|IN_NONBLOCK|O_NONBLOCK|O_DIRECT)) {
+    if (flags & ~(IN_CLOEXEC|IN_NONBLOCK|O_NONBLOCK|IN_DIRECT)) {
 #endif
         errno = EINVAL;
         return -1;

@@ -37,7 +37,8 @@
 /* Flags for the parameter of inotify_init1. */
 #define IN_CLOEXEC	02000000	/* Linux x86 O_CLOEXEC */
 #define IN_NONBLOCK	00004000	/* Linux x86 O_NONBLOCK */
-
+/* libinotify-specific - Direct mode operation. See below. */
+#define	IN_DIRECT	0x80000000
 
 /* Structure describing an inotify event. */
 __extension__ struct inotify_event
@@ -119,7 +120,7 @@ struct iovec;
  * In this mode the fd handed over to the user isn't a read()able one, but is
  * actually a kqueue fd. This allows to reduce some copying overhead at
  * the cost of adapting the library client code. The mode is activated by passing
- * O_DIRECT to inotify_init1().
+ * IN_DIRECT to inotify_init1().
  */
 
 /* Wait or poll for events in direct mode. This call boils down to kevent().
