@@ -60,7 +60,7 @@ endif
 libinotify_la_SOURCES += compat/tree.h
 
 libinotify_la_CFLAGS = -I. @DEBUG_CFLAGS@ @PTHREAD_CFLAGS@ -Wall -Werror
-libinotify_la_LDFLAGS = @PTHREAD_LIBS@ -export-symbols libinotify.sym
+libinotify_la_LDFLAGS = @PTHREAD_LIBS@ -export-symbols $(top_srcdir)/libinotify.sym
 endif
 
 inotify_test_SOURCES = inotify-test.c
